@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 struct HubberPopoverView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     @ObservedObject var store: HubberStore
 
     @State private var selectedTab: WorkTab = .incoming
@@ -13,7 +15,10 @@ struct HubberPopoverView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow)
+            VisualEffectView(material: .popover)
+                .ignoresSafeArea()
+
+            HubberAppearance.panelFill(for: colorScheme)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -40,7 +45,6 @@ struct HubberPopoverView: View {
                 footer
             }
         }
-        .preferredColorScheme(.dark)
         .foregroundStyle(.primary)
     }
 
@@ -212,6 +216,8 @@ private struct ClickableRow<Content: View>: View {
 }
 
 private struct HubberTabBar: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     @Binding var selectedTab: WorkTab
     @Binding var showSettings: Bool
     let counts: [WorkTab: Int]
@@ -238,19 +244,28 @@ private struct HubberTabBar: View {
                     Group {
                         if selectedTab == tab, !showSettings {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(.white.opacity(0.16))
-                                .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
+                                .fill(HubberAppearance.selectedControlFill(for: colorScheme))
+                                .shadow(
+                                    color: HubberAppearance.controlShadow(for: colorScheme),
+                                    radius: 1,
+                                    y: 1
+                                )
                         }
                     }
                 )
             }
         }
         .padding(2)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            HubberAppearance.controlGroupFill(for: colorScheme),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
     }
 }
 
 private struct CountBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let count: Int
     var isActive = false
 
@@ -261,9 +276,12 @@ private struct CountBadge: View {
             .frame(minWidth: 15)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(.white.opacity(isActive ? 0.16 : 0.10), in: Capsule())
+            .background(
+                HubberAppearance.badgeFill(isActive: isActive, for: colorScheme),
+                in: Capsule()
+            )
             .overlay {
-                Capsule().stroke(.white.opacity(0.10), lineWidth: 0.5)
+                Capsule().stroke(HubberAppearance.hairline(for: colorScheme), lineWidth: 0.5)
             }
     }
 }
@@ -626,6 +644,8 @@ private struct PRTitle: View {
 }
 
 private struct SLOPill: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let status: SLOStatus
     let text: String
     let helpText: String?
@@ -635,7 +655,7 @@ private struct SLOPill: View {
             Circle()
                 .fill(color)
                 .frame(width: 7, height: 7)
-                .shadow(color: color.opacity(0.65), radius: 3)
+                .shadow(color: color.opacity(HubberAppearance.sloDotShadowOpacity(for: colorScheme)), radius: 3)
 
             Text(text)
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
@@ -643,19 +663,15 @@ private struct SLOPill: View {
         .foregroundStyle(color)
         .padding(.horizontal, 9)
         .padding(.vertical, 3)
-        .background(color.opacity(status == .red ? 0.18 : 0.16), in: Capsule())
+        .background(color.opacity(HubberAppearance.sloFillOpacity(status, for: colorScheme)), in: Capsule())
         .overlay {
-            Capsule().stroke(color.opacity(status == .red ? 0.45 : 0.40), lineWidth: 0.5)
+            Capsule().stroke(color.opacity(HubberAppearance.sloStrokeOpacity(status, for: colorScheme)), lineWidth: 0.5)
         }
         .help(helpText ?? text)
     }
 
     private var color: Color {
-        switch status {
-        case .green: .hubberSuccess
-        case .amber: .hubberWarning
-        case .red: .hubberError
-        }
+        HubberAppearance.sloColor(status, for: colorScheme)
     }
 }
 
@@ -691,6 +707,8 @@ private struct CIBadge: View {
 }
 
 private struct AvatarView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let user: GitHubUser
     let size: CGFloat
 
@@ -701,12 +719,14 @@ private struct AvatarView: View {
             .frame(width: size, height: size)
             .background(user.color, in: Circle())
             .overlay {
-                Circle().stroke(.black.opacity(0.15), lineWidth: 0.5)
+                Circle().stroke(HubberAppearance.avatarStroke(for: colorScheme), lineWidth: 0.5)
             }
     }
 }
 
 private struct ReviewerStack: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let reviewers: [Reviewer]
     let size: CGFloat
 
@@ -721,7 +741,10 @@ private struct ReviewerStack: View {
                             .fill(color)
                             .frame(width: 8, height: 8)
                             .overlay {
-                                Circle().stroke(Color(red: 0.15, green: 0.15, blue: 0.17), lineWidth: 1.5)
+                                Circle().stroke(
+                                    HubberAppearance.statusDotStroke(for: colorScheme),
+                                    lineWidth: 1.5
+                                )
                             }
                             .offset(x: 1, y: 1)
                     }
