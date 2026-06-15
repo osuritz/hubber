@@ -292,6 +292,8 @@ extension GitHubUser {
     static let marisol = GitHubUser(login: "marisol", initials: "MR", color: Color(red: 0.49, green: 0.36, blue: 1.00))
     static let tobi = GitHubUser(login: "tobi-l", initials: "TL", color: Color(red: 0.12, green: 0.62, blue: 0.33))
     static let kenji = GitHubUser(login: "kenji", initials: "KS", color: Color(red: 0.84, green: 0.20, blue: 0.42))
-    static let priyanka = GitHubUser(login: "priyanka", initials: "PV", color: Color(red: 0.06, green: 0.44, blue: 1.00))
+    static let priyanka = GitHubUser(
+        login: "priyanka", initials: "PV", color: Color(red: 0.06, green: 0.44, blue: 1.00)
+    )
     static let ines = GitHubUser(login: "ines", initials: "IF", color: Color(red: 0.90, green: 0.47, blue: 0.00))
 }

@@ -231,7 +231,8 @@ final class GitHubAuthService: Sendable {
         if response.error == "bad_refresh_token" {
             throw GitHubAuthError.missingRefreshToken
         }
-        throw GitHubAuthError.github(response.errorDescription ?? response.error ?? "GitHub could not refresh the token.")
+        let fallback = "GitHub could not refresh the token."
+        throw GitHubAuthError.github(response.errorDescription ?? response.error ?? fallback)
     }
 
     func fetchAuthenticatedUser(accessToken: String) async throws -> GitHubAuthenticatedUser {
