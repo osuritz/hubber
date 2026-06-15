@@ -6,6 +6,7 @@ struct HubberPopoverView: View {
 
     @State private var selectedTab: WorkTab = .incoming
     @State private var showSettings = false
+    @AppStorage("reviewSLOEnabled") private var isSLOEnabled = true
     @State private var sloHours = 4.0
     @State private var sloDisplay: SLODisplay = .remaining
     @State private var rowDensity: RowDensity = .normal
@@ -23,6 +24,7 @@ struct HubberPopoverView: View {
                         if showSettings {
                             SettingsView(
                                 store: store,
+                                isSLOEnabled: $isSLOEnabled,
                                 sloHours: $sloHours,
                                 sloDisplay: $sloDisplay,
                                 rowDensity: $rowDensity
@@ -113,6 +115,7 @@ struct HubberPopoverView: View {
                 ClickableRow(url: review.url) {
                     IncomingReviewRow(
                         review: review,
+                        isSLOEnabled: isSLOEnabled,
                         sloHours: sloHours,
                         sloDisplay: sloDisplay,
                         density: rowDensity,
@@ -152,7 +155,7 @@ struct HubberPopoverView: View {
             Text(refreshStatusText)
                 .lineLimit(1)
             Spacer()
-            Text("SLO \(Int(sloHours))h")
+            Text(ReviewSLOPresentation.footerText(isEnabled: isSLOEnabled, hours: sloHours))
             Text("⌘, Settings")
         }
         .font(.system(size: 11))
@@ -267,6 +270,7 @@ private struct CountBadge: View {
 
 private struct IncomingReviewRow: View {
     let review: IncomingReview
+    let isSLOEnabled: Bool
     let sloHours: Double
     let sloDisplay: SLODisplay
     let density: RowDensity
@@ -300,10 +304,11 @@ private struct IncomingReviewRow: View {
                     .foregroundStyle(.secondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 8)
-
-            SLOPill(status: sloStatus, text: sloText)
+            if isSLOEnabled {
+                SLOPill(status: sloStatus, text: sloText, helpText: sloHelpText)
+            }
         }
     }
 
@@ -329,6 +334,15 @@ private struct IncomingReviewRow: View {
             }
         case .remaining:
             remainingText(hours: sloHours - review.assignedAgoHours)
+        }
+    }
+
+    private var sloHelpText: String? {
+        switch sloDisplay {
+        case .elapsed:
+            elapsedText(hours: review.assignedAgoHours)
+        case .traffic, .remaining:
+            remainingDetailText(hours: sloHours - review.assignedAgoHours)
         }
     }
 }
@@ -457,6 +471,7 @@ private struct EmptyStateRow: View {
 
 private struct SettingsView: View {
     @ObservedObject var store: HubberStore
+    @Binding var isSLOEnabled: Bool
     @Binding var sloHours: Double
     @Binding var sloDisplay: SLODisplay
     @Binding var rowDensity: RowDensity
@@ -471,18 +486,46 @@ private struct SettingsView: View {
                 DeveloperPanelView(store: store)
             }
 
-            SettingsSection(title: "Review SLO") {
-                HStack(spacing: 10) {
-                    Slider(value: $sloHours, in: 1...24, step: 1)
-                    Text("\(Int(sloHours))h")
-                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .frame(width: 56, alignment: .trailing)
+            SettingsSection(title: ReviewSLOPresentation.settingsSectionTitle) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ReviewSLOPresentation.title)
+                            .font(.system(size: 13, weight: .medium))
+
+                        Text(ReviewSLOPresentation.subtitle)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $isSLOEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                 }
 
-                Text("Reviews are flagged amber at 50% and red at 100% of this budget.")
+                HStack(spacing: 12) {
+                    Text(ReviewSLOPresentation.windowLabel)
+                        .font(.system(size: 13))
+
+                    Spacer(minLength: 12)
+
+                    Slider(value: $sloHours, in: 1...24, step: 1)
+                        .frame(width: 190)
+
+                    Text("\(Int(sloHours))h")
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                        .frame(width: 36, alignment: .trailing)
+                }
+                .disabled(!isSLOEnabled)
+                .opacity(isSLOEnabled ? 1 : 0.45)
+
+                Text(ReviewSLOPresentation.thresholdHelp)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(isSLOEnabled ? 1 : 0.55)
             }
 
             SettingsSection(title: "Show SLO as") {
@@ -493,6 +536,8 @@ private struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .disabled(!isSLOEnabled)
+                .opacity(isSLOEnabled ? 1 : 0.45)
             }
 
             SettingsSection(title: "Row density", isLast: true) {
@@ -583,6 +628,7 @@ private struct PRTitle: View {
 private struct SLOPill: View {
     let status: SLOStatus
     let text: String
+    let helpText: String?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -601,6 +647,7 @@ private struct SLOPill: View {
         .overlay {
             Capsule().stroke(color.opacity(status == .red ? 0.45 : 0.40), lineWidth: 0.5)
         }
+        .help(helpText ?? text)
     }
 
     private var color: Color {
@@ -700,33 +747,4 @@ private func reviewerStateColor(_ state: ReviewerState) -> Color? {
     case .commented: Color(red: 0.04, green: 0.52, blue: 1.00)
     case .pending: nil
     }
-}
-
-private func elapsedText(hours: Double) -> String {
-    let minutes = Int((hours * 60).rounded(.down))
-    if minutes < 1 { return "just now" }
-    if minutes < 60 { return "\(minutes)m ago" }
-    if minutes < 24 * 60 {
-        let h = minutes / 60
-        let m = minutes % 60
-        return m > 0 ? "\(h)h \(m)m ago" : "\(h)h ago"
-    }
-    return "\(minutes / (24 * 60))d ago"
-}
-
-private func remainingText(hours: Double) -> String {
-    if hours <= 0 {
-        let over = abs(hours)
-        let minutes = Int((over * 60).rounded(.down))
-        if minutes < 60 { return "\(minutes)m over" }
-        let h = minutes / 60
-        let m = minutes % 60
-        return m > 0 ? "\(h)h \(m)m over" : "\(h)h over"
-    }
-
-    let minutes = Int((hours * 60).rounded(.down))
-    if minutes < 60 { return "\(minutes)m left" }
-    let h = minutes / 60
-    let m = minutes % 60
-    return m > 0 ? "\(h)h \(m)m left" : "\(h)h left"
 }
