@@ -1,0 +1,49 @@
+--swiftversion 6.0
+
+# Indentation
+--indent 4
+--indentcase false
+--tabwidth 4
+
+# Spacing
+--trimwhitespace always
+--empty-braces no-space
+
+# Braces
+--allman false
+--elseposition same-line
+--guardelse auto
+
+# Closures
+--trailingclosures true
+--nospaceoperators ...,..<
+
+# Wrapping
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--wrapreturntype if-multiline
+--maxwidth 150
+--wrapconditions before-first
+--wrapternary default
+
+# Imports
+--importgrouping testable-bottom
+
+# Other
+--self remove
+--stripunusedargs closure-only
+--redundanttype inferred
+--shortoptionals always
+--semicolons never
+--commas always
+--ranges no-space
+--hexliteralcase uppercase
+--exponentcase lowercase
+--decimalgrouping 3,6
+--binarygrouping 4,8
+--hexgrouping 4,8
+--fractiongrouping disabled
+
+# Disabled rules (too opinionated or conflict with SwiftLint)
+--disable blankLinesAtStartOfScope,blankLinesAtEndOfScope

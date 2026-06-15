@@ -315,7 +315,10 @@ private struct DraftRow: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 5)
                     .stroke(.secondary, style: StrokeStyle(lineWidth: 1.5, dash: [3, 2]))
-                    .frame(width: density == .spacious ? 22 : density == .compact ? 16 : 18, height: density == .spacious ? 22 : density == .compact ? 16 : 18)
+                    .frame(
+                        width: density == .spacious ? 22 : density == .compact ? 16 : 18,
+                        height: density == .spacious ? 22 : density == .compact ? 16 : 18
+                    )
 
                 Image(systemName: "doc")
                     .font(.system(size: density == .spacious ? 11 : 9))
@@ -412,7 +415,9 @@ private struct SettingsView: View {
         }
     }
 
-    private func settingsSection<Content: View>(title: String, isLast: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+    private func settingsSection<Content: View>(
+        title: String, isLast: Bool = false, @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
