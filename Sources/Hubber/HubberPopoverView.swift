@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HubberPopoverView: View {
-    private let data = MockGitHubData.sample
+    @ObservedObject var store: HubberStore
 
     @State private var selectedTab: WorkTab = .incoming
     @State private var showSettings = false
@@ -21,6 +21,7 @@ struct HubberPopoverView: View {
                     VStack(spacing: 0) {
                         if showSettings {
                             SettingsView(
+                                store: store,
                                 sloHours: $sloHours,
                                 sloDisplay: $sloDisplay,
                                 rowDensity: $rowDensity
@@ -47,7 +48,7 @@ struct HubberPopoverView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text("· acme")
+                Text(store.usernameDisplay)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
@@ -69,9 +70,9 @@ struct HubberPopoverView: View {
                 selectedTab: $selectedTab,
                 showSettings: $showSettings,
                 counts: [
-                    .incoming: data.incoming.count,
-                    .outgoing: data.outgoing.count,
-                    .drafts: data.drafts.count
+                    .incoming: store.data.incoming.count,
+                    .outgoing: store.data.outgoing.count,
+                    .drafts: store.data.drafts.count
                 ]
             )
         }
@@ -87,7 +88,7 @@ struct HubberPopoverView: View {
     private var content: some View {
         switch selectedTab {
         case .incoming:
-            let sorted = data.incoming.sorted { $0.assignedAgoHours > $1.assignedAgoHours }
+            let sorted = store.data.incoming.sorted { $0.assignedAgoHours > $1.assignedAgoHours }
             ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
                 IncomingReviewRow(
                     review: review,
@@ -98,19 +99,19 @@ struct HubberPopoverView: View {
                 )
             }
         case .outgoing:
-            ForEach(Array(data.outgoing.enumerated()), id: \.element.id) { index, review in
+            ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
                 OutgoingReviewRow(
                     review: review,
                     density: rowDensity,
-                    isLast: index == data.outgoing.count - 1
+                    isLast: index == store.data.outgoing.count - 1
                 )
             }
         case .drafts:
-            ForEach(Array(data.drafts.enumerated()), id: \.element.id) { index, draft in
+            ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
                 DraftRow(
                     draft: draft,
                     density: rowDensity,
-                    isLast: index == data.drafts.count - 1
+                    isLast: index == store.data.drafts.count - 1
                 )
             }
         }
@@ -364,12 +365,17 @@ private struct DraftRow: View {
 }
 
 private struct SettingsView: View {
+    @ObservedObject var store: HubberStore
     @Binding var sloHours: Double
     @Binding var sloDisplay: SLODisplay
     @Binding var rowDensity: RowDensity
 
     var body: some View {
         VStack(spacing: 0) {
+            settingsSection(title: "GitHub Account") {
+                GitHubAuthSettingsView(store: store)
+            }
+
             settingsSection(title: "Review SLO") {
                 HStack(spacing: 10) {
                     Slider(value: $sloHours, in: 1...24, step: 1)
@@ -420,6 +426,104 @@ private struct SettingsView: View {
         .overlay(alignment: .bottom) {
             if !isLast {
                 Divider().opacity(0.55)
+            }
+        }
+    }
+}
+
+private struct GitHubAuthSettingsView: View {
+    @ObservedObject var store: HubberStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            switch store.authState {
+            case .restoring:
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Checking GitHub sign-in")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+
+            case .signedOut:
+                Button {
+                    store.startSignIn()
+                } label: {
+                    Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                        .frame(maxWidth: .infinity)
+                }
+                .controlSize(.small)
+
+            case .waitingForUser(let authorization):
+                HStack(spacing: 8) {
+                    Text(authorization.userCode)
+                        .font(.system(size: 18, weight: .semibold).monospaced())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                    Button {
+                        store.copyDeviceCode()
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 24, height: 24)
+                    .help("Copy code")
+
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        store.openDeviceVerificationPage()
+                    } label: {
+                        Label("Open GitHub", systemImage: "safari")
+                    }
+
+                    Button("Cancel") {
+                        store.cancelSignIn()
+                    }
+                }
+                .controlSize(.small)
+
+                Text("Enter this code at github.com/login/device.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+            case .signedIn(let login):
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color(red: 0.25, green: 0.73, blue: 0.31))
+
+                    Text("@\(login)")
+                        .font(.system(size: 13, weight: .semibold))
+
+                    Spacer()
+
+                    Button("Sign out") {
+                        store.signOut()
+                    }
+                    .controlSize(.small)
+                }
+
+            case .error(let message):
+                Text(message)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color(red: 1.00, green: 0.48, blue: 0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Button("Try again") {
+                        store.startSignIn()
+                    }
+
+                    Button("Clear") {
+                        store.signOut()
+                    }
+                }
+                .controlSize(.small)
             }
         }
     }
