@@ -39,6 +39,7 @@ private func remainingDurationText(hours: Double, style: RemainingDurationStyle)
 }
 
 private func compactDurationText(minutes: Int, suffix: String) -> String {
+    // Keep exact minutes through roughly 1.5h; beyond that, round compact labels to half units.
     if minutes <= 91 {
         return "\(minutes)m \(suffix)"
     }

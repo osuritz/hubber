@@ -2,6 +2,18 @@ import XCTest
 @testable import Hubber
 
 final class TimeFormattingTests: XCTestCase {
+    func testElapsedTextFormatsShortDurations() {
+        XCTAssertEqual(elapsedText(hours: 0.5 / 60.0), "just now")
+        XCTAssertEqual(elapsedText(hours: 45.0 / 60.0), "45m ago")
+        XCTAssertEqual(elapsedText(hours: 2.5), "2 h 30m ago")
+    }
+
+    func testElapsedTextRoundsToNearestHalfDayAfterTwentyFourHours() {
+        XCTAssertEqual(elapsedText(hours: 24), "1 d ago")
+        XCTAssertEqual(elapsedText(hours: 30), "1 ½ d ago")
+        XCTAssertEqual(elapsedText(hours: 42), "2 d ago")
+    }
+
     func testRemainingCompactUsesMinutesThroughNinetyOneMinutes() {
         XCTAssertEqual(remainingText(hours: 72.0 / 60.0), "72m left")
         XCTAssertEqual(remainingText(hours: 90.0 / 60.0), "90m left")
@@ -43,9 +55,4 @@ final class TimeFormattingTests: XCTestCase {
         XCTAssertEqual(remainingDetailText(hours: -92.0 / 60.0), "1 h 32m over")
     }
 
-    func testElapsedTextRoundsToNearestHalfDayAfterTwentyFourHours() {
-        XCTAssertEqual(elapsedText(hours: 24), "1 d ago")
-        XCTAssertEqual(elapsedText(hours: 30), "1 ½ d ago")
-        XCTAssertEqual(elapsedText(hours: 42), "2 d ago")
-    }
 }

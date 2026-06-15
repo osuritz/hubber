@@ -6,7 +6,7 @@ struct HubberPopoverView: View {
 
     @State private var selectedTab: WorkTab = .incoming
     @State private var showSettings = false
-    @State private var isSLOEnabled = true
+    @AppStorage("reviewSLOEnabled") private var isSLOEnabled = true
     @State private var sloHours = 4.0
     @State private var sloDisplay: SLODisplay = .remaining
     @State private var rowDensity: RowDensity = .normal
