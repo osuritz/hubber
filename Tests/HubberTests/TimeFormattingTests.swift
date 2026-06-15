@@ -14,6 +14,12 @@ final class TimeFormattingTests: XCTestCase {
         XCTAssertEqual(remainingText(hours: 151.0 / 60.0), "2 ½ h left")
     }
 
+    func testRemainingCompactRoundsToNearestHalfDayAfterTwentyFourHours() {
+        XCTAssertEqual(remainingText(hours: 24), "1 d left")
+        XCTAssertEqual(remainingText(hours: 30), "1 ½ d left")
+        XCTAssertEqual(remainingText(hours: 42), "2 d left")
+    }
+
     func testOverCompactUsesMinutesThroughNinetyOneMinutes() {
         XCTAssertEqual(remainingText(hours: -72.0 / 60.0), "72m over")
         XCTAssertEqual(remainingText(hours: -90.0 / 60.0), "90m over")
@@ -26,8 +32,20 @@ final class TimeFormattingTests: XCTestCase {
         XCTAssertEqual(remainingText(hours: -151.0 / 60.0), "2 ½ h over")
     }
 
+    func testOverCompactRoundsToNearestHalfDayAfterTwentyFourHours() {
+        XCTAssertEqual(remainingText(hours: -24), "1 d over")
+        XCTAssertEqual(remainingText(hours: -30), "1 ½ d over")
+        XCTAssertEqual(remainingText(hours: -42), "2 d over")
+    }
+
     func testRemainingDetailKeepsFullHoursAndMinutesForHoverText() {
         XCTAssertEqual(remainingDetailText(hours: 92.0 / 60.0), "1 h 32m left")
         XCTAssertEqual(remainingDetailText(hours: -92.0 / 60.0), "1 h 32m over")
+    }
+
+    func testElapsedTextRoundsToNearestHalfDayAfterTwentyFourHours() {
+        XCTAssertEqual(elapsedText(hours: 24), "1 d ago")
+        XCTAssertEqual(elapsedText(hours: 30), "1 ½ d ago")
+        XCTAssertEqual(elapsedText(hours: 42), "2 d ago")
     }
 }

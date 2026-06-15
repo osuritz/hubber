@@ -9,7 +9,7 @@ func elapsedText(hours: Double) -> String {
         let m = minutes % 60
         return m > 0 ? "\(h) h \(m)m ago" : "\(h) h ago"
     }
-    return "\(minutes / (24 * 60))d ago"
+    return "\(compactDaysText(minutes: minutes)) ago"
 }
 
 func remainingText(hours: Double) -> String {
@@ -43,6 +43,10 @@ private func compactDurationText(minutes: Int, suffix: String) -> String {
         return "\(minutes)m \(suffix)"
     }
 
+    if minutes >= 24 * 60 {
+        return "\(compactDaysText(minutes: minutes)) \(suffix)"
+    }
+
     return "\(compactHoursText(minutes: minutes)) \(suffix)"
 }
 
@@ -55,12 +59,21 @@ private func detailedHoursText(minutes: Int, suffix: String) -> String {
 
 private func compactHoursText(minutes: Int) -> String {
     let halfHours = max(1, Int((Double(minutes) / 30).rounded()))
-    let wholeHours = halfHours / 2
-    let hasHalfHour = halfHours.isMultiple(of: 2) == false
+    return compactHalfUnitText(halfUnits: halfHours, unit: "h")
+}
 
-    if hasHalfHour {
-        return wholeHours > 0 ? "\(wholeHours) ½ h" : "½ h"
+private func compactDaysText(minutes: Int) -> String {
+    let halfDays = max(1, Int((Double(minutes) / Double(12 * 60)).rounded()))
+    return compactHalfUnitText(halfUnits: halfDays, unit: "d")
+}
+
+private func compactHalfUnitText(halfUnits: Int, unit: String) -> String {
+    let wholeUnits = halfUnits / 2
+    let hasHalfUnit = halfUnits.isMultiple(of: 2) == false
+
+    if hasHalfUnit {
+        return wholeUnits > 0 ? "\(wholeUnits) ½ \(unit)" : "½ \(unit)"
     }
 
-    return "\(wholeHours) h"
+    return "\(wholeUnits) \(unit)"
 }
