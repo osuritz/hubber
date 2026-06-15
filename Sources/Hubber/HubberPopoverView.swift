@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct HubberPopoverView: View {
@@ -55,6 +56,25 @@ struct HubberPopoverView: View {
                 Spacer()
 
                 Button {
+                    store.refreshPullRequests()
+                } label: {
+                    if store.isRefreshingPullRequests {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.65)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(store.canRefreshPullRequests ? .secondary : .tertiary)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+                .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
+                .help("Refresh pull requests")
+
+                Button {
                     showSettings.toggle()
                 } label: {
                     Image(systemName: "gearshape")
@@ -72,7 +92,7 @@ struct HubberPopoverView: View {
                 counts: [
                     .incoming: store.data.incoming.count,
                     .outgoing: store.data.outgoing.count,
-                    .drafts: store.data.drafts.count
+                    .drafts: store.data.drafts.count,
                 ]
             )
         }
@@ -90,36 +110,47 @@ struct HubberPopoverView: View {
         case .incoming:
             let sorted = store.data.incoming.sorted { $0.assignedAgoHours > $1.assignedAgoHours }
             ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
-                IncomingReviewRow(
-                    review: review,
-                    sloHours: sloHours,
-                    sloDisplay: sloDisplay,
-                    density: rowDensity,
-                    isLast: index == sorted.count - 1
-                )
+                ClickableRow(url: review.url) {
+                    IncomingReviewRow(
+                        review: review,
+                        sloHours: sloHours,
+                        sloDisplay: sloDisplay,
+                        density: rowDensity,
+                        isLast: index == sorted.count - 1
+                    )
+                }
             }
         case .outgoing:
             ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
-                OutgoingReviewRow(
-                    review: review,
-                    density: rowDensity,
-                    isLast: index == store.data.outgoing.count - 1
-                )
+                ClickableRow(url: review.url) {
+                    OutgoingReviewRow(
+                        review: review,
+                        density: rowDensity,
+                        isLast: index == store.data.outgoing.count - 1
+                    )
+                }
             }
         case .drafts:
-            ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
-                DraftRow(
-                    draft: draft,
-                    density: rowDensity,
-                    isLast: index == store.data.drafts.count - 1
-                )
+            if store.data.drafts.isEmpty {
+                EmptyStateRow(text: draftEmptyText)
+            } else {
+                ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
+                    ClickableRow(url: draft.url) {
+                        DraftRow(
+                            draft: draft,
+                            density: rowDensity,
+                            isLast: index == store.data.drafts.count - 1
+                        )
+                    }
+                }
             }
         }
     }
 
     private var footer: some View {
         HStack {
-            Text("Updated 2 min ago")
+            Text(refreshStatusText)
+                .lineLimit(1)
             Spacer()
             Text("SLO \(Int(sloHours))h")
             Text("⌘, Settings")
@@ -130,6 +161,49 @@ struct HubberPopoverView: View {
         .padding(.vertical, 8)
         .overlay(alignment: .top) {
             Divider().opacity(0.55)
+        }
+    }
+
+    private var refreshStatusText: String {
+        if store.isRefreshingPullRequests {
+            return "Refreshing PRs..."
+        }
+        if store.pullRequestRefreshError != nil {
+            return "Refresh failed"
+        }
+        if let lastPullRequestRefresh = store.lastPullRequestRefresh {
+            return "Updated \(elapsedText(hours: Date().timeIntervalSince(lastPullRequestRefresh) / 3600))"
+        }
+        return store.canRefreshPullRequests ? "Not refreshed yet" : "Mock data"
+    }
+
+    private var draftEmptyText: String {
+        if let error = store.pullRequestRefreshError {
+            return "Refresh failed: \(error)"
+        }
+        if store.isRefreshingPullRequests {
+            return "Refreshing draft pull requests"
+        }
+        return store.canRefreshPullRequests ? "No accessible draft pull requests" : "No draft pull requests"
+    }
+}
+
+private struct ClickableRow<Content: View>: View {
+    let url: URL?
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if let url {
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                content()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open pull request")
+        } else {
+            content()
         }
     }
 }
@@ -159,7 +233,7 @@ private struct HubberTabBar: View {
                 .foregroundStyle(selectedTab == tab && !showSettings ? .primary : .secondary)
                 .background(
                     Group {
-                        if selectedTab == tab && !showSettings {
+                        if selectedTab == tab, !showSettings {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .fill(.white.opacity(0.16))
                                 .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
@@ -243,18 +317,18 @@ private struct IncomingReviewRow: View {
     private var sloText: String {
         switch sloDisplay {
         case .elapsed:
-            return elapsedText(hours: review.assignedAgoHours)
+            elapsedText(hours: review.assignedAgoHours)
         case .traffic:
             switch sloStatus {
             case .green:
-                return "On track"
+                "On track"
             case .amber:
-                return "Due soon"
+                "Due soon"
             case .red:
-                return "Past SLO"
+                "Past SLO"
             }
         case .remaining:
-            return remainingText(hours: sloHours - review.assignedAgoHours)
+            remainingText(hours: sloHours - review.assignedAgoHours)
         }
     }
 }
@@ -367,6 +441,20 @@ private struct DraftRow: View {
     }
 }
 
+private struct EmptyStateRow: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, minHeight: 70)
+    }
+}
+
 private struct SettingsView: View {
     @ObservedObject var store: HubberStore
     @Binding var sloHours: Double
@@ -375,11 +463,15 @@ private struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            settingsSection(title: "GitHub Account") {
+            SettingsSection(title: "GitHub Account") {
                 GitHubAuthSettingsView(store: store)
             }
 
-            settingsSection(title: "Review SLO") {
+            SettingsSection(title: "Developer") {
+                DeveloperPanelView(store: store)
+            }
+
+            SettingsSection(title: "Review SLO") {
                 HStack(spacing: 10) {
                     Slider(value: $sloHours, in: 1...24, step: 1)
                     Text("\(Int(sloHours))h")
@@ -393,7 +485,7 @@ private struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            settingsSection(title: "Show SLO as") {
+            SettingsSection(title: "Show SLO as") {
                 Picker("", selection: $sloDisplay) {
                     ForEach(SLODisplay.allCases) { display in
                         Text(display.title).tag(display)
@@ -403,7 +495,7 @@ private struct SettingsView: View {
                 .labelsHidden()
             }
 
-            settingsSection(title: "Row density", isLast: true) {
+            SettingsSection(title: "Row density", isLast: true) {
                 Picker("", selection: $rowDensity) {
                     ForEach(RowDensity.allCases) { density in
                         Text(density.title).tag(density)
@@ -415,9 +507,14 @@ private struct SettingsView: View {
         }
     }
 
-    private func settingsSection<Content: View>(
-        title: String, isLast: Bool = false, @ViewBuilder content: () -> Content
-    ) -> some View {
+}
+
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    var isLast = false
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
@@ -431,104 +528,6 @@ private struct SettingsView: View {
         .overlay(alignment: .bottom) {
             if !isLast {
                 Divider().opacity(0.55)
-            }
-        }
-    }
-}
-
-private struct GitHubAuthSettingsView: View {
-    @ObservedObject var store: HubberStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            switch store.authState {
-            case .restoring:
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Checking GitHub sign-in")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-
-            case .signedOut:
-                Button {
-                    store.startSignIn()
-                } label: {
-                    Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
-                        .frame(maxWidth: .infinity)
-                }
-                .controlSize(.small)
-
-            case .waitingForUser(let authorization):
-                HStack(spacing: 8) {
-                    Text(authorization.userCode)
-                        .font(.system(size: 18, weight: .semibold).monospaced())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-
-                    Button {
-                        store.copyDeviceCode()
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: 24, height: 24)
-                    .help("Copy code")
-
-                    Spacer()
-                }
-
-                HStack(spacing: 8) {
-                    Button {
-                        store.openDeviceVerificationPage()
-                    } label: {
-                        Label("Open GitHub", systemImage: "safari")
-                    }
-
-                    Button("Cancel") {
-                        store.cancelSignIn()
-                    }
-                }
-                .controlSize(.small)
-
-                Text("Enter this code at github.com/login/device.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-
-            case .signedIn(let login):
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color(red: 0.25, green: 0.73, blue: 0.31))
-
-                    Text("@\(login)")
-                        .font(.system(size: 13, weight: .semibold))
-
-                    Spacer()
-
-                    Button("Sign out") {
-                        store.signOut()
-                    }
-                    .controlSize(.small)
-                }
-
-            case .error(let message):
-                Text(message)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Color(red: 1.00, green: 0.48, blue: 0.45))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 8) {
-                    Button("Try again") {
-                        store.startSignIn()
-                    }
-
-                    Button("Clear") {
-                        store.signOut()
-                    }
-                }
-                .controlSize(.small)
             }
         }
     }
@@ -606,9 +605,9 @@ private struct SLOPill: View {
 
     private var color: Color {
         switch status {
-        case .green: Color(red: 0.25, green: 0.73, blue: 0.31)
-        case .amber: Color(red: 0.89, green: 0.70, blue: 0.25)
-        case .red: Color(red: 1.00, green: 0.48, blue: 0.45)
+        case .green: .hubberSuccess
+        case .amber: .hubberWarning
+        case .red: .hubberError
         }
     }
 }
@@ -687,9 +686,9 @@ private struct ReviewerStack: View {
 
 private func ciColor(_ ci: PullRequestCI) -> Color {
     switch ci {
-    case .passing: Color(red: 0.25, green: 0.73, blue: 0.31)
-    case .failing: Color(red: 1.00, green: 0.48, blue: 0.45)
-    case .running: Color(red: 0.89, green: 0.70, blue: 0.25)
+    case .passing: .hubberSuccess
+    case .failing: .hubberError
+    case .running: .hubberWarning
     case .pending: .secondary
     }
 }

@@ -43,6 +43,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configureStatusMenu() {
         statusMenu.removeAllItems()
         statusMenu.addItem(
+            withTitle: "Sign Out",
+            action: #selector(signOut(_:)),
+            keyEquivalent: ""
+        )
+        statusMenu.addItem(.separator())
+        statusMenu.addItem(
             withTitle: "Quit",
             action: #selector(quit(_:)),
             keyEquivalent: "q"
@@ -69,8 +75,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func signOut(_ sender: Any?) {
+        popover.performClose(sender)
+        store.signOut()
+    }
+
     @objc private func quit(_ sender: Any?) {
         NSApp.terminate(sender)
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(signOut(_:)) {
+            if case .signedIn = store.authState {
+                return true
+            }
+            return false
+        }
+        return true
     }
 }
 

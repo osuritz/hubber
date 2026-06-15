@@ -35,7 +35,9 @@ opt_in_rules:
   - yoda_condition
 
 disabled_rules:
+  - sorted_imports
   - todo
+  - trailing_comma
 
 line_length:
   warning: 120

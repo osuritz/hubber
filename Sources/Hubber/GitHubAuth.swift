@@ -52,26 +52,42 @@ enum GitHubAuthError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "GitHub returned an unexpected response."
+            "GitHub returned an unexpected response."
         case .authorizationExpired:
-            return "The GitHub sign-in code expired. Start sign-in again."
+            "The GitHub sign-in code expired. Start sign-in again."
         case .authorizationDenied:
-            return "GitHub sign-in was cancelled."
+            "GitHub sign-in was cancelled."
         case .deviceFlowDisabled:
-            return "Device Flow is not enabled for this GitHub App."
+            "Device Flow is not enabled for this GitHub App."
         case .badCredentials:
-            return "GitHub rejected the saved credentials. Please sign in again."
+            "GitHub rejected the saved credentials. Please sign in again."
         case .missingRefreshToken:
-            return "The saved token cannot be refreshed. Please sign in again."
-        case .keychain(let status):
-            return "Keychain returned status \(status)."
-        case .github(let message):
-            return message
+            "The saved token cannot be refreshed. Please sign in again."
+        case let .keychain(status):
+            "Keychain returned status \(status)."
+        case let .github(message):
+            message
         }
     }
 }
 
-final class GitHubTokenStore: Sendable {
+protocol GitHubTokenStoring: Sendable {
+    func load() throws -> GitHubStoredToken?
+    func save(_ token: GitHubStoredToken) throws
+    func delete() throws
+}
+
+enum GitHubTokenStore {
+    static func makeDefault() -> any GitHubTokenStoring {
+        #if DEBUG
+            return GitHubDevelopmentFileTokenStore()
+        #else
+            return GitHubKeychainTokenStore()
+        #endif
+    }
+}
+
+final class GitHubKeychainTokenStore: GitHubTokenStoring {
     private let service = "com.osuritz.hubber.github-auth"
     private let account = "github-app-user-token"
 
@@ -103,7 +119,7 @@ final class GitHubTokenStore: Sendable {
         var query = baseQuery
         let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
 
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
@@ -133,8 +149,56 @@ final class GitHubTokenStore: Sendable {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: account,
         ]
+    }
+}
+
+final class GitHubDevelopmentFileTokenStore: GitHubTokenStoring {
+    private let tokenURL: URL
+
+    init(tokenURL: URL = GitHubDevelopmentFileTokenStore.defaultTokenURL) {
+        self.tokenURL = tokenURL
+    }
+
+    func load() throws -> GitHubStoredToken? {
+        guard FileManager.default.fileExists(atPath: tokenURL.path) else {
+            return nil
+        }
+
+        let data = try Data(contentsOf: tokenURL)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(GitHubStoredToken.self, from: data)
+    }
+
+    func save(_ token: GitHubStoredToken) throws {
+        try FileManager.default.createDirectory(
+            at: tokenURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(token)
+        try data.write(to: tokenURL, options: [.atomic])
+    }
+
+    func delete() throws {
+        guard FileManager.default.fileExists(atPath: tokenURL.path) else {
+            return
+        }
+        try FileManager.default.removeItem(at: tokenURL)
+    }
+
+    static var defaultTokenURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let baseURL = appSupport
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return baseURL
+            .appendingPathComponent("Hubber", isDirectory: true)
+            .appendingPathComponent("github-auth-dev.json")
     }
 }
 
@@ -169,7 +233,7 @@ final class GitHubAuthService: Sendable {
     func pollForToken(deviceAuthorization: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
         var interval = max(deviceAuthorization.interval, 1)
 
-        while !Task.isCancelled && !deviceAuthorization.isExpired {
+        while !Task.isCancelled, !deviceAuthorization.isExpired {
             try await Task.sleep(for: .seconds(interval))
 
             let response: TokenResponse = try await postForm(
@@ -177,7 +241,7 @@ final class GitHubAuthService: Sendable {
                 parameters: [
                     "client_id": clientID,
                     "device_code": deviceAuthorization.deviceCode,
-                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 ]
             )
 
@@ -196,7 +260,7 @@ final class GitHubAuthService: Sendable {
                 throw GitHubAuthError.authorizationDenied
             case "device_flow_disabled":
                 throw GitHubAuthError.deviceFlowDisabled
-            case .some(let error):
+            case let .some(error):
                 throw GitHubAuthError.github(response.errorDescription ?? error)
             case nil:
                 throw GitHubAuthError.invalidResponse
@@ -219,7 +283,7 @@ final class GitHubAuthService: Sendable {
             parameters: [
                 "client_id": clientID,
                 "grant_type": "refresh_token",
-                "refresh_token": refreshToken
+                "refresh_token": refreshToken,
             ]
         )
 
@@ -276,38 +340,54 @@ final class GitHubAuthService: Sendable {
 @MainActor
 final class HubberStore: ObservableObject {
     @Published private(set) var authState: HubberAuthState = .restoring
-
-    let data = MockGitHubData.sample
+    @Published private(set) var data = HubberData.sample
+    @Published private(set) var isRefreshingPullRequests = false
+    @Published private(set) var lastPullRequestRefresh: Date?
+    @Published private(set) var pullRequestRefreshError: String?
+    @Published private(set) var developerLog: [DeveloperLogEntry] = []
 
     private let authService: GitHubAuthService
-    private let tokenStore: GitHubTokenStore
+    private let pullRequestService: GitHubPullRequestService
+    private let tokenStore: any GitHubTokenStoring
     private var authTask: Task<Void, Never>?
+    private var pullRequestRefreshTask: Task<Void, Never>?
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
-        tokenStore: GitHubTokenStore = GitHubTokenStore()
+        pullRequestService: GitHubPullRequestService = GitHubPullRequestService(),
+        tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault()
     ) {
         self.authService = authService
+        self.pullRequestService = pullRequestService
         self.tokenStore = tokenStore
         restoreSession()
     }
 
     var usernameDisplay: String {
         switch authState {
-        case .signedIn(let login):
-            return "· @\(login)"
+        case let .signedIn(login):
+            "· @\(login)"
         case .waitingForUser:
-            return "· signing in"
+            "· signing in"
         case .restoring:
-            return "· loading"
+            "· loading"
         case .signedOut:
-            return "· not signed in"
+            "· not signed in"
         case .error:
-            return "· auth error"
+            "· auth error"
         }
     }
 
+    var canRefreshPullRequests: Bool {
+        if case .signedIn = authState {
+            return true
+        }
+        return false
+    }
+
     func restoreSession() {
+        appendDeveloperLog("Restoring saved GitHub session")
+        appendDeveloperLog("Token storage: \(tokenStoreDescription)")
         authTask?.cancel()
         authTask = Task {
             var cachedLogin: String?
@@ -315,17 +395,19 @@ final class HubberStore: ObservableObject {
             do {
                 guard var token = try await loadStoredToken() else {
                     authState = .signedOut
+                    appendDeveloperLog("No saved GitHub token found")
                     return
                 }
 
                 cachedLogin = token.login
                 if let login = cachedLogin {
-                    authState = .signedIn(login: login)
+                    useCachedLogin(login)
                 } else {
                     authState = .restoring
                 }
 
                 if !token.hasFreshAccessToken {
+                    appendDeveloperLog("Refreshing expired GitHub access token")
                     token = try await authService.refresh(token)
                 }
 
@@ -339,38 +421,52 @@ final class HubberStore: ObservableObject {
 
                 token.login = user.login
                 try await saveStoredToken(token)
-                authState = .signedIn(login: user.login)
+                finishSignedInSession(login: user.login)
             } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
                 try? await deleteStoredToken()
                 authState = .signedOut
+                appendDeveloperLog("Saved GitHub credentials were rejected")
+                stopPullRequestRefreshLoop()
             } catch {
                 if let cachedLogin {
-                    authState = .signedIn(login: cachedLogin)
+                    useCachedLogin(cachedLogin)
+                    appendDeveloperLog(
+                        "Session restore failed, keeping cached login @\(cachedLogin): \(error.localizedDescription)"
+                    )
+                    startPullRequestRefreshLoop()
                 } else {
                     authState = .error(error.localizedDescription)
+                    appendDeveloperLog("Session restore failed: \(error.localizedDescription)")
+                    stopPullRequestRefreshLoop()
                 }
             }
         }
     }
 
     func startSignIn() {
+        appendDeveloperLog("Starting GitHub device sign-in")
         authTask?.cancel()
         authTask = Task {
             do {
                 authState = .restoring
                 let deviceAuthorization = try await authService.startDeviceFlow()
                 authState = .waitingForUser(deviceAuthorization)
+                appendDeveloperLog("Waiting for GitHub device authorization")
                 NSWorkspace.shared.open(deviceAuthorization.verificationURI)
 
                 var token = try await authService.pollForToken(deviceAuthorization: deviceAuthorization)
                 let user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
                 token.login = user.login
                 try await saveStoredToken(token)
-                authState = .signedIn(login: user.login)
+                finishSignedInSession(login: user.login)
             } catch is CancellationError {
                 authState = .signedOut
+                appendDeveloperLog("GitHub sign-in cancelled")
+                stopPullRequestRefreshLoop()
             } catch {
                 authState = .error(error.localizedDescription)
+                appendDeveloperLog("GitHub sign-in failed: \(error.localizedDescription)")
+                stopPullRequestRefreshLoop()
             }
         }
     }
@@ -379,31 +475,194 @@ final class HubberStore: ObservableObject {
         authTask?.cancel()
         authTask = nil
         authState = .signedOut
+        appendDeveloperLog("GitHub sign-in cancelled")
+        stopPullRequestRefreshLoop()
     }
 
     func signOut() {
+        appendDeveloperLog("Signing out")
         authTask?.cancel()
+        stopPullRequestRefreshLoop()
         authTask = Task {
             do {
                 try await deleteStoredToken()
                 authState = .signedOut
+                data = HubberData.sample
+                lastPullRequestRefresh = nil
+                pullRequestRefreshError = nil
+                appendDeveloperLog("Signed out and cleared saved GitHub token")
             } catch {
                 authState = .error(error.localizedDescription)
+                appendDeveloperLog("Sign out failed: \(error.localizedDescription)")
             }
         }
     }
 
     func openDeviceVerificationPage() {
-        if case .waitingForUser(let authorization) = authState {
+        if case let .waitingForUser(authorization) = authState {
             NSWorkspace.shared.open(authorization.verificationURI)
         }
     }
 
     func copyDeviceCode() {
-        if case .waitingForUser(let authorization) = authState {
+        if case let .waitingForUser(authorization) = authState {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(authorization.userCode, forType: .string)
         }
+    }
+
+    func refreshPullRequests() {
+        guard canRefreshPullRequests, !isRefreshingPullRequests else {
+            appendDeveloperLog("Ignored manual refresh request")
+            return
+        }
+
+        appendDeveloperLog("Manual pull request refresh requested")
+        Task {
+            await refreshPullRequestsFromGitHub()
+        }
+    }
+
+    func clearDeveloperLog() {
+        developerLog.removeAll()
+    }
+
+    func copyDeveloperLog() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(developerLogText, forType: .string)
+    }
+
+    private func startPullRequestRefreshLoop() {
+        pullRequestRefreshTask?.cancel()
+        pullRequestRefreshTask = Task {
+            await refreshPullRequestsFromGitHub()
+
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(5 * 60))
+                } catch {
+                    break
+                }
+                await refreshPullRequestsFromGitHub()
+            }
+        }
+    }
+
+    private func useCachedLogin(_ login: String) {
+        authState = .signedIn(login: login)
+        clearDraftMocks()
+        appendDeveloperLog("Using cached GitHub login @\(login)")
+    }
+
+    private func finishSignedInSession(login: String) {
+        authState = .signedIn(login: login)
+        clearDraftMocks()
+        appendDeveloperLog("Signed in as @\(login)")
+        startPullRequestRefreshLoop()
+    }
+
+    private func stopPullRequestRefreshLoop() {
+        pullRequestRefreshTask?.cancel()
+        pullRequestRefreshTask = nil
+        isRefreshingPullRequests = false
+    }
+
+    private func clearDraftMocks() {
+        guard lastPullRequestRefresh == nil else {
+            return
+        }
+        data = HubberData(
+            incoming: data.incoming,
+            outgoing: data.outgoing,
+            drafts: []
+        )
+    }
+
+    private func refreshPullRequestsFromGitHub() async {
+        guard canRefreshPullRequests, !isRefreshingPullRequests else {
+            return
+        }
+        guard let login = signedInLogin else {
+            appendDeveloperLog("Skipped refresh because no signed-in login was available")
+            return
+        }
+
+        isRefreshingPullRequests = true
+        defer { isRefreshingPullRequests = false }
+
+        do {
+            let token = try await freshStoredToken()
+            appendDeveloperLog("Fetching draft PRs for @\(token.login ?? login)")
+            let drafts = try await pullRequestService.fetchDraftPullRequests(accessToken: token.accessToken)
+            data = HubberData(
+                incoming: data.incoming,
+                outgoing: data.outgoing,
+                drafts: drafts
+            )
+            lastPullRequestRefresh = Date()
+            pullRequestRefreshError = nil
+            appendDeveloperLog("Fetched \(drafts.count) draft PRs")
+        } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
+            try? await deleteStoredToken()
+            authState = .signedOut
+            appendDeveloperLog("Refresh failed because saved credentials are invalid")
+            stopPullRequestRefreshLoop()
+        } catch is CancellationError {
+            appendDeveloperLog("Pull request refresh cancelled")
+            return
+        } catch {
+            pullRequestRefreshError = error.localizedDescription
+            appendDeveloperLog("Pull request refresh failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func freshStoredToken() async throws -> GitHubStoredToken {
+        guard var token = try await loadStoredToken() else {
+            throw GitHubAuthError.badCredentials
+        }
+
+        if !token.hasFreshAccessToken {
+            token = try await authService.refresh(token)
+            try await saveStoredToken(token)
+        }
+
+        return token
+    }
+
+    private var signedInLogin: String? {
+        if case let .signedIn(login) = authState {
+            return login
+        }
+        return nil
+    }
+
+    private var developerLogText: String {
+        developerLog
+            .map { entry in
+                "[\(Self.developerLogFormatter.string(from: entry.timestamp))] \(entry.message)"
+            }
+            .joined(separator: "\n")
+    }
+
+    private func appendDeveloperLog(_ message: String) {
+        developerLog.insert(DeveloperLogEntry(timestamp: Date(), message: message), at: 0)
+        if developerLog.count > 80 {
+            developerLog.removeLast(developerLog.count - 80)
+        }
+    }
+
+    private static let developerLogFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private var tokenStoreDescription: String {
+        #if DEBUG
+            return "development file at \(GitHubDevelopmentFileTokenStore.defaultTokenURL.path)"
+        #else
+            return "Keychain"
+        #endif
     }
 
     private func loadStoredToken() async throws -> GitHubStoredToken? {
@@ -436,7 +695,7 @@ enum HubberAuthState: Equatable, Sendable {
     case error(String)
 }
 
-private struct DeviceCodeResponse: Decodable, Sendable {
+private struct DeviceCodeResponse: Decodable {
     let deviceCode: String
     let userCode: String
     let verificationURI: String
@@ -452,7 +711,7 @@ private struct DeviceCodeResponse: Decodable, Sendable {
     }
 }
 
-private struct TokenResponse: Decodable, Sendable {
+private struct TokenResponse: Decodable {
     let accessToken: String?
     let expiresIn: Int?
     let refreshToken: String?
@@ -489,7 +748,7 @@ private struct TokenResponse: Decodable, Sendable {
     }
 }
 
-private extension Dictionary where Key == String, Value == String {
+private extension [String: String] {
     func formURLEncoded() -> String {
         map { key, value in
             "\(key.urlFormEncoded)=\(value.urlFormEncoded)"

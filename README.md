@@ -2,7 +2,7 @@
 
 Hubber is a macOS menu-bar prototype for keeping GitHub review work visible at a glance.
 
-It is currently mock-data only. The app is focused on validating a native macOS popover experience for three GitHub work streams: incoming reviews, outgoing pull requests, and draft pull requests.
+It is currently a prototype with mock incoming/outgoing data and a live draft PR proof of concept. The app is focused on validating a native macOS popover experience for three GitHub work streams: incoming reviews, outgoing pull requests, and draft pull requests.
 
 ## Status
 
@@ -15,12 +15,14 @@ Prototype. Hubber runs as a Swift Package Manager executable and is not packaged
 - SwiftUI popover UI with three tabs: `Incoming`, `Outgoing`, and `Drafts`
 - Count badges beside each tab label
 - GitHub App Device Flow sign-in from settings
-- Keychain storage for GitHub user access and refresh tokens
+- Debug token storage in an app-local file, with Keychain storage reserved for release builds
+- Live draft PR refresh on sign-in, every 5 minutes, and from the header refresh button
 - Incoming review rows with review SLO status pills
 - Outgoing PR rows with CI status, unresolved comments, and reviewer state
 - Draft PR rows with CI status and freshness
 - Settings view for review SLO display and row density
-- Right-click status item menu with `Quit`
+- Developer panel with recent auth and refresh logs
+- Right-click status item menu with `Sign Out` and `Quit`
 
 ## Requirements
 
@@ -46,8 +48,10 @@ swift run Hubber
 
 - Left-click the Hubber menu-bar item to open or close the popover.
 - Right-click the Hubber menu-bar item to open the app menu.
+- Choose `Sign Out` from the right-click menu to clear the saved GitHub token.
 - Choose `Quit` from the right-click menu to stop the app.
 - Use the gear button in the popover to adjust mock SLO display and row density settings.
+- Use the refresh button beside the gear to fetch draft PRs immediately after signing in.
 
 ## Project Layout
 
@@ -58,6 +62,7 @@ Sources/
     main.swift
     GitHubAuth.swift
     GitHubAppConfig.swift
+    GitHubPullRequestService.swift
     HubberPopoverView.swift
     Models.swift
     VisualEffectView.swift
@@ -65,8 +70,9 @@ Sources/
 
 - `Package.swift`: Swift Package Manager executable target definition
 - `Sources/Hubber/main.swift`: AppKit app delegate, menu-bar status item, popover, and quit menu wiring
-- `Sources/Hubber/GitHubAuth.swift`: GitHub App Device Flow client, token refresh, Keychain token storage, and auth view state
+- `Sources/Hubber/GitHubAuth.swift`: GitHub App Device Flow client, token refresh, development token storage, release Keychain token storage, and auth view state
 - `Sources/Hubber/GitHubAppConfig.swift`: non-secret GitHub App metadata used by the Device Flow integration
+- `Sources/Hubber/GitHubPullRequestService.swift`: GitHub GraphQL client for draft pull request data
 - `Sources/Hubber/HubberPopoverView.swift`: SwiftUI popover UI, tabs, rows, settings, SLO pills, CI badges, and avatar views
 - `Sources/Hubber/Models.swift`: mock GitHub data and lightweight data models
 - `Sources/Hubber/VisualEffectView.swift`: SwiftUI wrapper around `NSVisualEffectView`
@@ -85,9 +91,13 @@ Hubber deliberately starts as a small SPM executable so the product shape can mo
 
 ## GitHub Integration
 
-GitHub App Device Flow sign-in is implemented. The current pull request data is still static mock data in `Sources/Hubber/Models.swift`.
+GitHub App Device Flow sign-in is implemented. After sign-in, Hubber fetches the viewer's open draft PRs with GitHub GraphQL immediately, then every 5 minutes. Incoming reviews and outgoing PRs still use static mock data in `Sources/Hubber/Models.swift`.
+
+The draft PR query only sees repositories that the Hubber GitHub App token can access. If a repository is visible in the browser but missing in Hubber, install or authorize the GitHub App for that repository/account and sign in again.
 
 The GitHub App Client ID is configured in `Sources/Hubber/GitHubAppConfig.swift`. Do not store a client secret in this desktop app.
+
+Debug builds store the GitHub token in `~/Library/Application Support/Hubber/github-auth-dev.json` to avoid repeated Keychain prompts while iterating on the unsigned SwiftPM executable. Release builds use Keychain storage instead.
 
 Expected future data sources include:
 
@@ -106,7 +116,7 @@ If the status item is hard to find, look on the right side of the macOS menu bar
 
 ## Roadmap
 
-- Replace mock data with GitHub API data
+- Replace remaining mock data with GitHub API data
 - Package Hubber as a real `.app`
 - Add app icon and release metadata
 - Persist settings

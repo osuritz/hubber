@@ -5,7 +5,9 @@ enum WorkTab: String, CaseIterable, Identifiable {
     case outgoing
     case drafts
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -16,7 +18,7 @@ enum WorkTab: String, CaseIterable, Identifiable {
     }
 }
 
-enum PullRequestCI: String {
+enum PullRequestCI: String, Sendable {
     case passing
     case failing
     case running
@@ -41,7 +43,9 @@ enum SLODisplay: String, CaseIterable, Identifiable {
     case elapsed
     case traffic
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -57,7 +61,9 @@ enum RowDensity: Int, CaseIterable, Identifiable {
     case normal = 2
     case spacious = 3
 
-    var id: Int { rawValue }
+    var id: Int {
+        rawValue
+    }
 
     var title: String {
         switch self {
@@ -73,7 +79,9 @@ struct GitHubUser: Identifiable, Hashable {
     let initials: String
     let color: Color
 
-    var id: String { login }
+    var id: String {
+        login
+    }
 }
 
 struct IncomingReview: Identifiable {
@@ -81,6 +89,7 @@ struct IncomingReview: Identifiable {
     let repo: String
     let number: Int
     let title: String
+    let url: URL?
     let author: GitHubUser
     let assignedAgoHours: Double
     let additions: Int
@@ -93,6 +102,7 @@ struct OutgoingReview: Identifiable {
     let repo: String
     let number: Int
     let title: String
+    let url: URL?
     let ci: PullRequestCI
     let ciDetail: String
     let unresolved: Int
@@ -103,36 +113,50 @@ struct OutgoingReview: Identifiable {
     let mergeable: Bool
 }
 
-struct DraftReview: Identifiable {
+struct DraftReview: Identifiable, Sendable {
     let id: String
     let repo: String
     let number: Int
     let title: String
+    let url: URL?
     let ci: PullRequestCI
     let ciDetail: String
     let commits: Int
-    let updatedAgoHours: Double
+    let updatedAt: Date
+
+    var updatedAgoHours: Double {
+        max(0, Date().timeIntervalSince(updatedAt) / 3600)
+    }
 }
 
 struct Reviewer: Identifiable {
     let user: GitHubUser
     let state: ReviewerState
 
-    var id: String { user.login }
+    var id: String {
+        user.login
+    }
 }
 
-struct MockGitHubData {
+struct DeveloperLogEntry: Identifiable, Sendable {
+    let id = UUID()
+    let timestamp: Date
+    let message: String
+}
+
+struct HubberData {
     let incoming: [IncomingReview]
     let outgoing: [OutgoingReview]
     let drafts: [DraftReview]
 
-    static let sample = MockGitHubData(
+    static let sample = HubberData(
         incoming: [
             IncomingReview(
                 id: "pr-9821",
                 repo: "acme/payments-api",
                 number: 9821,
                 title: "Idempotency keys for refund retries",
+                url: nil,
                 author: .marisol,
                 assignedAgoHours: 0.4,
                 additions: 142,
@@ -144,6 +168,7 @@ struct MockGitHubData {
                 repo: "acme/web",
                 number: 9817,
                 title: "Switch checkout flow to server components",
+                url: nil,
                 author: .tobi,
                 assignedAgoHours: 2.3,
                 additions: 612,
@@ -155,6 +180,7 @@ struct MockGitHubData {
                 repo: "acme/infra",
                 number: 9805,
                 title: "Bump Postgres to 16.4 + reindex migration",
+                url: nil,
                 author: .kenji,
                 assignedAgoHours: 3.7,
                 additions: 86,
@@ -166,6 +192,7 @@ struct MockGitHubData {
                 repo: "acme/mobile-ios",
                 number: 9788,
                 title: "Fix biometric prompt race on cold launch",
+                url: nil,
                 author: .priyanka,
                 assignedAgoHours: 5.2,
                 additions: 54,
@@ -177,12 +204,13 @@ struct MockGitHubData {
                 repo: "acme/design-system",
                 number: 9776,
                 title: "Tokens: replace hex with semantic refs in Button",
+                url: nil,
                 author: .ines,
                 assignedAgoHours: 1.1,
                 additions: 318,
                 deletions: 290,
                 files: 12
-            )
+            ),
         ],
         outgoing: [
             OutgoingReview(
@@ -190,6 +218,7 @@ struct MockGitHubData {
                 repo: "acme/payments-api",
                 number: 9830,
                 title: "Webhook signature rotation playbook",
+                url: nil,
                 ci: .passing,
                 ciDetail: "12/12 checks",
                 unresolved: 0,
@@ -197,7 +226,7 @@ struct MockGitHubData {
                 requiredApprovals: 2,
                 reviewers: [
                     Reviewer(user: .marisol, state: .approved),
-                    Reviewer(user: .kenji, state: .approved)
+                    Reviewer(user: .kenji, state: .approved),
                 ],
                 updatedAgoHours: 0.3,
                 mergeable: true
@@ -207,6 +236,7 @@ struct MockGitHubData {
                 repo: "acme/web",
                 number: 9826,
                 title: "Search: debounce typeahead + cancel stale fetches",
+                url: nil,
                 ci: .failing,
                 ciDetail: "2 failing · 9 passing",
                 unresolved: 4,
@@ -214,7 +244,7 @@ struct MockGitHubData {
                 requiredApprovals: 2,
                 reviewers: [
                     Reviewer(user: .tobi, state: .changesRequested),
-                    Reviewer(user: .ines, state: .pending)
+                    Reviewer(user: .ines, state: .pending),
                 ],
                 updatedAgoHours: 1.6,
                 mergeable: true
@@ -224,6 +254,7 @@ struct MockGitHubData {
                 repo: "acme/infra",
                 number: 9819,
                 title: "Terraform: split staging VPC modules",
+                url: nil,
                 ci: .running,
                 ciDetail: "8/14 checks · running",
                 unresolved: 1,
@@ -231,7 +262,7 @@ struct MockGitHubData {
                 requiredApprovals: 2,
                 reviewers: [
                     Reviewer(user: .kenji, state: .approved),
-                    Reviewer(user: .priyanka, state: .pending)
+                    Reviewer(user: .priyanka, state: .pending),
                 ],
                 updatedAgoHours: 0.1,
                 mergeable: true
@@ -241,17 +272,18 @@ struct MockGitHubData {
                 repo: "acme/cli",
                 number: 9802,
                 title: "Add acme env diff subcommand",
+                url: nil,
                 ci: .passing,
                 ciDetail: "9/9 checks",
                 unresolved: 2,
                 approvals: 1,
                 requiredApprovals: 1,
                 reviewers: [
-                    Reviewer(user: .marisol, state: .commented)
+                    Reviewer(user: .marisol, state: .commented),
                 ],
                 updatedAgoHours: 4.2,
                 mergeable: false
-            )
+            ),
         ],
         drafts: [
             DraftReview(
@@ -259,33 +291,42 @@ struct MockGitHubData {
                 repo: "acme/payments-api",
                 number: 9835,
                 title: "Spike: ledger double-entry rewrite",
+                url: nil,
                 ci: .running,
                 ciDetail: "running · 3/11",
                 commits: 6,
-                updatedAgoHours: 0.5
+                updatedAt: .hoursAgo(0.5)
             ),
             DraftReview(
                 id: "pr-9831",
                 repo: "acme/web",
                 number: 9831,
                 title: "Experiment: streaming cart updates over SSE",
+                url: nil,
                 ci: .passing,
                 ciDetail: "11/11 checks",
                 commits: 14,
-                updatedAgoHours: 8
+                updatedAt: .hoursAgo(8)
             ),
             DraftReview(
                 id: "pr-9812",
                 repo: "acme/design-system",
                 number: 9812,
                 title: "RFC: motion tokens",
+                url: nil,
                 ci: .failing,
                 ciDetail: "1 failing",
                 commits: 3,
-                updatedAgoHours: 26
-            )
+                updatedAt: .hoursAgo(26)
+            ),
         ]
     )
+}
+
+extension Date {
+    static func hoursAgo(_ hours: Double) -> Date {
+        Date().addingTimeInterval(-hours * 3600)
+    }
 }
 
 extension GitHubUser {
