@@ -31,9 +31,6 @@ playground.xcworkspace
 
 .build/
 
-# SwiftLint
-.swiftlint.cache
-
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However
@@ -63,3 +60,22 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# ==========================================
+# Claude Code / Anthropic Configuration
+# ==========================================
+
+# Local-only user settings and credentials
+.claude/settings.local.json
+
+# Temporary local workspaces and parallel tracking
+.claude/worktrees/
+tmpclaude-*
+
+# AI context notes (if kept local-only)
+# Remove these two if your team actively shares system instructions
+CLAUDE.local.md
+.claude/rules/local/
+
+# Local AI session-state / memory notes (not tracked)
+CLAUDE_MEMORY.md
