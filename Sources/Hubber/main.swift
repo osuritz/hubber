@@ -6,12 +6,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private let statusMenu = NSMenu()
+    private let store = HubberStore()
     private var eventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        let contentView = HubberPopoverView()
+        let contentView = HubberPopoverView(store: store)
             .frame(width: 420, height: 540)
 
         popover.behavior = .transient
