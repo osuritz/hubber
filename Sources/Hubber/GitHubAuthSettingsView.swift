@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct GitHubAuthSettingsView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     @ObservedObject var store: HubberStore
 
     var body: some View {
@@ -47,7 +49,10 @@ struct GitHubAuthSettingsView: View {
                     .font(.system(size: 18, weight: .semibold).monospaced())
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .background(
+                        HubberAppearance.chipFill(for: colorScheme),
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    )
 
                 Button {
                     store.copyDeviceCode()
