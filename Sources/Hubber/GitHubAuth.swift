@@ -71,16 +71,9 @@ enum GitHubAuthError: LocalizedError, Equatable, Sendable {
     }
 }
 
-final class GitHubTokenStore {
+final class GitHubTokenStore: Sendable {
     private let service = "com.osuritz.hubber.github-auth"
     private let account = "github-app-user-token"
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
-
-    init() {
-        encoder.dateEncodingStrategy = .iso8601
-        decoder.dateDecodingStrategy = .iso8601
-    }
 
     func load() throws -> GitHubStoredToken? {
         var query = baseQuery
@@ -98,10 +91,14 @@ final class GitHubTokenStore {
         guard let data = item as? Data else {
             throw GitHubAuthError.invalidResponse
         }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(GitHubStoredToken.self, from: data)
     }
 
     func save(_ token: GitHubStoredToken) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(token)
         var query = baseQuery
         let attributes: [String: Any] = [
@@ -312,13 +309,16 @@ final class HubberStore: ObservableObject {
     func restoreSession() {
         authTask?.cancel()
         authTask = Task {
+            var cachedLogin: String?
+
             do {
-                guard var token = try tokenStore.load() else {
+                guard var token = try await loadStoredToken() else {
                     authState = .signedOut
                     return
                 }
 
-                if let login = token.login {
+                cachedLogin = token.login
+                if let login = cachedLogin {
                     authState = .signedIn(login: login)
                 } else {
                     authState = .restoring
@@ -328,15 +328,26 @@ final class HubberStore: ObservableObject {
                     token = try await authService.refresh(token)
                 }
 
-                let user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
+                let user: GitHubAuthenticatedUser
+                do {
+                    user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
+                } catch GitHubAuthError.badCredentials where token.canRefresh {
+                    token = try await authService.refresh(token)
+                    user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
+                }
+
                 token.login = user.login
-                try tokenStore.save(token)
+                try await saveStoredToken(token)
                 authState = .signedIn(login: user.login)
             } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
-                try? tokenStore.delete()
+                try? await deleteStoredToken()
                 authState = .signedOut
             } catch {
-                authState = .error(error.localizedDescription)
+                if let cachedLogin {
+                    authState = .signedIn(login: cachedLogin)
+                } else {
+                    authState = .error(error.localizedDescription)
+                }
             }
         }
     }
@@ -353,7 +364,7 @@ final class HubberStore: ObservableObject {
                 var token = try await authService.pollForToken(deviceAuthorization: deviceAuthorization)
                 let user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
                 token.login = user.login
-                try tokenStore.save(token)
+                try await saveStoredToken(token)
                 authState = .signedIn(login: user.login)
             } catch is CancellationError {
                 authState = .signedOut
@@ -371,12 +382,13 @@ final class HubberStore: ObservableObject {
 
     func signOut() {
         authTask?.cancel()
-        authTask = nil
-        do {
-            try tokenStore.delete()
-            authState = .signedOut
-        } catch {
-            authState = .error(error.localizedDescription)
+        authTask = Task {
+            do {
+                try await deleteStoredToken()
+                authState = .signedOut
+            } catch {
+                authState = .error(error.localizedDescription)
+            }
         }
     }
 
@@ -391,6 +403,27 @@ final class HubberStore: ObservableObject {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(authorization.userCode, forType: .string)
         }
+    }
+
+    private func loadStoredToken() async throws -> GitHubStoredToken? {
+        let tokenStore = tokenStore
+        return try await Task.detached(priority: .utility) {
+            try tokenStore.load()
+        }.value
+    }
+
+    private func saveStoredToken(_ token: GitHubStoredToken) async throws {
+        let tokenStore = tokenStore
+        try await Task.detached(priority: .utility) {
+            try tokenStore.save(token)
+        }.value
+    }
+
+    private func deleteStoredToken() async throws {
+        let tokenStore = tokenStore
+        try await Task.detached(priority: .utility) {
+            try tokenStore.delete()
+        }.value
     }
 }
 

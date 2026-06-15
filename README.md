@@ -66,7 +66,7 @@ Sources/
 - `Package.swift`: Swift Package Manager executable target definition
 - `Sources/Hubber/main.swift`: AppKit app delegate, menu-bar status item, popover, and quit menu wiring
 - `Sources/Hubber/GitHubAuth.swift`: GitHub App Device Flow client, token refresh, Keychain token storage, and auth view state
-- `Sources/Hubber/GitHubAppConfig.swift`: non-secret GitHub App metadata used by the future Device Flow integration
+- `Sources/Hubber/GitHubAppConfig.swift`: non-secret GitHub App metadata used by the Device Flow integration
 - `Sources/Hubber/HubberPopoverView.swift`: SwiftUI popover UI, tabs, rows, settings, SLO pills, CI badges, and avatar views
 - `Sources/Hubber/Models.swift`: mock GitHub data and lightweight data models
 - `Sources/Hubber/VisualEffectView.swift`: SwiftUI wrapper around `NSVisualEffectView`
@@ -87,7 +87,7 @@ Hubber deliberately starts as a small SPM executable so the product shape can mo
 
 GitHub App Device Flow sign-in is implemented. The current pull request data is still static mock data in `Sources/Hubber/Models.swift`.
 
-The GitHub App numeric ID and Client ID are configured in `Sources/Hubber/GitHubAppConfig.swift`. Do not store a client secret in this desktop app.
+The GitHub App Client ID is configured in `Sources/Hubber/GitHubAppConfig.swift`. Do not store a client secret in this desktop app.
 
 Expected future data sources include:
 
