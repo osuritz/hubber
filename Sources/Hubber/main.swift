@@ -28,8 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pulsePhase: Double = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        TelemetryDeckSink.initialize()
-        MXMetricManager.shared.add(metricSubscriber)
+        startTelemetry()
         NSApp.setActivationPolicy(.accessory)
 
         let contentView = HubberPopoverView(store: store)
@@ -86,6 +85,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 self?.store.refreshPullRequests()
             }
+        }
+    }
+
+    // MARK: - Telemetry / crash reporting
+
+    /// Gates TelemetryDeck and MetricKit on the user/MDM privacy kill-switches.
+    ///
+    /// Both `analyticsEnabled` and `crashReportingEnabled` default to `true`.
+    /// MDM can force either to `false`; users can also toggle them in Privacy settings.
+    /// Sinks that are not started here are also not removed in `applicationWillTerminate`.
+    private func startTelemetry() {
+        if store.settings.analyticsEnabled {
+            TelemetryDeckSink.initialize()
+        }
+        if store.settings.crashReportingEnabled {
+            MXMetricManager.shared.add(metricSubscriber)
         }
     }
 
@@ -305,7 +320,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
-        MXMetricManager.shared.remove(metricSubscriber)
+        // Only remove the subscriber if crash reporting was enabled (i.e. it was actually added).
+        if store.settings.crashReportingEnabled {
+            MXMetricManager.shared.remove(metricSubscriber)
+        }
         if let appActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
         }

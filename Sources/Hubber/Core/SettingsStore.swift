@@ -50,6 +50,19 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rowDensity.rawValue, forKey: "rowDensity") }
     }
 
+    // MARK: - Privacy / Telemetry kill-switches (#53)
+    //
+    // Both default to true. Managed-lockable via MDM; user-toggleable in the Privacy settings
+    // section. Gated at app launch in applicationDidFinishLaunching (main.swift).
+
+    @Published var analyticsEnabled: Bool {
+        didSet { defaults.set(analyticsEnabled, forKey: "analyticsEnabled") }
+    }
+
+    @Published var crashReportingEnabled: Bool {
+        didSet { defaults.set(crashReportingEnabled, forKey: "crashReportingEnabled") }
+    }
+
     // MARK: - Notifications (#37)
 
     /// Master toggle — when false, no notifications are sent regardless of per-type flags.
@@ -101,6 +114,20 @@ final class SettingsStore: ObservableObject {
         unresolvedMode = Self.resolveUnresolvedMode(defaults: defaults, managed: managed)
         rowDensity = Self.resolveRowDensity(defaults: defaults, managed: managed)
         badgeMode = Self.resolveBadgeMode(defaults: defaults, managed: managed)
+        analyticsEnabled = Self.bool(
+            managedKey: ManagedKey.analyticsEnabled,
+            defaultsKey: ManagedKey.analyticsEnabled,
+            defaults: defaults,
+            managed: managed,
+            fallback: true
+        )
+        crashReportingEnabled = Self.bool(
+            managedKey: ManagedKey.crashReportingEnabled,
+            defaultsKey: ManagedKey.crashReportingEnabled,
+            defaults: defaults,
+            managed: managed,
+            fallback: true
+        )
         notificationsEnabled = Self.bool(
             managedKey: ManagedKey.notificationsEnabled,
             defaultsKey: ManagedKey.notificationsEnabled,

@@ -405,4 +405,77 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.isLocked("notifyCIFailed"))
         XCTAssertFalse(store.isLocked("notifyPRMerged"))
     }
+
+    // MARK: - Task 4: analyticsEnabled + crashReportingEnabled
+
+    func testDefaultAnalyticsEnabledIsTrue() {
+        XCTAssertTrue(sut.analyticsEnabled)
+    }
+
+    func testDefaultCrashReportingEnabledIsTrue() {
+        XCTAssertTrue(sut.crashReportingEnabled)
+    }
+
+    func testAnalyticsEnabledPersistedToUserDefaults() {
+        sut.analyticsEnabled = false
+        XCTAssertFalse(defaults.bool(forKey: "analyticsEnabled"))
+    }
+
+    func testCrashReportingEnabledPersistedToUserDefaults() {
+        sut.crashReportingEnabled = false
+        XCTAssertFalse(defaults.bool(forKey: "crashReportingEnabled"))
+    }
+
+    func testUserDefaultsAnalyticsEnabledOverride() {
+        defaults.set(false, forKey: "analyticsEnabled")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertFalse(store.analyticsEnabled)
+    }
+
+    func testUserDefaultsCrashReportingEnabledOverride() {
+        defaults.set(false, forKey: "crashReportingEnabled")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertFalse(store.crashReportingEnabled)
+    }
+
+    func testForcedAnalyticsEnabledFalseWinsOverDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.analyticsEnabled: false])
+        let store = makeStore(managed: managed)
+        XCTAssertFalse(store.analyticsEnabled)
+    }
+
+    func testForcedCrashReportingEnabledFalseWinsOverDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.crashReportingEnabled: false])
+        let store = makeStore(managed: managed)
+        XCTAssertFalse(store.crashReportingEnabled)
+    }
+
+    func testForcedAnalyticsEnabledWinsOverUserDefaults() {
+        defaults.set(false, forKey: "analyticsEnabled")  // UserDefaults says false
+        let managed = InMemoryManagedPreferences([ManagedKey.analyticsEnabled: true])  // MDM says true
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.analyticsEnabled)  // MDM wins
+    }
+
+    func testIsLockedAnalyticsEnabled() {
+        let managed = InMemoryManagedPreferences([ManagedKey.analyticsEnabled: false])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.analyticsEnabled))
+    }
+
+    func testIsLockedCrashReportingEnabled() {
+        let managed = InMemoryManagedPreferences([ManagedKey.crashReportingEnabled: false])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.crashReportingEnabled))
+    }
+
+    func testAnalyticsEnabledNotLockedWhenNotForced() {
+        let store = makeStore(managed: InMemoryManagedPreferences())
+        XCTAssertFalse(store.isLocked(ManagedKey.analyticsEnabled))
+    }
+
+    func testCrashReportingEnabledNotLockedWhenNotForced() {
+        let store = makeStore(managed: InMemoryManagedPreferences())
+        XCTAssertFalse(store.isLocked(ManagedKey.crashReportingEnabled))
+    }
 }
