@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import Hubber
 
-final class GitHubPullRequestServiceTests: XCTestCase {
+final class GitHubProviderDraftTests: XCTestCase {
     override func tearDown() {
         MockURLProtocol.handler = nil
         MockURLProtocol.lastRequest = nil
@@ -10,7 +10,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
     }
 
     func testFetchDraftPullRequestsMapsDraftNodes() async throws {
-        let service = GitHubPullRequestService(session: makeSession())
+        let service = GitHubProvider(session: makeSession())
         MockURLProtocol.handler = { request in
             MockURLProtocol.lastRequest = request
             let response = try Self.response(for: request)
@@ -33,7 +33,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
     }
 
     func testFetchDraftPullRequestsSurfacesGraphQLError() async throws {
-        let service = GitHubPullRequestService(session: makeSession())
+        let service = GitHubProvider(session: makeSession())
         MockURLProtocol.handler = { request in
             let response = try Self.response(for: request)
             return (response, Self.graphQLErrorResponse)
@@ -48,7 +48,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
     }
 
     func testFetchDraftPullRequestsThrowsBadCredentialsForUnauthorizedResponse() async throws {
-        let service = GitHubPullRequestService(session: makeSession())
+        let service = GitHubProvider(session: makeSession())
         MockURLProtocol.handler = { request in
             let response = try Self.response(for: request, statusCode: 401)
             return (response, Data())
@@ -63,7 +63,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
     }
 
     func testFetchDraftPullRequestsSurfacesServerError() async throws {
-        let service = GitHubPullRequestService(session: makeSession())
+        let service = GitHubProvider(session: makeSession())
         MockURLProtocol.handler = { request in
             let response = try Self.response(for: request, statusCode: 503)
             return (response, Data())
@@ -78,7 +78,7 @@ final class GitHubPullRequestServiceTests: XCTestCase {
     }
 
     func testFetchDraftPullRequestsReturnsEmptyArrayForEmptyNodes() async throws {
-        let service = GitHubPullRequestService(session: makeSession())
+        let service = GitHubProvider(session: makeSession())
         MockURLProtocol.handler = { request in
             let response = try Self.response(for: request)
             return (response, Self.emptyPullRequestsResponse)
