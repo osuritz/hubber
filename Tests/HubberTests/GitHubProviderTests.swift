@@ -439,3 +439,125 @@ final class GitHubProviderTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Partial data + errors[] tolerance
+
+/// GitHub GraphQL contract: HTTP 200 may carry BOTH partial `data` AND `errors[]` when
+/// the token lacks access to some fields (e.g. statusCheckRollup / reviewThreads on repos
+/// the GitHub App cannot fully read).  The transport must return the usable data payload
+/// instead of discarding it by throwing on the presence of errors[].
+final class GitHubProviderPartialDataTests: XCTestCase {
+    private var provider: GitHubProvider!
+
+    override func setUp() {
+        super.setUp()
+        provider = GitHubProvider(session: makeSession())
+    }
+
+    override func tearDown() {
+        MockURLProtocol.handler = nil
+        super.tearDown()
+    }
+
+    func testFetchOutgoingReturnsPartialDataDespiteFieldErrors() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.outgoingPartialResponse)
+        }
+
+        let prs = try await provider.fetchOutgoingPullRequests(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        XCTAssertEqual(prs.count, 1, "Must return the partial PR data, not throw")
+        XCTAssertEqual(prs[0].number, 9830)
+    }
+
+    func testFetchIncomingReturnsPartialDataDespiteFieldErrors() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.incomingPartialResponse)
+        }
+
+        let reviews = try await provider.fetchIncomingReviews(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            mode: .explicit
+        )
+
+        XCTAssertEqual(reviews.count, 1, "Must return the partial review data, not throw")
+        XCTAssertEqual(reviews[0].number, 42)
+    }
+
+    // MARK: - Helpers
+
+    private func makeSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+
+    private static func response(for request: URLRequest, statusCode: Int = 200) throws -> HTTPURLResponse {
+        guard let url = request.url else { throw URLError(.badURL) }
+        guard
+            let response = HTTPURLResponse(
+                url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil
+            ) else { throw URLError(.badServerResponse) }
+        return response
+    }
+
+    // MARK: - Fixtures
+
+    private static let outgoingPartialResponse = Data("""
+    {
+      "data": {
+        "viewer": {
+          "pullRequests": {
+            "nodes": [{
+              "id": "PR_9830",
+              "number": 9830,
+              "title": "Webhook rotation",
+              "url": "https://github.com/acme/api/pull/9830",
+              "isDraft": false,
+              "updatedAt": "2026-06-15T09:00:00Z",
+              "mergeable": "MERGEABLE",
+              "repository": { "nameWithOwner": "acme/api" },
+              "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] },
+              "reviewThreads": { "nodes": [] },
+              "latestReviews": { "nodes": [] }
+            }]
+          }
+        }
+      },
+      "errors": [
+        { "type": "FORBIDDEN", "message": "Resource not accessible by integration" }
+      ]
+    }
+    """.utf8)
+
+    private static let incomingPartialResponse = Data("""
+    {
+      "data": {
+        "search": {
+          "nodes": [{
+            "__typename": "PullRequest",
+            "id": "PR_kw1",
+            "number": 42,
+            "title": "Fix biometric prompt",
+            "url": "https://github.com/acme/ios/pull/42",
+            "isDraft": false,
+            "additions": 54,
+            "deletions": 29,
+            "changedFiles": 3,
+            "repository": { "nameWithOwner": "acme/ios" },
+            "author": { "login": "priyanka", "avatarUrl": null },
+            "timelineItems": { "nodes": [] }
+          }]
+        }
+      },
+      "errors": [
+        { "type": "FORBIDDEN", "message": "Resource not accessible by integration" }
+      ]
+    }
+    """.utf8)
+}
