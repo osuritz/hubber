@@ -1,4 +1,4 @@
-.PHONY: lint format fix build app zip dmg dist
+.PHONY: lint format fix build app zip dmg dist pkg
 
 SWIFT_PATHS = Sources/ Tests/
 
@@ -35,3 +35,8 @@ dmg: app
 
 ## Build all distribution artifacts (DMG + zip).
 dist: app dmg zip
+
+## Build an MDM-compatible .pkg installer that installs Hubber.app to /Applications.
+## Set HUBBER_INSTALLER_SIGN_IDENTITY for a signed pkg (required for silent MDM deploy).
+pkg: app
+	bash Scripts/make-pkg.sh $(VERSION)
