@@ -164,7 +164,9 @@ struct SettingsSection<Content: View>: View {
             HStack(spacing: 7) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    // No native token sits between secondaryLabelColor and labelColor;
+                    // secondary reads too light for a section header, so use primary at 70%.
+                    .foregroundStyle(Color.primary.opacity(0.7))
 
                 if isDebug {
                     Text("DEBUG")
