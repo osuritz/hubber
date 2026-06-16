@@ -98,24 +98,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatusItem() {
+        let mode = store.settings.badgeMode
+        let incomingCount = store.data.incoming.count
+        let attentionCount = AttentionState.attentionCount(data: store.data)
         let count = MenubarPresentation.badgeCount(
-            mode: store.settings.badgeMode,
-            incomingCount: store.data.incoming.count,
-            attentionCount: AttentionState.attentionCount(data: store.data, settings: store.settings)
+            mode: mode,
+            incomingCount: incomingCount,
+            attentionCount: attentionCount
         )
         let state = MenubarPresentation.state(badgeCount: count, isRefreshing: store.isRefreshingPullRequests)
 
         guard let button = statusItem?.button else { return }
 
         button.title = state.badgeText ?? ""
-
-        let tooltipText = if let text = state.badgeText {
-            "\(text) item(s) need attention"
-        } else {
-            "Hubber — no items need attention"
-        }
-        button.toolTip = tooltipText
-        button.setAccessibilityValue(state.badgeText ?? "0")
+        button.toolTip = MenubarPresentation.tooltip(
+            mode: mode,
+            incomingCount: incomingCount,
+            attentionCount: attentionCount
+        )
+        button.setAccessibilityValue(
+            MenubarPresentation.accessibilityValue(
+                mode: mode,
+                incomingCount: incomingCount,
+                attentionCount: attentionCount
+            )
+        )
 
         if state.isRefreshing {
             startPulse(on: button)
@@ -206,7 +213,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func closePanel() {
         panel.close()
-        store.setPopoverOpen(false)
     }
 
     private func closePanelForOutsideClick() {

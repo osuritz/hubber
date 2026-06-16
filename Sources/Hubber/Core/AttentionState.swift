@@ -19,13 +19,13 @@ enum AttentionState {
     }
 
     @MainActor
-    static func attentionCount(data: HubberData, settings: SettingsStore) -> Int {
+    static func attentionCount(data: HubberData) -> Int {
         attentionItems(data: data).count
     }
 
     @MainActor
-    static func isAllGreen(data: HubberData, settings: SettingsStore) -> Bool {
-        attentionCount(data: data, settings: settings) == 0
+    static func isAllGreen(data: HubberData) -> Bool {
+        attentionCount(data: data) == 0
     }
 
     /// True when SLO is enabled and any incoming review has elapsed ≥ 80% of its SLO budget.

@@ -83,4 +83,10 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults)
         XCTAssertEqual(store.badgeMode, .incomingCount)
     }
+
+    func testUserDefaultsOffValueOverridesBadgeModeDefault() {
+        defaults.set(BadgeMode.off.rawValue, forKey: "badgeMode")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.badgeMode, .off)
+    }
 }

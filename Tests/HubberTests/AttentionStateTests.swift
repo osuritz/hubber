@@ -60,46 +60,39 @@ final class AttentionStateTests: XCTestCase {
 
     func testAllGreenWhenNoData() {
         let data = HubberData(incoming: [], outgoing: [], drafts: [])
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 0)
-        XCTAssertTrue(AttentionState.isAllGreen(data: data, settings: settings))
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 0)
+        XCTAssertTrue(AttentionState.isAllGreen(data: data))
     }
 
     func testIncomingReviewCountsAsAttention() {
         let data = HubberData(incoming: [makeIncoming()], outgoing: [], drafts: [])
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 1)
-        XCTAssertFalse(AttentionState.isAllGreen(data: data, settings: settings))
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 1)
+        XCTAssertFalse(AttentionState.isAllGreen(data: data))
     }
 
     func testFailingCIOutgoingCountsAsAttention() {
         let data = HubberData(incoming: [], outgoing: [makeOutgoing(ci: .failing)], drafts: [])
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 1)
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 1)
     }
 
     func testRunningCIOutgoingDoesNotCount() {
         let data = HubberData(incoming: [], outgoing: [makeOutgoing(ci: .running)], drafts: [])
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 0)
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 0)
     }
 
     func testPassingCIOutgoingWithNoUnresolvedDoesNotCount() {
         let data = HubberData(incoming: [], outgoing: [makeOutgoing(ci: .passing, unresolved: 0)], drafts: [])
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 0)
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 0)
     }
 
     func testOutgoingWithUnresolvedCountsAsAttention() {
         let data = HubberData(incoming: [], outgoing: [makeOutgoing(ci: .passing, unresolved: 2)], drafts: [])
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 1)
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 1)
     }
 
     func testPendingCIOutgoingDoesNotCount() {
         let data = HubberData(incoming: [], outgoing: [makeOutgoing(ci: .pending, unresolved: 0)], drafts: [])
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 0)
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 0)
     }
 
     func testSamePRCountsOnce() {
@@ -109,8 +102,7 @@ final class AttentionStateTests: XCTestCase {
             outgoing: [makeOutgoing(id: "pr-1", ci: .failing, unresolved: 3)],
             drafts: []
         )
-        let settings = makeSettings()
-        XCTAssertEqual(AttentionState.attentionCount(data: data, settings: settings), 1)
+        XCTAssertEqual(AttentionState.attentionCount(data: data), 1)
     }
 
     // MARK: - hasUrgentSLO
