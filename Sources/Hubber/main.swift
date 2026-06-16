@@ -51,8 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  activatedApp.processIdentifier != NSRunningApplication.current.processIdentifier
+            guard
+                let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                activatedApp.processIdentifier != NSRunningApplication.current.processIdentifier
             else {
                 return
             }

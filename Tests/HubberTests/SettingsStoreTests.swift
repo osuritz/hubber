@@ -6,7 +6,7 @@ import XCTest
 final class SettingsStoreTests: XCTestCase {
     private var sut: SettingsStore!
     private var defaults: UserDefaults!
-    nonisolated(unsafe) private var suiteName: String!
+    private nonisolated(unsafe) var suiteName: String!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
