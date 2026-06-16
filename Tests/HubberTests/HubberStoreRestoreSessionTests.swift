@@ -41,52 +41,9 @@ final class HubberStoreRestoreSessionTests: XCTestCase {
     /// - `authState` must become `.sessionExpired(login:)` (not `.signedOut`)
     /// - `delete()` on the token store must NOT be called (token is preserved for re-auth)
     func testRestoreSession401SetsSessionExpiredAndPreservesToken() async throws {
-
-        // MARK: Arrange
-
-        // Token with a fresh access token (no refresh needed) and a known login.
-        // `hasFreshAccessToken` returns true when `accessTokenExpiresAt` is nil, so
-        // omitting it causes restoreSession to skip the refresh step and go straight
-        // to `fetchAuthenticatedUser` — which our mock will answer with 401.
         let knownLogin = "testuser-session-restore"
-        let fakeToken = GitHubStoredToken(
-            accessToken: "fake-access-token",
-            accessTokenExpiresAt: nil, // nil → hasFreshAccessToken == true
-            refreshToken: nil,
-            refreshTokenExpiresAt: nil,
-            tokenType: "bearer",
-            login: knownLogin
-        )
-        let spyStore = SpyTokenStore(token: fakeToken)
-
-        // URLSession backed by MockURLProtocol; every request to api.github.com/user
-        // returns HTTP 401 so GitHubAuthService.fetchAuthenticatedUser throws .badCredentials.
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockURLProtocol.self]
-        MockURLProtocol.handler = { _ in
-            guard
-                let url = URL(string: "https://api.github.com/user"),
-                let response = HTTPURLResponse(
-                    url: url,
-                    statusCode: 401,
-                    httpVersion: nil,
-                    headerFields: nil
-                )
-            else {
-                throw URLError(.badURL)
-            }
-            return (response, Data())
-        }
-        let mockSession = URLSession(configuration: config)
-        let authService = GitHubAuthService(clientID: "test-client-id", session: mockSession)
-
-        // MARK: Act
-
-        let store = HubberStore(
-            authService: authService,
-            provider: CachingCodeHostProvider(wrapping: NoOpProvider()),
-            tokenStore: spyStore
-        )
+        let spyStore = SpyTokenStore(token: makeTokenWithKnownLogin(knownLogin))
+        let store = makeStore401(spyStore: spyStore)
 
         // `restoreSession()` is called from `init` and runs in a Task. Poll until
         // authState leaves `.restoring` (or timeout after ~2s).
@@ -99,8 +56,6 @@ final class HubberStoreRestoreSessionTests: XCTestCase {
             }
         }
 
-        // MARK: Assert
-
         XCTAssertEqual(
             store.authState,
             .sessionExpired(login: knownLogin),
@@ -110,6 +65,43 @@ final class HubberStoreRestoreSessionTests: XCTestCase {
             spyStore.deleteCallCount,
             0,
             "Token must NOT be deleted when session expires — it is needed for re-authentication"
+        )
+    }
+
+    // MARK: - Helpers
+
+    /// Token with a fresh access token (no refresh needed) and a known login.
+    /// `hasFreshAccessToken` is true when `accessTokenExpiresAt` is nil, so
+    /// restoreSession skips refresh and goes straight to `fetchAuthenticatedUser`.
+    private func makeTokenWithKnownLogin(_ login: String) -> GitHubStoredToken {
+        GitHubStoredToken(
+            accessToken: "fake-access-token",
+            accessTokenExpiresAt: nil,
+            refreshToken: nil,
+            refreshTokenExpiresAt: nil,
+            tokenType: "bearer",
+            login: login
+        )
+    }
+
+    /// Builds a `HubberStore` whose `GitHubAuthService` returns HTTP 401 for every request.
+    private func makeStore401(spyStore: SpyTokenStore) -> HubberStore {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        MockURLProtocol.handler = { _ in
+            guard
+                let url = URL(string: "https://api.github.com/user"),
+                let response = HTTPURLResponse(url: url, statusCode: 401, httpVersion: nil, headerFields: nil)
+            else {
+                throw URLError(.badURL)
+            }
+            return (response, Data())
+        }
+        let authService = GitHubAuthService(clientID: "test-client-id", session: URLSession(configuration: config))
+        return HubberStore(
+            authService: authService,
+            provider: CachingCodeHostProvider(wrapping: NoOpProvider()),
+            tokenStore: spyStore
         )
     }
 }
