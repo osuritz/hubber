@@ -187,8 +187,9 @@ struct SettingsSection<Content: View>: View {
         .padding(.bottom, isLast ? 18 : 2)
         .overlay(alignment: .bottom) {
             if !isLast {
-                HubberDesign.sep.frame(height: 0.5)
-                    .padding(.top, 12)
+                Color(nsColor: .separatorColor)
+                    .frame(height: 0.5)
+                    .padding(.vertical, 9)
             }
         }
     }
@@ -243,7 +244,8 @@ struct SettingsRow<Content: View>: View {
         .frame(minHeight: 22)
         .overlay(alignment: .bottom) {
             if !isLast {
-                HubberDesign.sep.frame(height: 0.5)
+                Color(nsColor: .separatorColor)
+                    .frame(height: 0.5)
                     .padding(.leading, 12)
             }
         }
