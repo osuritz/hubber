@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -19,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appActivationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var eventMonitor: Any?
+    private var cancellables: Set<AnyCancellable> = []
+    private var pulseTimer: Timer?
+    private var pulsePhase: Double = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -35,11 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = item.button {
             button.image = NSImage(systemSymbolName: "arrow.triangle.pull", accessibilityDescription: "Hubber")
             button.imagePosition = .imageLeading
-            button.title = "5"
             button.target = self
             button.action = #selector(togglePanel(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+
+        updateStatusItem()
+        subscribeToStore()
 
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in
@@ -73,6 +79,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.store.refreshPullRequests()
             }
         }
+    }
+
+    // MARK: - Status item badge + animation
+
+    private func subscribeToStore() {
+        // Merge data, badgeMode, and refreshing signals into a single debounced update.
+        let dataChange = store.$data.map { _ in () }
+        let badgeModeChange = store.settings.$badgeMode.map { _ in () }
+        let refreshingChange = store.$isRefreshingPullRequests.map { _ in () }
+
+        dataChange
+            .merge(with: badgeModeChange)
+            .merge(with: refreshingChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.updateStatusItem() }
+            .store(in: &cancellables)
+    }
+
+    private func updateStatusItem() {
+        let count = MenubarPresentation.badgeCount(
+            mode: store.settings.badgeMode,
+            incomingCount: store.data.incoming.count,
+            attentionCount: AttentionState.attentionCount(data: store.data, settings: store.settings)
+        )
+        let state = MenubarPresentation.state(badgeCount: count, isRefreshing: store.isRefreshingPullRequests)
+
+        guard let button = statusItem?.button else { return }
+
+        button.title = state.badgeText ?? ""
+
+        let tooltipText = if let text = state.badgeText {
+            "\(text) item(s) need attention"
+        } else {
+            "Hubber — no items need attention"
+        }
+        button.toolTip = tooltipText
+        button.setAccessibilityValue(state.badgeText ?? "0")
+
+        if state.isRefreshing {
+            startPulse(on: button)
+        } else {
+            stopPulse(on: button)
+        }
+    }
+
+    /// Starts a subtle alpha pulse (0.45 ↔ 1.0) on the status button to signal a refresh in progress.
+    private func startPulse(on button: NSStatusBarButton) {
+        guard pulseTimer == nil else { return }
+        pulsePhase = 0
+        // Timer fires on the main run loop (scheduled on main thread); MainActor.assumeIsolated
+        // is safe here because AppDelegate is @MainActor and all setup runs on the main thread.
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak button] _ in
+            MainActor.assumeIsolated {
+                guard let self, let button else { return }
+                self.pulsePhase += 0.05
+                let alpha = 0.725 + 0.275 * sin(self.pulsePhase * .pi * 2)
+                button.alphaValue = alpha
+            }
+        }
+    }
+
+    /// Stops the alpha pulse and restores full opacity.
+    private func stopPulse(on button: NSStatusBarButton) {
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        button.alphaValue = 1.0
     }
 
     private func configurePanel(with contentView: some View) {
