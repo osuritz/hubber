@@ -18,17 +18,12 @@ final class SpyTelemetrySink: TelemetrySink, @unchecked Sendable {
     }
 }
 
-// MARK: - PII allow-list
+// MARK: - Structural allow-list
 
-/// Strings that, if they appear as param values, indicate possible PII leakage.
-/// The tests below assert none of these ever appear in a telemetry payload.
-private let knownPIIValues: Set = [
-    "my-org/secret-repo", // repo name
-    "Fix the very secret bug", // PR title
-    "pr-9999", // PR number
-    "secret-user", // GitHub login
-    "https://github.com/my-org", // URL
-]
+/// The complete set of values that are ALLOWED in any telemetry param.
+/// Every param value must be either an integer string (counts) or a WorkTab raw value.
+/// Any other string indicates either PII leakage or an unapproved free-form value.
+private let allowedTabRawValues: Set<String> = Set(WorkTab.allCases.map(\.rawValue))
 
 // MARK: - Tests
 
@@ -101,27 +96,7 @@ final class TelemetryTests: XCTestCase {
         XCTAssertEqual(spy.calls[0].params["red"], "0")
     }
 
-    // MARK: Privacy contract — no PII in any emitted param value
-
-    func testNoPIIInTabSwitched() {
-        // Tab names are raw values of WorkTab — not user data.
-        telemetry.tabSwitched(to: .incoming)
-        telemetry.tabSwitched(to: .outgoing)
-        telemetry.tabSwitched(to: .drafts)
-        assertNoPII(in: spy.calls)
-    }
-
-    func testNoPIIInSessionCounts() {
-        telemetry.sessionCounts(incoming: 99, outgoing: 0, drafts: 42)
-        assertNoPII(in: spy.calls)
-    }
-
-    func testNoPIIInSLODistribution() {
-        telemetry.sloDistribution(green: 10, amber: 3, red: 1)
-        assertNoPII(in: spy.calls)
-    }
-
-    // MARK: Param values are counts or enum raw values only
+    // MARK: Param values are counts or enum raw values only (structural allow-list)
 
     func testSessionCountsValuesArePureNumbers() {
         telemetry.sessionCounts(incoming: 7, outgoing: 2, drafts: 0)
@@ -143,18 +118,48 @@ final class TelemetryTests: XCTestCase {
         XCTAssertEqual(tabValues, WorkTab.allCases.map(\.rawValue))
     }
 
+    /// Exercises EVERY Telemetry facade method and asserts that every param value across
+    /// ALL recorded sink calls is either an integer string (counts) or a WorkTab raw value.
+    ///
+    /// This is a structural allow-list: it grows with the API automatically (any new facade
+    /// method that accidentally passes a free-form string will fail this test), replacing the
+    /// previous deny-list which could only catch known PII strings.
+    func testAllFacadeMethodsEmitOnlyAllowedParamValues() {
+        // Exercise every Telemetry facade method.
+        telemetry.sessionOpened()
+        telemetry.tabSwitched(to: .incoming)
+        telemetry.tabSwitched(to: .outgoing)
+        telemetry.tabSwitched(to: .drafts)
+        telemetry.itemOpened(in: .incoming)
+        telemetry.itemOpened(in: .outgoing)
+        telemetry.itemOpened(in: .drafts)
+        telemetry.manualRefresh()
+        telemetry.sessionCounts(incoming: 3, outgoing: 1, drafts: 5)
+        telemetry.sloDistribution(green: 2, amber: 1, red: 0)
+
+        XCTAssertGreaterThan(spy.calls.count, 0, "Expected at least one telemetry call")
+
+        assertAllParamValuesAllowed(in: spy.calls)
+    }
+
     // MARK: - Helpers
 
-    private func assertNoPII(
+    /// Asserts that every param value across all calls is either an integer string
+    /// or a WorkTab raw value — the complete structural allow-list for Telemetry params.
+    private func assertAllParamValuesAllowed(
         in calls: [(event: String, params: [String: String])],
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         for (event, params) in calls {
             for (key, value) in params {
-                XCTAssertFalse(
-                    knownPIIValues.contains(value),
-                    "Possible PII '\(value)' found in event '\(event)' param '\(key)'",
+                let isIntegerValue = Int(value) != nil
+                let isTabRawValue = allowedTabRawValues.contains(value)
+                XCTAssertTrue(
+                    isIntegerValue || isTabRawValue,
+                    "Param value '\(value)' in event '\(event)' key '\(key)' "
+                        + "is not an integer nor a WorkTab raw value — "
+                        + "possible PII or unapproved free-form string",
                     file: file,
                     line: line
                 )
