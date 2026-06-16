@@ -121,11 +121,37 @@ final class SettingsStore: ObservableObject {
             )
         ) ?? .attentionNeeded
         notificationsEnabled = Self.bool(key: "notificationsEnabled", defaults: defaults, fallback: true)
-        notifyNewReview = Self.bool(key: "notifyNewReview", defaults: defaults, fallback: true)
-        notifyReviewApproved = Self.bool(key: "notifyReviewApproved", defaults: defaults, fallback: false)
-        notifyChangesRequested = Self.bool(key: "notifyChangesRequested", defaults: defaults, fallback: false)
-        notifyCIFailed = Self.bool(key: "notifyCIFailed", defaults: defaults, fallback: false)
-        notifyPRMerged = Self.bool(key: "notifyPRMerged", defaults: defaults, fallback: false)
+        let perType = Self.resolvePerTypeFlags(defaults: defaults)
+        notifyNewReview = perType.contains(.newReview)
+        notifyReviewApproved = perType.contains(.reviewApproved)
+        notifyChangesRequested = perType.contains(.changesRequested)
+        notifyCIFailed = perType.contains(.ciFailed)
+        notifyPRMerged = perType.contains(.prMerged)
+    }
+
+    /// Resolves per-type notification flags.
+    /// The MDM composite key `defaultNotificationEvents` (comma-separated rawValues) takes
+    /// priority when forced; otherwise per-type UserDefaults keys are used (#D).
+    private static func resolvePerTypeFlags(defaults: UserDefaults) -> Set<NotificationEventType> {
+        let compositeKey = "defaultNotificationEvents" as CFString
+        if
+            CFPreferencesAppValueIsForced(compositeKey, managedDomain),
+            let raw = CFPreferencesCopyAppValue(compositeKey, managedDomain) as? String {
+            return Set(
+                raw.split(separator: ",")
+                    .map { $0.trimmingCharacters(in: CharacterSet.whitespaces) }
+                    .compactMap { NotificationEventType(rawValue: String($0)) }
+            )
+        }
+        var types = Set<NotificationEventType>()
+        if Self.bool(key: "notifyNewReview", defaults: defaults, fallback: true) { types.insert(.newReview) }
+        if Self.bool(key: "notifyReviewApproved", defaults: defaults, fallback: false) { types.insert(.reviewApproved) }
+        if Self.bool(key: "notifyChangesRequested", defaults: defaults, fallback: false) {
+            types.insert(.changesRequested)
+        }
+        if Self.bool(key: "notifyCIFailed", defaults: defaults, fallback: false) { types.insert(.ciFailed) }
+        if Self.bool(key: "notifyPRMerged", defaults: defaults, fallback: false) { types.insert(.prMerged) }
+        return types
     }
 
     /// Returns true when a key is locked via MDM managed preferences.
