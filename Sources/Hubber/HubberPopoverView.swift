@@ -8,10 +8,6 @@ struct HubberPopoverView: View {
 
     @State private var selectedTab: WorkTab = .incoming
     @State private var showSettings = false
-    @AppStorage("reviewSLOEnabled") private var isSLOEnabled = true
-    @State private var sloHours = 4.0
-    @State private var sloDisplay: SLODisplay = .remaining
-    @State private var rowDensity: RowDensity = .normal
 
     var body: some View {
         ZStack {
@@ -27,13 +23,7 @@ struct HubberPopoverView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         if showSettings {
-                            SettingsView(
-                                store: store,
-                                isSLOEnabled: $isSLOEnabled,
-                                sloHours: $sloHours,
-                                sloDisplay: $sloDisplay,
-                                rowDensity: $rowDensity
-                            )
+                            SettingsView(store: store, settings: store.settings)
                         } else {
                             content
                         }
@@ -172,10 +162,12 @@ struct HubberPopoverView: View {
 
     private var footer: some View {
         HStack {
-            Text(refreshStatusText)
-                .lineLimit(1)
+            Text(refreshStatusText).lineLimit(1)
             Spacer()
-            Text(ReviewSLOPresentation.footerText(isEnabled: isSLOEnabled, hours: sloHours))
+            Text(ReviewSLOPresentation.footerText(
+                isEnabled: store.settings.sloEnabled,
+                hours: store.settings.sloHours
+            ))
             Text("⌘, Settings")
         }
         .font(.system(size: 11))
@@ -529,10 +521,7 @@ private struct AllClearRow: View {
 
 private struct SettingsView: View {
     @ObservedObject var store: HubberStore
-    @Binding var isSLOEnabled: Bool
-    @Binding var sloHours: Double
-    @Binding var sloDisplay: SLODisplay
-    @Binding var rowDensity: RowDensity
+    @ObservedObject var settings: SettingsStore
 
     var body: some View {
         VStack(spacing: 0) {
@@ -549,67 +538,75 @@ private struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ReviewSLOPresentation.title)
                             .font(.system(size: 13, weight: .medium))
-
                         Text(ReviewSLOPresentation.subtitle)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
                     Spacer()
-
-                    Toggle("", isOn: $isSLOEnabled)
+                    Toggle("", isOn: $settings.sloEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
+                        .disabled(settings.isLocked("reviewSLOEnabled"))
                 }
 
                 HStack(spacing: 12) {
-                    Text(ReviewSLOPresentation.windowLabel)
-                        .font(.system(size: 13))
-
+                    Text(ReviewSLOPresentation.windowLabel).font(.system(size: 13))
                     Spacer(minLength: 12)
-
-                    Slider(value: $sloHours, in: 1...24, step: 1)
+                    Slider(value: $settings.sloHours, in: 1...24, step: 1)
                         .frame(width: 190)
-
-                    Text("\(Int(sloHours))h")
+                    Text("\(Int(settings.sloHours))h")
                         .font(.system(size: 13, weight: .semibold).monospacedDigit())
                         .frame(width: 36, alignment: .trailing)
                 }
-                .disabled(!isSLOEnabled)
-                .opacity(isSLOEnabled ? 1 : 0.45)
+                .disabled(!settings.sloEnabled || settings.isLocked("sloWindowHours"))
+                .opacity(settings.sloEnabled ? 1 : 0.45)
 
                 Text(ReviewSLOPresentation.thresholdHelp)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(isSLOEnabled ? 1 : 0.55)
+                    .opacity(settings.sloEnabled ? 1 : 0.55)
             }
 
             SettingsSection(title: "Show SLO as") {
-                Picker("", selection: $sloDisplay) {
-                    ForEach(SLODisplay.allCases) { display in
-                        Text(display.title).tag(display)
-                    }
+                Picker("", selection: $settings.sloDisplay) {
+                    ForEach(SLODisplay.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .disabled(!isSLOEnabled)
-                .opacity(isSLOEnabled ? 1 : 0.45)
+                .disabled(!settings.sloEnabled)
+                .opacity(settings.sloEnabled ? 1 : 0.45)
+            }
+
+            SettingsSection(title: "Incoming mode") {
+                Picker("", selection: $settings.incomingMode) {
+                    ForEach(IncomingReviewMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(settings.isLocked("incomingMode"))
+            }
+
+            SettingsSection(title: "Unresolved threads") {
+                Picker("", selection: $settings.unresolvedMode) {
+                    ForEach(UnresolvedThreadMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(settings.isLocked("unresolvedThreadMode"))
             }
 
             SettingsSection(title: "Row density", isLast: true) {
-                Picker("", selection: $rowDensity) {
-                    ForEach(RowDensity.allCases) { density in
-                        Text(density.title).tag(density)
-                    }
+                Picker("", selection: $settings.rowDensity) {
+                    ForEach(RowDensity.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .disabled(settings.isLocked("rowDensity"))
             }
         }
     }
-
 }
 
 private struct SettingsSection<Content: View>: View {
