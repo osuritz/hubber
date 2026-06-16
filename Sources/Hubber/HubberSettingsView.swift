@@ -78,6 +78,15 @@ struct SettingsView: View {
                 .disabled(settings.isLocked("unresolvedThreadMode"))
             }
 
+            SettingsSection(title: "Menubar badge") {
+                Picker("", selection: $settings.badgeMode) {
+                    ForEach(BadgeMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(settings.isLocked("badgeMode"))
+            }
+
             SettingsSection(title: "Row density", isLast: true) {
                 Picker("", selection: $settings.rowDensity) {
                     ForEach(RowDensity.allCases) { Text($0.title).tag($0) }
