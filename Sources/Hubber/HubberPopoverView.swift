@@ -157,7 +157,8 @@ struct HubberPopoverView: View {
             if let error = store.incomingError {
                 ErrorState(
                     message: "Couldn't load reviews",
-                    lastUpdated: "Last refresh failed: \(error)"
+                    lastUpdated: "Last refresh failed: \(error)",
+                    onRetry: { store.refreshPullRequests() }
                 )
             }
             let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
@@ -196,7 +197,8 @@ struct HubberPopoverView: View {
             if let error = store.outgoingError {
                 ErrorState(
                     message: "Couldn't load outgoing PRs",
-                    lastUpdated: "Last refresh failed: \(error)"
+                    lastUpdated: "Last refresh failed: \(error)",
+                    onRetry: { store.refreshPullRequests() }
                 )
             }
             ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
@@ -232,7 +234,8 @@ struct HubberPopoverView: View {
             if let error = store.draftsError {
                 ErrorState(
                     message: "Couldn't load drafts",
-                    lastUpdated: "Last refresh failed: \(error)"
+                    lastUpdated: "Last refresh failed: \(error)",
+                    onRetry: { store.refreshPullRequests() }
                 )
             }
             ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
