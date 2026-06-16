@@ -163,8 +163,8 @@ struct SettingsSection<Content: View>: View {
             // Section header: Title Case · 13 / Regular · secondaryLabelColor (native macOS style)
             HStack(spacing: 7) {
                 Text(title)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
 
                 if isDebug {
                     Text("DEBUG")
@@ -183,13 +183,15 @@ struct SettingsSection<Content: View>: View {
             content()
         }
         .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, isLast ? 18 : 2)
+        .padding(.top, 12)
+        // Real gap below the card so the separator sits in the gutter between
+        // sections (12pt below this card, 12pt above the next header) rather than
+        // being pulled up into the card by overlay padding.
+        .padding(.bottom, isLast ? 18 : 12)
         .overlay(alignment: .bottom) {
             if !isLast {
                 Color(nsColor: .separatorColor)
                     .frame(height: 0.5)
-                    .padding(.vertical, 9)
             }
         }
     }
