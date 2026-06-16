@@ -123,16 +123,15 @@ final class NotificationBatcherTests: XCTestCase {
         XCTAssertEqual(contents[0].url, url)
     }
 
-    func testBatchedEventsURLIsFirstPROrNil() throws {
+    func testBatchedEventsURLIsNil() throws {
         let url1 = try XCTUnwrap(URL(string: "https://github.com/acme/web/pull/1"))
         let events = try [
             event(type: .newReview, prID: "pr-1", url: url1),
             event(type: .newReview, prID: "pr-2", url: XCTUnwrap(URL(string: "https://github.com/acme/web/pull/2"))),
         ]
         let contents = NotificationBatcher.contents(from: events)
-        // batched: url may be nil or the first pr's url
         XCTAssertEqual(contents.count, 1)
-        // either nil or url1 is acceptable per spec
-        XCTAssertTrue(contents[0].url == nil || contents[0].url == url1)
+        // batched notifications have no single-PR url to open
+        XCTAssertNil(contents[0].url)
     }
 }

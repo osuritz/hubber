@@ -164,4 +164,35 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults)
         XCTAssertTrue(store.notifyReviewApproved)
     }
+
+    // MARK: - defaultNotificationEvents composite key (D)
+
+    // Note: CFPreferencesAppValueIsForced cannot be forced in unit tests (requires system MDM).
+    // These tests verify the per-type UserDefaults path (used when MDM key is not forced)
+    // and confirm that enabledNotificationTypes reflects a matching parsed set.
+
+    func testDefaultNotificationEventsViaUserDefaultsAllTypes() {
+        // Simulate what the MDM composite key would configure: all types enabled
+        defaults.set(true, forKey: "notifyNewReview")
+        defaults.set(true, forKey: "notifyReviewApproved")
+        defaults.set(true, forKey: "notifyChangesRequested")
+        defaults.set(true, forKey: "notifyCIFailed")
+        defaults.set(true, forKey: "notifyPRMerged")
+        let store = SettingsStore(defaults: defaults)
+        let expected: Set<NotificationEventType> = [
+            .newReview, .reviewApproved, .changesRequested, .ciFailed, .prMerged,
+        ]
+        XCTAssertEqual(store.enabledNotificationTypes, expected)
+    }
+
+    func testDefaultNotificationEventsViaUserDefaultsSubset() {
+        // Simulate composite key "newReview,ciFailed"
+        defaults.set(true, forKey: "notifyNewReview")
+        defaults.set(false, forKey: "notifyReviewApproved")
+        defaults.set(false, forKey: "notifyChangesRequested")
+        defaults.set(true, forKey: "notifyCIFailed")
+        defaults.set(false, forKey: "notifyPRMerged")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.enabledNotificationTypes, [.newReview, .ciFailed])
+    }
 }
