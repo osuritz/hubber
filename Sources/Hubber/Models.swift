@@ -258,3 +258,15 @@ enum HubberAuthState: Equatable {
     case sessionExpired(login: String)
     case error(String)
 }
+
+// MARK: - Async result helpers
+
+func catchingResult<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, Error> {
+    do { return try await .success(body()) } catch { return .failure(error) }
+}
+
+extension Result {
+    var failureError: Failure? {
+        if case let .failure(e) = self { e } else { nil }
+    }
+}

@@ -275,6 +275,8 @@ final class GitHubAuthService: Sendable {
 @MainActor
 final class HubberStore: ObservableObject {
     @Published private(set) var authState: HubberAuthState = .restoring
+    @Published private(set) var viewerName: String?
+    @Published private(set) var viewerAvatarURL: URL?
     @Published private(set) var data = HubberData.sample
     @Published private(set) var isRefreshingPullRequests = false
     @Published private(set) var lastPullRequestRefresh: Date?
@@ -382,7 +384,7 @@ final class HubberStore: ObservableObject {
 
                 token.login = user.login
                 try await saveStoredToken(token)
-                finishSignedInSession(login: user.login)
+                finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
             } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
                 await handleRestoreCredentialError(cachedLogin: cachedLogin)
             } catch {
@@ -432,7 +434,7 @@ final class HubberStore: ObservableObject {
                 let user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
                 token.login = user.login
                 try await saveStoredToken(token)
-                finishSignedInSession(login: user.login)
+                finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
             } catch is CancellationError {
                 authState = .signedOut
                 appendDeveloperLog("GitHub sign-in cancelled")
@@ -464,6 +466,8 @@ final class HubberStore: ObservableObject {
                 }
                 try await deleteStoredToken()
                 authState = .signedOut
+                viewerName = nil
+                viewerAvatarURL = nil
                 data = HubberData.sample
                 lastPullRequestRefresh = nil
                 pullRequestRefreshError = nil
@@ -534,8 +538,10 @@ final class HubberStore: ObservableObject {
         appendDeveloperLog("Using cached GitHub login @\(login)")
     }
 
-    private func finishSignedInSession(login: String) {
+    private func finishSignedInSession(login: String, name: String? = nil, avatarUrl: String? = nil) {
         authState = .signedIn(login: login)
+        viewerName = name
+        viewerAvatarURL = avatarUrl.flatMap { URL(string: $0) }
         appendDeveloperLog("Signed in as @\(login)")
         startPullRequestRefreshLoop()
     }
@@ -779,17 +785,5 @@ extension HubberStore {
             stopPullRequestRefreshLoop()
         }
         return true
-    }
-}
-
-// MARK: - Async result helpers
-
-func catchingResult<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, Error> {
-    do { return try await .success(body()) } catch { return .failure(error) }
-}
-
-extension Result {
-    var failureError: Failure? {
-        if case let .failure(e) = self { e } else { nil }
     }
 }

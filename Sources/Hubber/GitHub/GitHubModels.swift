@@ -37,6 +37,14 @@ struct GitHubStoredToken: Codable, Equatable {
 
 struct GitHubAuthenticatedUser: Decodable, Equatable {
     let login: String
+    let name: String?
+    let avatarUrl: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case login
+        case name
+        case avatarUrl = "avatar_url"
+    }
 }
 
 enum GitHubAuthError: LocalizedError, Equatable {
