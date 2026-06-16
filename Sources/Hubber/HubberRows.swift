@@ -184,7 +184,7 @@ struct IncomingReviewRow: View {
             switch sloStatus {
             case .green: "On track"
             case .amber: "Due soon"
-            case .red: "Past SLO"
+            case .red: "Overdue"
             }
         case .remaining:
             remainingText(hours: sloHours - review.assignedAgoHours)
@@ -248,9 +248,11 @@ struct OutgoingReviewRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if cfg.secondary {
-                ReviewerStack(reviewers: review.reviewers, size: cfg.rv)
-            }
+            ReviewerStack(
+                reviewers: review.reviewers,
+                size: cfg.rv,
+                maxAvatars: cfg.secondary ? 3 : 2
+            )
         }
     }
 }
@@ -287,9 +289,14 @@ struct DraftPRRow: View {
             HStack(spacing: 5) {
                 CIBadgeView(ci: draft.ci, size: cfg.ci - 4)
                 if cfg.secondary {
+                    let isResultState = draft.ci == .passing || draft.ci == .failing
                     Text(draftCILabel)
                         .font(HubberType.ciDetail)
-                        .foregroundStyle(HubberDesign.ciColor(for: draft.ci))
+                        .foregroundStyle(
+                            isResultState
+                                ? HubberDesign.ciColor(for: draft.ci)
+                                : HubberDesign.text2
+                        )
                 }
             }
             .alignmentGuide(.top) { $0[.top] + 1 }
@@ -325,7 +332,8 @@ struct SLOPillView: View {
                 .font(HubberType.sloPill)
                 .foregroundStyle(tokens.fg)
         }
-        .padding(.horizontal, 8)
+        .padding(.leading, 7)
+        .padding(.trailing, 8)
         .padding(.vertical, 2.5)
         .background(tokens.bg, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
@@ -403,12 +411,13 @@ struct DraftDocIcon: View {
 struct ReviewerStack: View {
     let reviewers: [Reviewer]
     let size: CGFloat
+    var maxAvatars = 3
 
     var body: some View {
         HStack(spacing: -7) {
-            ForEach(reviewers.prefix(3)) { reviewer in
+            ForEach(reviewers.prefix(maxAvatars)) { reviewer in
                 AvatarView(user: reviewer.user, size: size, reviewerState: reviewer.state)
-                    .zIndex(Double(3 - (reviewers.firstIndex(where: { $0.id == reviewer.id }) ?? 0)))
+                    .zIndex(Double(maxAvatars - (reviewers.firstIndex(where: { $0.id == reviewer.id }) ?? 0)))
             }
         }
     }
