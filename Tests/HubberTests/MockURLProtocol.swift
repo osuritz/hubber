@@ -3,6 +3,15 @@ import Foundation
 final class MockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
     nonisolated(unsafe) static var lastRequest: URLRequest?
+    /// Optional artificial delay (in seconds) applied before delivering the response.
+    nonisolated(unsafe) static var responseDelay: TimeInterval = 0
+
+    /// Reset all shared state between tests.
+    static func reset() {
+        handler = nil
+        lastRequest = nil
+        responseDelay = 0
+    }
 
     override static func canInit(with request: URLRequest) -> Bool {
         true
@@ -28,6 +37,12 @@ final class MockURLProtocol: URLProtocol {
             mutableRequest.httpBody = data
         }
         Self.lastRequest = mutableRequest
+
+        // Apply artificial delay on this background thread so the calling Task can be cancelled.
+        let delay = Self.responseDelay
+        if delay > 0 {
+            Thread.sleep(forTimeInterval: delay)
+        }
 
         guard let handler = Self.handler else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
