@@ -51,8 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  activatedApp.processIdentifier != NSRunningApplication.current.processIdentifier
+            guard
+                let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                activatedApp.processIdentifier != NSRunningApplication.current.processIdentifier
             else {
                 return
             }
@@ -182,10 +183,12 @@ private final class HubberMenuPanel: NSPanel {
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(signOut(_:)) {
-            if case .signedIn = store.authState {
+            switch store.authState {
+            case .signedIn, .sessionExpired:
                 return true
+            default:
+                return false
             }
-            return false
         }
         return true
     }

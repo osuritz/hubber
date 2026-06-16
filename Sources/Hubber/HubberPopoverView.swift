@@ -8,10 +8,6 @@ struct HubberPopoverView: View {
 
     @State private var selectedTab: WorkTab = .incoming
     @State private var showSettings = false
-    @AppStorage("reviewSLOEnabled") private var isSLOEnabled = true
-    @State private var sloHours = 4.0
-    @State private var sloDisplay: SLODisplay = .remaining
-    @State private var rowDensity: RowDensity = .normal
 
     var body: some View {
         ZStack {
@@ -27,13 +23,7 @@ struct HubberPopoverView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         if showSettings {
-                            SettingsView(
-                                store: store,
-                                isSLOEnabled: $isSLOEnabled,
-                                sloHours: $sloHours,
-                                sloDisplay: $sloDisplay,
-                                rowDensity: $rowDensity
-                            )
+                            SettingsView(store: store, settings: store.settings)
                         } else {
                             content
                         }
@@ -112,42 +102,66 @@ struct HubberPopoverView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch selectedTab {
-        case .incoming:
-            let sorted = store.data.incoming.sorted { $0.assignedAgoHours > $1.assignedAgoHours }
-            ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
-                    IncomingReviewRow(
-                        review: review,
-                        isSLOEnabled: isSLOEnabled,
-                        sloHours: sloHours,
-                        sloDisplay: sloDisplay,
-                        density: rowDensity,
-                        isLast: index == sorted.count - 1
-                    )
+        if case .sessionExpired = store.authState {
+            ReauthPromptRow(store: store)
+        } else {
+            switch selectedTab {
+            case .incoming:
+                if let error = store.pullRequestRefreshError, store.data.incoming.isEmpty {
+                    EmptyStateRow(text: "Refresh failed: \(error)")
+                } else if store.isRefreshingPullRequests, store.data.incoming.isEmpty {
+                    EmptyStateRow(text: "Loading reviews…")
+                } else if store.data.incoming.isEmpty, store.lastPullRequestRefresh != nil {
+                    AllClearRow()
+                } else if store.data.incoming.isEmpty, store.lastPullRequestRefresh == nil {
+                    EmptyStateRow(text: "Loading reviews…")
+                } else {
+                    let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
+                    ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
+                        ClickableRow(url: review.url) {
+                            IncomingReviewRow(
+                                review: review,
+                                isSLOEnabled: store.settings.sloEnabled,
+                                sloHours: store.settings.sloHours(for: review.repo),
+                                sloDisplay: store.settings.sloDisplay,
+                                density: store.settings.rowDensity,
+                                isLast: index == sorted.count - 1
+                            )
+                        }
+                    }
                 }
-            }
-        case .outgoing:
-            ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
-                    OutgoingReviewRow(
-                        review: review,
-                        density: rowDensity,
-                        isLast: index == store.data.outgoing.count - 1
-                    )
+            case .outgoing:
+                if let error = store.pullRequestRefreshError, store.data.outgoing.isEmpty {
+                    EmptyStateRow(text: "Refresh failed: \(error)")
+                } else if store.isRefreshingPullRequests, store.data.outgoing.isEmpty {
+                    EmptyStateRow(text: "Loading pull requests…")
+                } else if store.data.outgoing.isEmpty, store.lastPullRequestRefresh != nil {
+                    EmptyStateRow(text: "No open pull requests.")
+                } else if store.data.outgoing.isEmpty, store.lastPullRequestRefresh == nil {
+                    EmptyStateRow(text: "Loading pull requests…")
+                } else {
+                    ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
+                        ClickableRow(url: review.url) {
+                            OutgoingReviewRow(
+                                review: review,
+                                density: store.settings.rowDensity,
+                                isLast: index == store.data.outgoing.count - 1
+                            )
+                        }
+                    }
                 }
-            }
-        case .drafts:
-            if store.data.drafts.isEmpty {
-                EmptyStateRow(text: draftEmptyText)
-            } else {
-                ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
-                    ClickableRow(url: draft.url) {
-                        DraftRow(
-                            draft: draft,
-                            density: rowDensity,
-                            isLast: index == store.data.drafts.count - 1
-                        )
+            case .drafts:
+                if store.data.drafts.isEmpty {
+                    EmptyStateRow(text: draftEmptyText)
+                } else {
+                    ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
+                        ClickableRow(url: draft.url) {
+                            DraftRow(
+                                draft: draft,
+                                density: store.settings.rowDensity,
+                                isLast: index == store.data.drafts.count - 1
+                            )
+                        }
                     }
                 }
             }
@@ -156,10 +170,12 @@ struct HubberPopoverView: View {
 
     private var footer: some View {
         HStack {
-            Text(refreshStatusText)
-                .lineLimit(1)
+            Text(refreshStatusText).lineLimit(1)
             Spacer()
-            Text(ReviewSLOPresentation.footerText(isEnabled: isSLOEnabled, hours: sloHours))
+            Text(ReviewSLOPresentation.footerText(
+                isEnabled: store.settings.sloEnabled,
+                hours: store.settings.sloHours
+            ))
             Text("⌘, Settings")
         }
         .font(.system(size: 11))
@@ -487,12 +503,33 @@ private struct EmptyStateRow: View {
     }
 }
 
+private struct AllClearRow: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(Color.hubberSuccess.opacity(0.15))
+                    .frame(width: 48, height: 48)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Color.hubberSuccess)
+            }
+            Text("All clear")
+                .font(.system(size: 14, weight: .semibold))
+            Text("No reviews waiting on you. Enjoy the deep work.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 40)
+    }
+}
+
 private struct SettingsView: View {
     @ObservedObject var store: HubberStore
-    @Binding var isSLOEnabled: Bool
-    @Binding var sloHours: Double
-    @Binding var sloDisplay: SLODisplay
-    @Binding var rowDensity: RowDensity
+    @ObservedObject var settings: SettingsStore
 
     var body: some View {
         VStack(spacing: 0) {
@@ -509,67 +546,75 @@ private struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ReviewSLOPresentation.title)
                             .font(.system(size: 13, weight: .medium))
-
                         Text(ReviewSLOPresentation.subtitle)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
                     Spacer()
-
-                    Toggle("", isOn: $isSLOEnabled)
+                    Toggle("", isOn: $settings.sloEnabled)
                         .toggleStyle(.switch)
                         .labelsHidden()
+                        .disabled(settings.isLocked("reviewSLOEnabled"))
                 }
 
                 HStack(spacing: 12) {
-                    Text(ReviewSLOPresentation.windowLabel)
-                        .font(.system(size: 13))
-
+                    Text(ReviewSLOPresentation.windowLabel).font(.system(size: 13))
                     Spacer(minLength: 12)
-
-                    Slider(value: $sloHours, in: 1...24, step: 1)
+                    Slider(value: $settings.sloHours, in: 1...24, step: 1)
                         .frame(width: 190)
-
-                    Text("\(Int(sloHours))h")
+                    Text("\(Int(settings.sloHours))h")
                         .font(.system(size: 13, weight: .semibold).monospacedDigit())
                         .frame(width: 36, alignment: .trailing)
                 }
-                .disabled(!isSLOEnabled)
-                .opacity(isSLOEnabled ? 1 : 0.45)
+                .disabled(!settings.sloEnabled || settings.isLocked("sloWindowHours"))
+                .opacity(settings.sloEnabled ? 1 : 0.45)
 
                 Text(ReviewSLOPresentation.thresholdHelp)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(isSLOEnabled ? 1 : 0.55)
+                    .opacity(settings.sloEnabled ? 1 : 0.55)
             }
 
             SettingsSection(title: "Show SLO as") {
-                Picker("", selection: $sloDisplay) {
-                    ForEach(SLODisplay.allCases) { display in
-                        Text(display.title).tag(display)
-                    }
+                Picker("", selection: $settings.sloDisplay) {
+                    ForEach(SLODisplay.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .disabled(!isSLOEnabled)
-                .opacity(isSLOEnabled ? 1 : 0.45)
+                .disabled(!settings.sloEnabled)
+                .opacity(settings.sloEnabled ? 1 : 0.45)
+            }
+
+            SettingsSection(title: "Incoming mode") {
+                Picker("", selection: $settings.incomingMode) {
+                    ForEach(IncomingReviewMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(settings.isLocked("incomingMode"))
+            }
+
+            SettingsSection(title: "Unresolved threads") {
+                Picker("", selection: $settings.unresolvedMode) {
+                    ForEach(UnresolvedThreadMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(settings.isLocked("unresolvedThreadMode"))
             }
 
             SettingsSection(title: "Row density", isLast: true) {
-                Picker("", selection: $rowDensity) {
-                    ForEach(RowDensity.allCases) { density in
-                        Text(density.title).tag(density)
-                    }
+                Picker("", selection: $settings.rowDensity) {
+                    ForEach(RowDensity.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .disabled(settings.isLocked("rowDensity"))
             }
         }
     }
-
 }
 
 private struct SettingsSection<Content: View>: View {
@@ -703,24 +748,6 @@ private struct CIBadge: View {
             }
         }
         .frame(width: size, height: size)
-    }
-}
-
-private struct AvatarView: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    let user: GitHubUser
-    let size: CGFloat
-
-    var body: some View {
-        Text(user.initials)
-            .font(.system(size: round(size * 0.42), weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(user.color, in: Circle())
-            .overlay {
-                Circle().stroke(HubberAppearance.avatarStroke(for: colorScheme), lineWidth: 0.5)
-            }
     }
 }
 

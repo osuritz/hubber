@@ -3,7 +3,7 @@ import Combine
 import Foundation
 import Security
 
-struct GitHubDeviceAuthorization: Equatable, Sendable {
+struct GitHubDeviceAuthorization: Equatable {
     let deviceCode: String
     let userCode: String
     let verificationURI: URL
@@ -15,7 +15,7 @@ struct GitHubDeviceAuthorization: Equatable, Sendable {
     }
 }
 
-struct GitHubStoredToken: Codable, Equatable, Sendable {
+struct GitHubStoredToken: Codable, Equatable {
     var accessToken: String
     var accessTokenExpiresAt: Date?
     var refreshToken: String?
@@ -35,11 +35,11 @@ struct GitHubStoredToken: Codable, Equatable, Sendable {
     }
 }
 
-struct GitHubAuthenticatedUser: Decodable, Equatable, Sendable {
+struct GitHubAuthenticatedUser: Decodable, Equatable {
     let login: String
 }
 
-enum GitHubAuthError: LocalizedError, Equatable, Sendable {
+enum GitHubAuthError: LocalizedError, Equatable {
     case invalidResponse
     case authorizationExpired
     case authorizationDenied
@@ -346,20 +346,24 @@ final class HubberStore: ObservableObject {
     @Published private(set) var pullRequestRefreshError: String?
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
 
+    let settings: SettingsStore // exposed so views can bind
+
     private let authService: GitHubAuthService
-    private let pullRequestService: GitHubPullRequestService
+    private let provider: any CodeHostProvider
     private let tokenStore: any GitHubTokenStoring
     private var authTask: Task<Void, Never>?
     private var pullRequestRefreshTask: Task<Void, Never>?
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
-        pullRequestService: GitHubPullRequestService = GitHubPullRequestService(),
-        tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault()
+        provider: any CodeHostProvider = CachingCodeHostProvider(wrapping: GitHubProvider()),
+        tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
+        settings: SettingsStore = SettingsStore()
     ) {
         self.authService = authService
-        self.pullRequestService = pullRequestService
+        self.provider = provider
         self.tokenStore = tokenStore
+        self.settings = settings
         restoreSession()
     }
 
@@ -373,6 +377,8 @@ final class HubberStore: ObservableObject {
             "· loading"
         case .signedOut:
             "· not signed in"
+        case .sessionExpired:
+            "· session expired"
         case .error:
             "· auth error"
         }
@@ -423,23 +429,36 @@ final class HubberStore: ObservableObject {
                 try await saveStoredToken(token)
                 finishSignedInSession(login: user.login)
             } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
-                try? await deleteStoredToken()
-                authState = .signedOut
-                appendDeveloperLog("Saved GitHub credentials were rejected")
-                stopPullRequestRefreshLoop()
+                await handleRestoreCredentialError(cachedLogin: cachedLogin)
             } catch {
-                if let cachedLogin {
-                    useCachedLogin(cachedLogin)
-                    appendDeveloperLog(
-                        "Session restore failed, keeping cached login @\(cachedLogin): \(error.localizedDescription)"
-                    )
-                    startPullRequestRefreshLoop()
-                } else {
-                    authState = .error(error.localizedDescription)
-                    appendDeveloperLog("Session restore failed: \(error.localizedDescription)")
-                    stopPullRequestRefreshLoop()
-                }
+                await handleRestoreGenericError(error, cachedLogin: cachedLogin)
             }
+        }
+    }
+
+    private func handleRestoreCredentialError(cachedLogin: String?) async {
+        if let cachedLogin {
+            authState = .sessionExpired(login: cachedLogin)
+            appendDeveloperLog("Saved GitHub credentials were rejected, showing re-auth prompt")
+        } else {
+            try? await deleteStoredToken()
+            authState = .signedOut
+            appendDeveloperLog("Saved GitHub credentials were rejected")
+        }
+        stopPullRequestRefreshLoop()
+    }
+
+    private func handleRestoreGenericError(_ error: Error, cachedLogin: String?) {
+        if let cachedLogin {
+            useCachedLogin(cachedLogin)
+            appendDeveloperLog(
+                "Session restore failed, keeping cached login @\(cachedLogin): \(error.localizedDescription)"
+            )
+            startPullRequestRefreshLoop()
+        } else {
+            authState = .error(error.localizedDescription)
+            appendDeveloperLog("Session restore failed: \(error.localizedDescription)")
+            stopPullRequestRefreshLoop()
         }
     }
 
@@ -485,6 +504,9 @@ final class HubberStore: ObservableObject {
         stopPullRequestRefreshLoop()
         authTask = Task {
             do {
+                if let invalidating = provider as? CodeHostCacheInvalidating {
+                    await invalidating.invalidateAll()
+                }
                 try await deleteStoredToken()
                 authState = .signedOut
                 data = HubberData.sample
@@ -550,13 +572,11 @@ final class HubberStore: ObservableObject {
 
     private func useCachedLogin(_ login: String) {
         authState = .signedIn(login: login)
-        clearDraftMocks()
         appendDeveloperLog("Using cached GitHub login @\(login)")
     }
 
     private func finishSignedInSession(login: String) {
         authState = .signedIn(login: login)
-        clearDraftMocks()
         appendDeveloperLog("Signed in as @\(login)")
         startPullRequestRefreshLoop()
     }
@@ -567,23 +587,10 @@ final class HubberStore: ObservableObject {
         isRefreshingPullRequests = false
     }
 
-    private func clearDraftMocks() {
-        guard lastPullRequestRefresh == nil else {
-            return
-        }
-        data = HubberData(
-            incoming: data.incoming,
-            outgoing: data.outgoing,
-            drafts: []
-        )
-    }
-
     private func refreshPullRequestsFromGitHub() async {
-        guard canRefreshPullRequests, !isRefreshingPullRequests else {
-            return
-        }
+        guard canRefreshPullRequests, !isRefreshingPullRequests else { return }
         guard let login = signedInLogin else {
-            appendDeveloperLog("Skipped refresh because no signed-in login was available")
+            appendDeveloperLog("Skipped refresh: no signed-in login")
             return
         }
 
@@ -592,27 +599,54 @@ final class HubberStore: ObservableObject {
 
         do {
             let token = try await freshStoredToken()
-            appendDeveloperLog("Fetching draft PRs for @\(token.login ?? login)")
-            let drafts = try await pullRequestService.fetchDraftPullRequests(accessToken: token.accessToken)
-            data = HubberData(
-                incoming: data.incoming,
-                outgoing: data.outgoing,
+            appendDeveloperLog("Refreshing all tabs for @\(login)")
+
+            async let incoming = provider.fetchIncomingReviews(
+                accessToken: token.accessToken,
+                viewerLogin: login,
+                mode: settings.incomingMode
+            )
+            async let outgoing = provider.fetchOutgoingPullRequests(
+                accessToken: token.accessToken,
+                viewerLogin: login,
+                unresolvedMode: settings.unresolvedMode
+            )
+            async let drafts = provider.fetchDraftPullRequests(
+                accessToken: token.accessToken,
+                limit: 100
+            )
+
+            data = try await HubberData(
+                incoming: incoming,
+                outgoing: outgoing,
                 drafts: drafts
             )
+
             lastPullRequestRefresh = Date()
             pullRequestRefreshError = nil
-            appendDeveloperLog("Fetched \(drafts.count) draft PRs")
-        } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
-            try? await deleteStoredToken()
-            authState = .signedOut
-            appendDeveloperLog("Refresh failed because saved credentials are invalid")
-            stopPullRequestRefreshLoop()
+            let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
+            appendDeveloperLog("Fetched \(counts)")
         } catch is CancellationError {
             appendDeveloperLog("Pull request refresh cancelled")
-            return
         } catch {
+            await handleRefreshError(error)
+        }
+    }
+
+    private func handleRefreshError(_ error: Error) async {
+        guard let newState = Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) else {
             pullRequestRefreshError = error.localizedDescription
-            appendDeveloperLog("Pull request refresh failed: \(error.localizedDescription)")
+            appendDeveloperLog("Refresh failed: \(error.localizedDescription)")
+            return
+        }
+        authState = newState
+        if case .sessionExpired = newState {
+            appendDeveloperLog("Refresh failed: session expired, showing re-auth prompt")
+            stopPullRequestRefreshLoop()
+        } else if case .signedOut = newState {
+            try? await deleteStoredToken()
+            appendDeveloperLog("Refresh failed: invalid credentials")
+            stopPullRequestRefreshLoop()
         }
     }
 
@@ -634,6 +668,28 @@ final class HubberStore: ObservableObject {
             return login
         }
         return nil
+    }
+
+    /// Pure decision function: determines the new authState after a refresh error.
+    /// Returns `.sessionExpired(login:)` for credential errors when a login is known;
+    /// `.signedOut` for credential errors when login is nil;
+    /// `nil` for cancellation or other errors (leave authState unchanged).
+    nonisolated static func authState(
+        afterRefreshError error: Error,
+        signedInLogin login: String?
+    ) -> HubberAuthState? {
+        switch error {
+        case GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken:
+            if let login {
+                .sessionExpired(login: login)
+            } else {
+                .signedOut
+            }
+        case is CancellationError:
+            nil
+        default:
+            nil
+        }
     }
 
     private var developerLogText: String {
@@ -687,87 +743,11 @@ final class HubberStore: ObservableObject {
     }
 }
 
-enum HubberAuthState: Equatable, Sendable {
+enum HubberAuthState: Equatable {
     case restoring
     case signedOut
     case waitingForUser(GitHubDeviceAuthorization)
     case signedIn(login: String)
+    case sessionExpired(login: String)
     case error(String)
-}
-
-private struct DeviceCodeResponse: Decodable {
-    let deviceCode: String
-    let userCode: String
-    let verificationURI: String
-    let expiresIn: Int
-    let interval: Int
-
-    enum CodingKeys: String, CodingKey {
-        case deviceCode = "device_code"
-        case userCode = "user_code"
-        case verificationURI = "verification_uri"
-        case expiresIn = "expires_in"
-        case interval
-    }
-}
-
-private struct TokenResponse: Decodable {
-    let accessToken: String?
-    let expiresIn: Int?
-    let refreshToken: String?
-    let refreshTokenExpiresIn: Int?
-    let tokenType: String?
-    let error: String?
-    let errorDescription: String?
-    let interval: Int?
-
-    func storedToken() -> GitHubStoredToken? {
-        guard let accessToken else {
-            return nil
-        }
-
-        return GitHubStoredToken(
-            accessToken: accessToken,
-            accessTokenExpiresAt: expiresIn.map { Date().addingTimeInterval(TimeInterval($0)) },
-            refreshToken: refreshToken,
-            refreshTokenExpiresAt: refreshTokenExpiresIn.map { Date().addingTimeInterval(TimeInterval($0)) },
-            tokenType: tokenType ?? "bearer",
-            login: nil
-        )
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case expiresIn = "expires_in"
-        case refreshToken = "refresh_token"
-        case refreshTokenExpiresIn = "refresh_token_expires_in"
-        case tokenType = "token_type"
-        case error
-        case errorDescription = "error_description"
-        case interval
-    }
-}
-
-private extension [String: String] {
-    func formURLEncoded() -> String {
-        map { key, value in
-            "\(key.urlFormEncoded)=\(value.urlFormEncoded)"
-        }
-        .sorted()
-        .joined(separator: "&")
-    }
-}
-
-private extension String {
-    var urlFormEncoded: String {
-        addingPercentEncoding(withAllowedCharacters: .urlFormAllowed) ?? self
-    }
-}
-
-private extension CharacterSet {
-    static let urlFormAllowed: CharacterSet = {
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: ":#[]@!$&'()*+,;=")
-        return allowed
-    }()
 }

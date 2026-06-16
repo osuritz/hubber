@@ -16,6 +16,8 @@ struct GitHubAuthSettingsView: View {
                 waitingForUserView(authorization: authorization)
             case let .signedIn(login):
                 signedInView(login: login)
+            case .sessionExpired:
+                sessionExpiredView
             case let .error(message):
                 errorView(message: message)
             }
@@ -40,6 +42,28 @@ struct GitHubAuthSettingsView: View {
                 .frame(maxWidth: .infinity)
         }
         .controlSize(.small)
+    }
+
+    private var sessionExpiredView: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("Session expired — sign in again")
+                .font(.system(size: 11.5))
+                .foregroundStyle(Color.hubberWarning)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Button {
+                    store.startSignIn()
+                } label: {
+                    Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                }
+
+                Button("Sign out") {
+                    store.signOut()
+                }
+            }
+            .controlSize(.small)
+        }
     }
 
     private func waitingForUserView(authorization: GitHubDeviceAuthorization) -> some View {
