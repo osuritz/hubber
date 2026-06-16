@@ -43,8 +43,8 @@ struct DeveloperPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             if store.developerLog.isEmpty {
                 Text("No logs yet")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .font(HubberType.log)
+                    .foregroundStyle(HubberDesign.text2)
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
             } else {
                 ForEach(store.developerLog.prefix(12)) { entry in
@@ -61,13 +61,13 @@ private struct DeveloperLogRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(Self.timeFormatter.string(from: entry.timestamp))
-                .font(.system(size: 10.5).monospacedDigit())
-                .foregroundStyle(.tertiary)
+                .font(HubberType.log)
+                .foregroundStyle(HubberDesign.text3)
                 .frame(width: 48, alignment: .leading)
 
             Text(entry.message)
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
+                .font(HubberType.log)
+                .foregroundStyle(HubberDesign.text2)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 4)
