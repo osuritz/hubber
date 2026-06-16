@@ -1,3 +1,7 @@
+// Implementation details for `GitHubAuthService` — OAuth device-flow response types and
+// URL form-encoding helpers. These types are `internal` only because the file split requires it;
+// they are not part of any public or cross-module API and should not be used outside of
+// `GitHubAuthService` and its tests.
 import Foundation
 
 // MARK: - OAuth device-flow response types (used by GitHubAuthService)
