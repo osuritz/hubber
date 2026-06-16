@@ -467,6 +467,9 @@ final class HubberStore: ObservableObject {
                 data = HubberData.sample
                 lastPullRequestRefresh = nil
                 pullRequestRefreshError = nil
+                setTabError(nil, for: .incoming)
+                setTabError(nil, for: .outgoing)
+                setTabError(nil, for: .drafts)
                 appendDeveloperLog("Signed out and cleared saved GitHub token")
             } catch {
                 authState = .error(error.localizedDescription)
@@ -600,10 +603,7 @@ final class HubberStore: ObservableObject {
         return nil
     }
 
-    /// Pure decision function: determines the new authState after a refresh error.
-    /// Returns `.sessionExpired(login:)` for credential errors when a login is known;
-    /// `.signedOut` for credential errors when login is nil;
-    /// `nil` for cancellation or other errors (leave authState unchanged).
+    /// Maps a refresh error to the resulting `HubberAuthState` (or `nil` to leave state unchanged).
     nonisolated static func authState(
         afterRefreshError error: Error,
         signedInLogin login: String?
@@ -677,67 +677,71 @@ final class HubberStore: ObservableObject {
 
 @MainActor
 extension HubberStore {
-    /// Fans out three concurrent tab fetches and updates each tab independently.
-    ///
-    /// Returns `true` if a global error (credential/rate-limit/cancellation) caused an early exit.
+    /// Fans out three concurrent tab fetches; commits successful data before any global error handling.
     func fetchAllTabsIndependently(token: GitHubStoredToken, login: String) async -> Bool {
-        async let incomingFetch: Result<[IncomingReview], Error> = catchingResult {
-            try await self.provider.fetchIncomingReviews(
-                accessToken: token.accessToken,
-                viewerLogin: login,
-                mode: self.settings.incomingMode
-            )
+        let incomingResult = await fetchIncoming(token: token, login: login)
+        let outgoingResult = await fetchOutgoing(token: token, login: login)
+        let draftsResult = await fetchDrafts(token: token)
+        let errs = [incomingResult.failureError, outgoingResult.failureError, draftsResult.failureError]
+        if errs.compactMap(\.self).contains(where: { $0 is CancellationError }) {
+            appendDeveloperLog("Pull request refresh cancelled")
+            return true
         }
-        async let outgoingFetch: Result<[OutgoingReview], Error> = catchingResult {
-            try await self.provider.fetchOutgoingPullRequests(
-                accessToken: token.accessToken,
-                viewerLogin: login,
-                unresolvedMode: self.settings.unresolvedMode
-            )
-        }
-        async let draftsFetch: Result<[DraftReview], Error> = catchingResult {
-            try await self.provider.fetchDraftPullRequests(
-                accessToken: token.accessToken,
-                limit: 100
-            )
-        }
-
-        var newIncoming = data.incoming
-        var newOutgoing = data.outgoing
-        var newDrafts = data.drafts
-
-        let incomingResult = await incomingFetch
-        let outgoingResult = await outgoingFetch
-        let draftsResult = await draftsFetch
-
-        if await applyTabResult(incomingResult, tab: .incoming, label: "Incoming", into: &newIncoming) { return true }
-        if await applyTabResult(outgoingResult, tab: .outgoing, label: "Outgoing", into: &newOutgoing) { return true }
-        if await applyTabResult(draftsResult, tab: .drafts, label: "Drafts", into: &newDrafts) { return true }
-
+        let (newIncoming, incomingGlobal) = resolveTab(
+            incomingResult, existing: data.incoming, tab: .incoming, label: "Incoming"
+        )
+        let (newOutgoing, outgoingGlobal) = resolveTab(
+            outgoingResult, existing: data.outgoing, tab: .outgoing, label: "Outgoing"
+        )
+        let (newDrafts, draftsGlobal) = resolveTab(
+            draftsResult, existing: data.drafts, tab: .drafts, label: "Drafts"
+        )
         data = HubberData(incoming: newIncoming, outgoing: newOutgoing, drafts: newDrafts)
+        if let globalError = incomingGlobal ?? outgoingGlobal ?? draftsGlobal {
+            await handleRefreshError(globalError, settingGlobalError: false)
+            return true
+        }
         return false
     }
 
-    /// Applies a single tab result. Returns `true` for cancellation or global errors.
-    func applyTabResult<T>(
-        _ result: Result<T, Error>,
-        tab: WorkTab,
-        label: String,
-        into current: inout T
-    ) async -> Bool {
+    private func fetchIncoming(token: GitHubStoredToken, login: String) async -> Result<[IncomingReview], Error> {
+        await catchingResult {
+            try await self.provider.fetchIncomingReviews(
+                accessToken: token.accessToken, viewerLogin: login, mode: self.settings.incomingMode
+            )
+        }
+    }
+
+    private func fetchOutgoing(token: GitHubStoredToken, login: String) async -> Result<[OutgoingReview], Error> {
+        await catchingResult {
+            try await self.provider.fetchOutgoingPullRequests(
+                accessToken: token.accessToken, viewerLogin: login, unresolvedMode: self.settings.unresolvedMode
+            )
+        }
+    }
+
+    private func fetchDrafts(token: GitHubStoredToken) async -> Result<[DraftReview], Error> {
+        await catchingResult {
+            try await self.provider.fetchDraftPullRequests(accessToken: token.accessToken, limit: 100)
+        }
+    }
+
+    private func resolveTab<T>(_ result: Result<T, Error>, existing: T, tab: WorkTab, label: String) -> (T, Error?) {
         switch result {
         case let .success(value):
-            current = value
             setTabError(nil, for: tab)
-        case let .failure(error) where error is CancellationError:
-            appendDeveloperLog("Pull request refresh cancelled")
-            return true
+            return (value, nil)
         case let .failure(error):
-            if await handleRefreshError(error, settingGlobalError: false) { return true }
+            if isGlobalError(error) { return (existing, error) }
             setTabError(error.localizedDescription, for: tab)
             appendDeveloperLog("\(label) tab refresh failed: \(error.localizedDescription)")
+            return (existing, nil)
         }
-        return false
+    }
+
+    private func isGlobalError(_ error: Error) -> Bool {
+        if case GitHubAuthError.rateLimited = error { return true }
+        return Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) != nil
     }
 
     func setTabError(_ message: String?, for tab: WorkTab) {
@@ -748,8 +752,7 @@ extension HubberStore {
         }
     }
 
-    /// Handles rate-limit and credential errors. Returns `true` when the error was global.
-    /// When `settingGlobalError` is true, also records a `pullRequestRefreshError` for unknown errors.
+    /// Handles rate-limit and credential errors; returns `true` for global errors.
     @discardableResult
     func handleRefreshError(_ error: Error, settingGlobalError: Bool = true) async -> Bool {
         if case let GitHubAuthError.rateLimited(retryAfter) = error {
@@ -781,12 +784,12 @@ extension HubberStore {
 
 // MARK: - Async result helpers
 
-/// Wraps an `async throws` operation in a `Result`, allowing concurrent fan-out without
-/// propagating throws immediately (so each tab can be resolved independently).
 func catchingResult<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, Error> {
-    do {
-        return try await .success(body())
-    } catch {
-        return .failure(error)
+    do { return try await .success(body()) } catch { return .failure(error) }
+}
+
+extension Result {
+    var failureError: Failure? {
+        if case let .failure(e) = self { e } else { nil }
     }
 }
