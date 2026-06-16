@@ -8,6 +8,9 @@ final class SpyNotificationDispatcher: NotificationDispatching, @unchecked Senda
     private(set) var ensureAuthorizedCallCount = 0
     private(set) var postedContents: [NotificationContent] = []
     var authorizationGranted = true
+    @MainActor var notificationsDenied: Bool {
+        !authorizationGranted
+    }
 
     func ensureAuthorized() async -> Bool {
         ensureAuthorizedCallCount += 1
@@ -24,28 +27,42 @@ final class SpyNotificationDispatcher: NotificationDispatching, @unchecked Senda
 @MainActor
 final class NotificationDispatcherTests: XCTestCase {
 
-    // MARK: - ensureAuthorized called before post
+    // MARK: - Coordinator: one event + authorized → ensureAuthorized called once AND one post (G)
 
     func testEnsureAuthorizedCalledBeforePost() async {
         let spy = SpyNotificationDispatcher()
-        _ = await spy.ensureAuthorized()
-        XCTAssertEqual(spy.ensureAuthorizedCallCount, 1)
+        spy.authorizationGranted = true
+        let coordinator = NotificationCoordinator(dispatcher: spy)
+
+        let baseline = ReviewSnapshot(incomingIDs: [], outgoing: [:])
+        let data = HubberData(
+            incoming: [makeIncoming(id: "pr-1", repo: "acme/web", number: 1, title: "New PR")],
+            outgoing: [],
+            drafts: []
+        )
+        await coordinator.processRefresh(data: data, baseline: baseline, enabledTypes: [.newReview])
+
+        XCTAssertEqual(spy.ensureAuthorizedCallCount, 1, "ensureAuthorized must be called exactly once")
+        XCTAssertEqual(spy.postedContents.count, 1, "one notification must be posted")
     }
 
-    // MARK: - post dispatches content when authorized
+    // MARK: - Coordinator: no events (nil baseline) → ensureAuthorized NOT called and no post (G)
 
     func testPostWhenAuthorizedStoresContent() async {
         let spy = SpyNotificationDispatcher()
         spy.authorizationGranted = true
-        let content = NotificationContent(
-            id: "newReview-pr-1",
-            title: "New review requested",
-            body: "New review · acme/web #1",
-            url: URL(string: "https://github.com/acme/web/pull/1")
+        let coordinator = NotificationCoordinator(dispatcher: spy)
+
+        // nil baseline → no diff → no events → ensureAuthorized must NOT be called
+        let data = HubberData(
+            incoming: [makeIncoming(id: "pr-1")],
+            outgoing: [],
+            drafts: []
         )
-        await spy.post(content)
-        XCTAssertEqual(spy.postedContents.count, 1)
-        XCTAssertEqual(spy.postedContents[0].id, "newReview-pr-1")
+        await coordinator.processRefresh(data: data, baseline: nil, enabledTypes: [.newReview])
+
+        XCTAssertEqual(spy.ensureAuthorizedCallCount, 0, "ensureAuthorized must not be called when there are no events")
+        XCTAssertTrue(spy.postedContents.isEmpty, "no post when there are no events")
     }
 
     // MARK: - Coordinator: first refresh → no events (nil baseline)
