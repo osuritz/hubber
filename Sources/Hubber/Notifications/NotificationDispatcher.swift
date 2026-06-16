@@ -30,13 +30,30 @@ final class UNNotificationDispatcher: NotificationDispatching {
 
     init() {}
 
+    /// True only inside a real `.app` bundle. `UNUserNotificationCenter.current()` raises an
+    /// uncatchable Objective-C `NSException` ("bundleProxyForCurrentProcess is nil") when there
+    /// is no app bundle — e.g. under `xctest` or `swift run` — so we must never touch it there.
+    private nonisolated var isBundledApp: Bool {
+        Bundle.main.bundleURL.pathExtension == "app"
+    }
+
     nonisolated func ensureAuthorized() async -> Bool {
         // Fast path: already determined
         let (determined, granted) = await MainActor.run { (authorizationDetermined, authorizationGranted) }
         if determined { return granted }
 
+        // No app bundle (xctest / `swift run`): treat UN as unavailable rather than crashing.
+        // notificationsDenied stays false — this is an environment limitation, not a user denial.
+        guard isBundledApp else {
+            await MainActor.run {
+                authorizationDetermined = true
+                authorizationGranted = false
+                notificationsDenied = false
+            }
+            return false
+        }
+
         // Slow path: request authorization for the first time.
-        // Access center lazily here — avoids crash in SPM/test mode with no bundle.
         let center = UNUserNotificationCenter.current()
         do {
             let result = try await center.requestAuthorization(options: [.alert, .sound])
