@@ -1,11 +1,18 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Legacy named colors (kept for any call sites that use them directly)
+
 extension Color {
-    static let hubberSuccess = Color(red: 0.25, green: 0.73, blue: 0.31)
-    static let hubberWarning = Color(red: 0.89, green: 0.70, blue: 0.25)
-    static let hubberError = Color(red: 1.00, green: 0.48, blue: 0.45)
+    static let hubberSuccess = HubberDesign.ciPassing
+    static let hubberWarning = Color(light: "#FF9500", dark: "#FFA00A")
+    static let hubberError = HubberDesign.error
 }
+
+// MARK: - HubberAppearance (re-pointed at HubberDesign tokens)
+
+//
+// All helpers are kept so existing call sites continue to compile unchanged.
 
 enum HubberAppearance {
     static func panelFill(for colorScheme: ColorScheme) -> Color {
@@ -14,23 +21,19 @@ enum HubberAppearance {
     }
 
     static func controlGroupFill(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.055)
+        HubberDesign.ctrlTrack
     }
 
     static func selectedControlFill(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? .white.opacity(0.16) : .white.opacity(0.68)
+        HubberDesign.ctrlThumb
     }
 
     static func badgeFill(isActive: Bool, for colorScheme: ColorScheme) -> Color {
         switch (colorScheme, isActive) {
-        case (.dark, true):
-            .white.opacity(0.16)
-        case (.dark, false):
-            .white.opacity(0.10)
-        case (_, true):
-            .black.opacity(0.075)
-        case (_, false):
-            .black.opacity(0.045)
+        case (.dark, true): .white.opacity(0.16)
+        case (.dark, false): .white.opacity(0.10)
+        case (_, true): .black.opacity(0.075)
+        case (_, false): .black.opacity(0.045)
         }
     }
 
@@ -39,7 +42,7 @@ enum HubberAppearance {
     }
 
     static func hairline(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? .white.opacity(0.10) : .black.opacity(0.08)
+        HubberDesign.sep
     }
 
     static func avatarStroke(for colorScheme: ColorScheme) -> Color {
@@ -47,30 +50,21 @@ enum HubberAppearance {
     }
 
     static func statusDotStroke(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? Color(red: 0.15, green: 0.15, blue: 0.17) : .white.opacity(0.85)
+        HubberDesign.materialSolid
     }
 
     static func controlShadow(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark ? .black.opacity(0.25) : .black.opacity(0.12)
     }
 
+    // MARK: SLO Helpers — now delegating to HubberDesign
+
     static func sloColor(_ status: SLOStatus, for colorScheme: ColorScheme) -> Color {
-        if colorScheme == .dark {
-            switch status {
-            case .green: .hubberSuccess
-            case .amber: .hubberWarning
-            case .red: .hubberError
-            }
-        } else {
-            switch status {
-            case .green: Color(red: 0.12, green: 0.56, blue: 0.20)
-            case .amber: Color(red: 0.70, green: 0.43, blue: 0.00)
-            case .red: Color(red: 0.82, green: 0.23, blue: 0.18)
-            }
-        }
+        HubberDesign.sloForeground(status)
     }
 
     static func sloFillOpacity(_ status: SLOStatus, for colorScheme: ColorScheme) -> Double {
+        // Kept for legacy callers — the real fill color is now in HubberDesign.sloBackground(_:)
         if colorScheme == .dark {
             return status == .red ? 0.18 : 0.16
         }
