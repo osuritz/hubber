@@ -247,3 +247,14 @@ extension GitHubUser {
     )
     static let ines = GitHubUser(login: "ines", initials: "IF", color: Color(red: 0.90, green: 0.47, blue: 0.00))
 }
+
+// MARK: - Auth state
+
+enum HubberAuthState: Equatable {
+    case restoring
+    case signedOut
+    case waitingForUser(GitHubDeviceAuthorization)
+    case signedIn(login: String)
+    case sessionExpired(login: String)
+    case error(String)
+}

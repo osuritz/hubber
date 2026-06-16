@@ -75,9 +75,13 @@ private func makeSignedInStore(provider: some CodeHostProvider) -> HubberStore {
     config.protocolClasses = [MockURLProtocol.self]
     // Return 200 for /user so restoreSession succeeds (resolves to signedIn)
     MockURLProtocol.handler = { _ in
-        let url = URL(string: "https://api.github.com/user")!
-        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
-        let body = try! JSONSerialization.data(withJSONObject: ["login": "testuser"])
+        guard
+            let url = URL(string: "https://api.github.com/user"),
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+        else {
+            throw URLError(.badURL)
+        }
+        let body = try JSONSerialization.data(withJSONObject: ["login": "testuser"])
         return (response, body)
     }
     let authService = GitHubAuthService(clientID: "test", session: URLSession(configuration: config))

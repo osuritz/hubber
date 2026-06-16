@@ -145,7 +145,7 @@ struct HubberPopoverView: View {
     private var incomingContent: some View {
         if store.isRefreshingPullRequests, store.data.incoming.isEmpty {
             LoadingState()
-        } else if let _ = store.incomingError, store.data.incoming.isEmpty {
+        } else if store.incomingError != nil, store.data.incoming.isEmpty {
             ErrorState(
                 message: "Couldn't load reviews",
                 lastUpdated: lastUpdatedText,
@@ -162,16 +162,20 @@ struct HubberPopoverView: View {
             }
             let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
             ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url, onOpen: { store.telemetry.itemOpened(in: .incoming) }) {
-                    IncomingReviewRow(
-                        review: review,
-                        isSLOEnabled: store.settings.sloEnabled,
-                        sloHours: store.settings.sloHours(for: review.repo),
-                        sloDisplay: store.settings.sloDisplay,
-                        density: store.settings.rowDensity,
-                        isLast: index == sorted.count - 1
-                    )
-                }
+                ClickableRow(
+                    url: review.url,
+                    onOpen: { store.telemetry.itemOpened(in: .incoming) },
+                    content: {
+                        IncomingReviewRow(
+                            review: review,
+                            isSLOEnabled: store.settings.sloEnabled,
+                            sloHours: store.settings.sloHours(for: review.repo),
+                            sloDisplay: store.settings.sloDisplay,
+                            density: store.settings.rowDensity,
+                            isLast: index == sorted.count - 1
+                        )
+                    }
+                )
             }
         }
     }
@@ -180,7 +184,7 @@ struct HubberPopoverView: View {
     private var outgoingContent: some View {
         if store.isRefreshingPullRequests, store.data.outgoing.isEmpty {
             LoadingState()
-        } else if let _ = store.outgoingError, store.data.outgoing.isEmpty {
+        } else if store.outgoingError != nil, store.data.outgoing.isEmpty {
             ErrorState(
                 message: "Couldn't load outgoing PRs",
                 lastUpdated: lastUpdatedText,
@@ -196,13 +200,17 @@ struct HubberPopoverView: View {
                 )
             }
             ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url, onOpen: { store.telemetry.itemOpened(in: .outgoing) }) {
-                    OutgoingReviewRow(
-                        review: review,
-                        density: store.settings.rowDensity,
-                        isLast: index == store.data.outgoing.count - 1
-                    )
-                }
+                ClickableRow(
+                    url: review.url,
+                    onOpen: { store.telemetry.itemOpened(in: .outgoing) },
+                    content: {
+                        OutgoingReviewRow(
+                            review: review,
+                            density: store.settings.rowDensity,
+                            isLast: index == store.data.outgoing.count - 1
+                        )
+                    }
+                )
             }
         }
     }
@@ -212,7 +220,7 @@ struct HubberPopoverView: View {
     private var draftsContent: some View {
         if store.isRefreshingPullRequests, store.data.drafts.isEmpty {
             LoadingState()
-        } else if let _ = store.draftsError, store.data.drafts.isEmpty {
+        } else if store.draftsError != nil, store.data.drafts.isEmpty {
             ErrorState(
                 message: "Couldn't load drafts",
                 lastUpdated: lastUpdatedText,
@@ -228,13 +236,17 @@ struct HubberPopoverView: View {
                 )
             }
             ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
-                ClickableRow(url: draft.url, onOpen: { store.telemetry.itemOpened(in: .drafts) }) {
-                    DraftPRRow(
-                        draft: draft,
-                        density: store.settings.rowDensity,
-                        isLast: index == store.data.drafts.count - 1
-                    )
-                }
+                ClickableRow(
+                    url: draft.url,
+                    onOpen: { store.telemetry.itemOpened(in: .drafts) },
+                    content: {
+                        DraftPRRow(
+                            draft: draft,
+                            density: store.settings.rowDensity,
+                            isLast: index == store.data.drafts.count - 1
+                        )
+                    }
+                )
             }
         }
     }
