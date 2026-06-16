@@ -351,7 +351,11 @@ final class HubberStore: ObservableObject {
     @Published private(set) var pullRequestRefreshError: String?
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published private(set) var isPopoverOpen = false
-    @Published private(set) var rateLimitMessage: String?
+
+    var rateLimitMessage: String? {
+        guard let until = rateLimitedUntil, until > Date() else { return nil }
+        return ReviewSLOPresentation.rateLimitFooter(secondsRemaining: until.timeIntervalSinceNow)
+    }
 
     let settings: SettingsStore // exposed so views can bind
 
@@ -360,8 +364,7 @@ final class HubberStore: ObservableObject {
     private let tokenStore: any GitHubTokenStoring
     private let scheduler: RefreshScheduler
     private var authTask: Task<Void, Never>?
-    private var pullRequestRefreshTask: Task<Void, Never>?
-    private var rateLimitedUntil: Date?
+    @Published private var rateLimitedUntil: Date?
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
@@ -598,13 +601,16 @@ final class HubberStore: ObservableObject {
 
     private func stopPullRequestRefreshLoop() {
         scheduler.stop()
-        pullRequestRefreshTask?.cancel()
-        pullRequestRefreshTask = nil
         isRefreshingPullRequests = false
     }
 
     private func refreshPullRequestsFromGitHub() async {
         guard canRefreshPullRequests, !isRefreshingPullRequests else { return }
+        guard rateLimitedUntil.map({ $0 > Date() }) != true else {
+            let until = rateLimitedUntil.map { Self.developerLogFormatter.string(from: $0) } ?? "unknown"
+            appendDeveloperLog("Skipped refresh: rate-limited until \(until)")
+            return
+        }
         guard let login = signedInLogin else {
             appendDeveloperLog("Skipped refresh: no signed-in login")
             return
@@ -641,7 +647,6 @@ final class HubberStore: ObservableObject {
             lastPullRequestRefresh = Date()
             pullRequestRefreshError = nil
             rateLimitedUntil = nil
-            rateLimitMessage = nil
             let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
             appendDeveloperLog("Fetched \(counts)")
         } catch is CancellationError {
@@ -657,7 +662,6 @@ final class HubberStore: ObservableObject {
             let delay = retryAfter ?? (15 * 60)
             rateLimitedUntil = Date().addingTimeInterval(delay)
             let minutes = Int((delay / 60).rounded(.up))
-            rateLimitMessage = ReviewSLOPresentation.rateLimitFooter(secondsRemaining: delay)
             appendDeveloperLog("GitHub rate limited, backing off for \(minutes)m")
             return
         }
