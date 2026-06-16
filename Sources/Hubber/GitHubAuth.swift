@@ -3,78 +3,8 @@ import Combine
 import Foundation
 import Security
 
-struct GitHubDeviceAuthorization: Equatable {
-    let deviceCode: String
-    let userCode: String
-    let verificationURI: URL
-    let expiresAt: Date
-    let interval: Int
-
-    var isExpired: Bool {
-        Date() >= expiresAt
-    }
-}
-
-struct GitHubStoredToken: Codable, Equatable {
-    var accessToken: String
-    var accessTokenExpiresAt: Date?
-    var refreshToken: String?
-    var refreshTokenExpiresAt: Date?
-    var tokenType: String
-    var login: String?
-
-    var canRefresh: Bool {
-        guard let refreshToken, !refreshToken.isEmpty else { return false }
-        guard let refreshTokenExpiresAt else { return true }
-        return refreshTokenExpiresAt > Date().addingTimeInterval(60)
-    }
-
-    var hasFreshAccessToken: Bool {
-        guard let accessTokenExpiresAt else { return true }
-        return accessTokenExpiresAt > Date().addingTimeInterval(5 * 60)
-    }
-}
-
-struct GitHubAuthenticatedUser: Decodable, Equatable {
-    let login: String
-}
-
-enum GitHubAuthError: LocalizedError, Equatable {
-    case invalidResponse
-    case authorizationExpired
-    case authorizationDenied
-    case deviceFlowDisabled
-    case badCredentials
-    case missingRefreshToken
-    case keychain(OSStatus)
-    case github(String)
-    case rateLimited(retryAfter: TimeInterval?)
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidResponse:
-            "GitHub returned an unexpected response."
-        case .authorizationExpired:
-            "The GitHub sign-in code expired. Start sign-in again."
-        case .authorizationDenied:
-            "GitHub sign-in was cancelled."
-        case .deviceFlowDisabled:
-            "Device Flow is not enabled for this GitHub App."
-        case .badCredentials:
-            "GitHub rejected the saved credentials. Please sign in again."
-        case .missingRefreshToken:
-            "The saved token cannot be refreshed. Please sign in again."
-        case let .keychain(status):
-            "Keychain returned status \(status)."
-        case let .github(message):
-            message
-        case let .rateLimited(retryAfter):
-            retryAfter.map { seconds in
-                "GitHub rate limit reached. Retry in \(Int((seconds / 60).rounded(.up)))m."
-            } ?? "GitHub rate limit reached."
-        }
-    }
-}
+// GitHub model types (GitHubDeviceAuthorization, GitHubStoredToken, GitHubAuthenticatedUser,
+// GitHubAuthError) live in GitHub/GitHubModels.swift.
 
 protocol GitHubTokenStoring: Sendable {
     func load() throws -> GitHubStoredToken?
@@ -349,6 +279,10 @@ final class HubberStore: ObservableObject {
     @Published private(set) var isRefreshingPullRequests = false
     @Published private(set) var lastPullRequestRefresh: Date?
     @Published private(set) var pullRequestRefreshError: String?
+    /// Per-tab fetch errors. Nil when the last fetch for that tab succeeded.
+    @Published private(set) var incomingError: String?
+    @Published private(set) var outgoingError: String?
+    @Published private(set) var draftsError: String?
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published private(set) var isPopoverOpen = false
 
@@ -358,6 +292,7 @@ final class HubberStore: ObservableObject {
     }
 
     let settings: SettingsStore // exposed so views can bind
+    let telemetry: Telemetry // exposed so views can emit events
 
     private let authService: GitHubAuthService
     private let provider: any CodeHostProvider
@@ -371,12 +306,14 @@ final class HubberStore: ObservableObject {
         provider: any CodeHostProvider = CachingCodeHostProvider(wrapping: GitHubProvider()),
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
         settings: SettingsStore = SettingsStore(),
-        idle: any MachineIdleProviding = SystemIdleProvider()
+        idle: any MachineIdleProviding = SystemIdleProvider(),
+        telemetry: Telemetry = Telemetry(sink: TelemetryDeckSink())
     ) {
         self.authService = authService
         self.provider = provider
         self.tokenStore = tokenStore
         self.settings = settings
+        self.telemetry = telemetry
         scheduler = RefreshScheduler(idle: idle)
         restoreSession()
     }
@@ -530,6 +467,9 @@ final class HubberStore: ObservableObject {
                 data = HubberData.sample
                 lastPullRequestRefresh = nil
                 pullRequestRefreshError = nil
+                setTabError(nil, for: .incoming)
+                setTabError(nil, for: .outgoing)
+                setTabError(nil, for: .drafts)
                 appendDeveloperLog("Signed out and cleared saved GitHub token")
             } catch {
                 authState = .error(error.localizedDescription)
@@ -558,6 +498,7 @@ final class HubberStore: ObservableObject {
         }
 
         appendDeveloperLog("Manual pull request refresh requested")
+        telemetry.manualRefresh()
         scheduler.reset()
     }
 
@@ -619,66 +560,26 @@ final class HubberStore: ObservableObject {
         isRefreshingPullRequests = true
         defer { isRefreshingPullRequests = false }
 
+        // Obtain a fresh token — a token error is a global (credential) failure.
+        let token: GitHubStoredToken
         do {
-            let token = try await freshStoredToken()
-            appendDeveloperLog("Refreshing all tabs for @\(login)")
+            token = try await freshStoredToken()
+        } catch is CancellationError {
+            appendDeveloperLog("Pull request refresh cancelled")
+            return
+        } catch {
+            await handleRefreshError(error)
+            return
+        }
 
-            async let incoming = provider.fetchIncomingReviews(
-                accessToken: token.accessToken,
-                viewerLogin: login,
-                mode: settings.incomingMode
-            )
-            async let outgoing = provider.fetchOutgoingPullRequests(
-                accessToken: token.accessToken,
-                viewerLogin: login,
-                unresolvedMode: settings.unresolvedMode
-            )
-            async let drafts = provider.fetchDraftPullRequests(
-                accessToken: token.accessToken,
-                limit: 100
-            )
-
-            data = try await HubberData(
-                incoming: incoming,
-                outgoing: outgoing,
-                drafts: drafts
-            )
-
+        appendDeveloperLog("Refreshing all tabs for @\(login)")
+        let didStop = await fetchAllTabsIndependently(token: token, login: login)
+        if !didStop {
             lastPullRequestRefresh = Date()
             pullRequestRefreshError = nil
             rateLimitedUntil = nil
             let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
             appendDeveloperLog("Fetched \(counts)")
-        } catch is CancellationError {
-            appendDeveloperLog("Pull request refresh cancelled")
-        } catch {
-            await handleRefreshError(error)
-        }
-    }
-
-    private func handleRefreshError(_ error: Error) async {
-        // Handle rate limiting: set rateLimitedUntil so next context has isRateLimited=true
-        if case let GitHubAuthError.rateLimited(retryAfter) = error {
-            let delay = retryAfter ?? (15 * 60)
-            rateLimitedUntil = Date().addingTimeInterval(delay)
-            let minutes = Int((delay / 60).rounded(.up))
-            appendDeveloperLog("GitHub rate limited, backing off for \(minutes)m")
-            return
-        }
-
-        guard let newState = Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) else {
-            pullRequestRefreshError = error.localizedDescription
-            appendDeveloperLog("Refresh failed: \(error.localizedDescription)")
-            return
-        }
-        authState = newState
-        if case .sessionExpired = newState {
-            appendDeveloperLog("Refresh failed: session expired, showing re-auth prompt")
-            stopPullRequestRefreshLoop()
-        } else if case .signedOut = newState {
-            try? await deleteStoredToken()
-            appendDeveloperLog("Refresh failed: invalid credentials")
-            stopPullRequestRefreshLoop()
         }
     }
 
@@ -702,10 +603,7 @@ final class HubberStore: ObservableObject {
         return nil
     }
 
-    /// Pure decision function: determines the new authState after a refresh error.
-    /// Returns `.sessionExpired(login:)` for credential errors when a login is known;
-    /// `.signedOut` for credential errors when login is nil;
-    /// `nil` for cancellation or other errors (leave authState unchanged).
+    /// Maps a refresh error to the resulting `HubberAuthState` (or `nil` to leave state unchanged).
     nonisolated static func authState(
         afterRefreshError error: Error,
         signedInLogin login: String?
@@ -775,11 +673,123 @@ final class HubberStore: ObservableObject {
     }
 }
 
-enum HubberAuthState: Equatable {
-    case restoring
-    case signedOut
-    case waitingForUser(GitHubDeviceAuthorization)
-    case signedIn(login: String)
-    case sessionExpired(login: String)
-    case error(String)
+// MARK: - Per-tab independent refresh helpers
+
+@MainActor
+extension HubberStore {
+    /// Fans out three concurrent tab fetches; commits successful data before any global error handling.
+    func fetchAllTabsIndependently(token: GitHubStoredToken, login: String) async -> Bool {
+        let incomingResult = await fetchIncoming(token: token, login: login)
+        let outgoingResult = await fetchOutgoing(token: token, login: login)
+        let draftsResult = await fetchDrafts(token: token)
+        let errs = [incomingResult.failureError, outgoingResult.failureError, draftsResult.failureError]
+        if errs.compactMap(\.self).contains(where: { $0 is CancellationError }) {
+            appendDeveloperLog("Pull request refresh cancelled")
+            return true
+        }
+        let (newIncoming, incomingGlobal) = resolveTab(
+            incomingResult, existing: data.incoming, tab: .incoming, label: "Incoming"
+        )
+        let (newOutgoing, outgoingGlobal) = resolveTab(
+            outgoingResult, existing: data.outgoing, tab: .outgoing, label: "Outgoing"
+        )
+        let (newDrafts, draftsGlobal) = resolveTab(
+            draftsResult, existing: data.drafts, tab: .drafts, label: "Drafts"
+        )
+        data = HubberData(incoming: newIncoming, outgoing: newOutgoing, drafts: newDrafts)
+        if let globalError = incomingGlobal ?? outgoingGlobal ?? draftsGlobal {
+            await handleRefreshError(globalError, settingGlobalError: false)
+            return true
+        }
+        return false
+    }
+
+    private func fetchIncoming(token: GitHubStoredToken, login: String) async -> Result<[IncomingReview], Error> {
+        await catchingResult {
+            try await self.provider.fetchIncomingReviews(
+                accessToken: token.accessToken, viewerLogin: login, mode: self.settings.incomingMode
+            )
+        }
+    }
+
+    private func fetchOutgoing(token: GitHubStoredToken, login: String) async -> Result<[OutgoingReview], Error> {
+        await catchingResult {
+            try await self.provider.fetchOutgoingPullRequests(
+                accessToken: token.accessToken, viewerLogin: login, unresolvedMode: self.settings.unresolvedMode
+            )
+        }
+    }
+
+    private func fetchDrafts(token: GitHubStoredToken) async -> Result<[DraftReview], Error> {
+        await catchingResult {
+            try await self.provider.fetchDraftPullRequests(accessToken: token.accessToken, limit: 100)
+        }
+    }
+
+    private func resolveTab<T>(_ result: Result<T, Error>, existing: T, tab: WorkTab, label: String) -> (T, Error?) {
+        switch result {
+        case let .success(value):
+            setTabError(nil, for: tab)
+            return (value, nil)
+        case let .failure(error):
+            if isGlobalError(error) { return (existing, error) }
+            setTabError(error.localizedDescription, for: tab)
+            appendDeveloperLog("\(label) tab refresh failed: \(error.localizedDescription)")
+            return (existing, nil)
+        }
+    }
+
+    private func isGlobalError(_ error: Error) -> Bool {
+        if case GitHubAuthError.rateLimited = error { return true }
+        return Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) != nil
+    }
+
+    func setTabError(_ message: String?, for tab: WorkTab) {
+        switch tab {
+        case .incoming: incomingError = message
+        case .outgoing: outgoingError = message
+        case .drafts: draftsError = message
+        }
+    }
+
+    /// Handles rate-limit and credential errors; returns `true` for global errors.
+    @discardableResult
+    func handleRefreshError(_ error: Error, settingGlobalError: Bool = true) async -> Bool {
+        if case let GitHubAuthError.rateLimited(retryAfter) = error {
+            let delay = retryAfter ?? (15 * 60)
+            rateLimitedUntil = Date().addingTimeInterval(delay)
+            let minutes = Int((delay / 60).rounded(.up))
+            appendDeveloperLog("GitHub rate limited, backing off for \(minutes)m")
+            return true
+        }
+        guard let newState = Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) else {
+            if settingGlobalError {
+                pullRequestRefreshError = error.localizedDescription
+                appendDeveloperLog("Refresh failed: \(error.localizedDescription)")
+            }
+            return false
+        }
+        authState = newState
+        if case .sessionExpired = newState {
+            appendDeveloperLog("Refresh failed: session expired, showing re-auth prompt")
+            stopPullRequestRefreshLoop()
+        } else if case .signedOut = newState {
+            try? await deleteStoredToken()
+            appendDeveloperLog("Refresh failed: invalid credentials")
+            stopPullRequestRefreshLoop()
+        }
+        return true
+    }
+}
+
+// MARK: - Async result helpers
+
+func catchingResult<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, Error> {
+    do { return try await .success(body()) } catch { return .failure(error) }
+}
+
+extension Result {
+    var failureError: Failure? {
+        if case let .failure(e) = self { e } else { nil }
+    }
 }

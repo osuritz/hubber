@@ -36,6 +36,9 @@ struct HubberPopoverView: View {
             }
         }
         .foregroundStyle(.primary)
+        .onChange(of: selectedTab) { _, newTab in
+            store.telemetry.tabSwitched(to: newTab)
+        }
     }
 
     private var header: some View {
@@ -142,7 +145,7 @@ struct HubberPopoverView: View {
     private var incomingContent: some View {
         if store.isRefreshingPullRequests, store.data.incoming.isEmpty {
             LoadingState()
-        } else if let error = store.pullRequestRefreshError, store.data.incoming.isEmpty {
+        } else if store.incomingError != nil, store.data.incoming.isEmpty {
             ErrorState(
                 message: "Couldn't load reviews",
                 lastUpdated: lastUpdatedText,
@@ -151,24 +154,29 @@ struct HubberPopoverView: View {
         } else if store.data.incoming.isEmpty {
             AllClearState()
         } else {
-            if let error = store.pullRequestRefreshError {
+            if let error = store.incomingError {
                 ErrorState(
                     message: "Couldn't load reviews",
-                    lastUpdated: "Last refresh failed: \(error)"
+                    lastUpdated: "Last refresh failed: \(error)",
+                    onRetry: { store.refreshPullRequests() }
                 )
             }
             let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
             ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
-                    IncomingReviewRow(
-                        review: review,
-                        isSLOEnabled: store.settings.sloEnabled,
-                        sloHours: store.settings.sloHours(for: review.repo),
-                        sloDisplay: store.settings.sloDisplay,
-                        density: store.settings.rowDensity,
-                        isLast: index == sorted.count - 1
-                    )
-                }
+                ClickableRow(
+                    url: review.url,
+                    onOpen: { store.telemetry.itemOpened(in: .incoming) },
+                    content: {
+                        IncomingReviewRow(
+                            review: review,
+                            isSLOEnabled: store.settings.sloEnabled,
+                            sloHours: store.settings.sloHours(for: review.repo),
+                            sloDisplay: store.settings.sloDisplay,
+                            density: store.settings.rowDensity,
+                            isLast: index == sorted.count - 1
+                        )
+                    }
+                )
             }
         }
     }
@@ -177,7 +185,7 @@ struct HubberPopoverView: View {
     private var outgoingContent: some View {
         if store.isRefreshingPullRequests, store.data.outgoing.isEmpty {
             LoadingState()
-        } else if let error = store.pullRequestRefreshError, store.data.outgoing.isEmpty {
+        } else if store.outgoingError != nil, store.data.outgoing.isEmpty {
             ErrorState(
                 message: "Couldn't load outgoing PRs",
                 lastUpdated: lastUpdatedText,
@@ -186,20 +194,25 @@ struct HubberPopoverView: View {
         } else if store.data.outgoing.isEmpty {
             EmptyOutgoingState()
         } else {
-            if let error = store.pullRequestRefreshError {
+            if let error = store.outgoingError {
                 ErrorState(
                     message: "Couldn't load outgoing PRs",
-                    lastUpdated: "Last refresh failed: \(error)"
+                    lastUpdated: "Last refresh failed: \(error)",
+                    onRetry: { store.refreshPullRequests() }
                 )
             }
             ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
-                    OutgoingReviewRow(
-                        review: review,
-                        density: store.settings.rowDensity,
-                        isLast: index == store.data.outgoing.count - 1
-                    )
-                }
+                ClickableRow(
+                    url: review.url,
+                    onOpen: { store.telemetry.itemOpened(in: .outgoing) },
+                    content: {
+                        OutgoingReviewRow(
+                            review: review,
+                            density: store.settings.rowDensity,
+                            isLast: index == store.data.outgoing.count - 1
+                        )
+                    }
+                )
             }
         }
     }
@@ -209,7 +222,7 @@ struct HubberPopoverView: View {
     private var draftsContent: some View {
         if store.isRefreshingPullRequests, store.data.drafts.isEmpty {
             LoadingState()
-        } else if let error = store.pullRequestRefreshError, store.data.drafts.isEmpty {
+        } else if store.draftsError != nil, store.data.drafts.isEmpty {
             ErrorState(
                 message: "Couldn't load drafts",
                 lastUpdated: lastUpdatedText,
@@ -218,20 +231,25 @@ struct HubberPopoverView: View {
         } else if store.data.drafts.isEmpty {
             EmptyDraftsState()
         } else {
-            if let error = store.pullRequestRefreshError {
+            if let error = store.draftsError {
                 ErrorState(
                     message: "Couldn't load drafts",
-                    lastUpdated: "Last refresh failed: \(error)"
+                    lastUpdated: "Last refresh failed: \(error)",
+                    onRetry: { store.refreshPullRequests() }
                 )
             }
             ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
-                ClickableRow(url: draft.url) {
-                    DraftPRRow(
-                        draft: draft,
-                        density: store.settings.rowDensity,
-                        isLast: index == store.data.drafts.count - 1
-                    )
-                }
+                ClickableRow(
+                    url: draft.url,
+                    onOpen: { store.telemetry.itemOpened(in: .drafts) },
+                    content: {
+                        DraftPRRow(
+                            draft: draft,
+                            density: store.settings.rowDensity,
+                            isLast: index == store.data.drafts.count - 1
+                        )
+                    }
+                )
             }
         }
     }
@@ -280,7 +298,11 @@ struct HubberPopoverView: View {
         if store.isRefreshingPullRequests {
             return "Refreshing PRs..."
         }
-        if store.pullRequestRefreshError != nil {
+        let hasAnyError = store.pullRequestRefreshError != nil
+            || store.incomingError != nil
+            || store.outgoingError != nil
+            || store.draftsError != nil
+        if hasAnyError {
             return "Refresh failed"
         }
         if let lastPullRequestRefresh = store.lastPullRequestRefresh {
@@ -293,11 +315,13 @@ struct HubberPopoverView: View {
 
 private struct ClickableRow<Content: View>: View {
     let url: URL?
+    var onOpen: (() -> Void)?
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         if let url {
             Button {
+                onOpen?()
                 NSWorkspace.shared.open(url)
             } label: {
                 content()
