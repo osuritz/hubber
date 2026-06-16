@@ -149,6 +149,45 @@ struct SettingsView: View {
                 }
             }
 
+            // Privacy
+            SettingsSection(title: "Privacy") {
+                SettingsGroup {
+                    // Analytics toggle
+                    SettingsRow(isLast: false) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Share anonymous usage analytics")
+                                .font(HubberType.settingsLabel)
+                                .foregroundStyle(HubberDesign.text)
+                            Text("Helps improve Hubber. No personal data is shared.")
+                                .font(HubberType.settingsSub)
+                                .foregroundStyle(HubberDesign.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Toggle("", isOn: $settings.analyticsEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .disabled(settings.isLocked(ManagedKey.analyticsEnabled))
+                    }
+
+                    // Crash reporting toggle
+                    SettingsRow(isLast: true) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Send crash & hang reports")
+                                .font(HubberType.settingsLabel)
+                                .foregroundStyle(HubberDesign.text)
+                            Text("Reports help diagnose stability issues. No PII is included.")
+                                .font(HubberType.settingsSub)
+                                .foregroundStyle(HubberDesign.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Toggle("", isOn: $settings.crashReportingEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .disabled(settings.isLocked(ManagedKey.crashReportingEnabled))
+                    }
+                }
+            }
+
             // Developer (debug chip per settings.jsx)
             SettingsSection(title: "Developer", isLast: true, isDebug: true) {
                 DeveloperPanelView(store: store)

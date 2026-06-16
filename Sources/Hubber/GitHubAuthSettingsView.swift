@@ -5,6 +5,11 @@ struct GitHubAuthSettingsView: View {
 
     @ObservedObject var store: HubberStore
 
+    /// True when the provider access policy blocks github.com sign-in.
+    private var isRestricted: Bool {
+        !store.settings.providerAccessPolicy.canConnectGitHubDotCom
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             switch store.authState {
@@ -35,13 +40,27 @@ struct GitHubAuthSettingsView: View {
     }
 
     private var signedOutView: some View {
-        Button {
-            store.startSignIn()
-        } label: {
-            Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
-                .frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                store.startSignIn()
+            } label: {
+                Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .controlSize(.small)
+            .disabled(isRestricted)
+            .opacity(isRestricted ? 0.45 : 1)
+
+            if isRestricted {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .regular))
+                    Text("Sign-in is restricted by your organization.")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(HubberDesign.text2)
+            }
         }
-        .controlSize(.small)
     }
 
     private var sessionExpiredView: some View {
@@ -57,12 +76,24 @@ struct GitHubAuthSettingsView: View {
                 } label: {
                     Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
                 }
+                .disabled(isRestricted)
+                .opacity(isRestricted ? 0.45 : 1)
 
                 Button("Sign out") {
                     store.signOut()
                 }
             }
             .controlSize(.small)
+
+            if isRestricted {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .regular))
+                    Text("Sign-in is restricted by your organization.")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(HubberDesign.text2)
+            }
         }
     }
 
@@ -181,12 +212,24 @@ struct GitHubAuthSettingsView: View {
                 Button("Try again") {
                     store.startSignIn()
                 }
+                .disabled(isRestricted)
+                .opacity(isRestricted ? 0.45 : 1)
 
                 Button("Clear") {
                     store.signOut()
                 }
             }
             .controlSize(.small)
+
+            if isRestricted {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .regular))
+                    Text("Sign-in is restricted by your organization.")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(HubberDesign.text2)
+            }
         }
     }
 }

@@ -8,6 +8,11 @@ struct SignInScreen: View {
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
 
+    /// True when the provider access policy blocks github.com sign-in.
+    private var isRestricted: Bool {
+        !store.settings.providerAccessPolicy.canConnectGitHubDotCom
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
@@ -36,7 +41,7 @@ struct SignInScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 24)
 
-                // "Sign in with GitHub" button
+                // "Sign in with GitHub" button — disabled when policy blocks the provider
                 Button {
                     store.startSignIn()
                 } label: {
@@ -53,16 +58,30 @@ struct SignInScreen: View {
                 }
                 .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
                 .frame(maxWidth: 264)
-                .padding(.bottom, 16)
+                .disabled(isRestricted)
+                .opacity(isRestricted ? 0.45 : 1)
+                .padding(.bottom, isRestricted ? 8 : 16)
 
-                // Footnote
-                HStack(spacing: 6) {
-                    Image(systemName: "lock")
-                        .font(.system(size: 12, weight: .regular))
-                    Text("Read-only access to your pull requests")
-                        .font(.system(size: 11))
+                // Restricted-by-organization message (shown in place of the normal footnote)
+                if isRestricted {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 11, weight: .regular))
+                        Text("Sign-in is restricted by your organization.")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(HubberDesign.text2)
+                    .padding(.bottom, 16)
+                } else {
+                    // Footnote
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock")
+                            .font(.system(size: 12, weight: .regular))
+                        Text("Read-only access to your pull requests")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(HubberDesign.text3)
                 }
-                .foregroundStyle(HubberDesign.text3)
             }
             .padding(.horizontal, 40)
             .padding(.vertical, 36)

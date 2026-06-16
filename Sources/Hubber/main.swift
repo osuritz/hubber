@@ -26,10 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables: Set<AnyCancellable> = []
     private var pulseTimer: Timer?
     private var pulsePhase: Double = 0
+    /// Tracks whether MetricKit was started at launch. Used in applicationWillTerminate
+    /// to remove the subscriber only if it was actually added — guards against the case
+    /// where the user disables crash reporting mid-session (live setting would be false,
+    /// but the subscriber is still registered from launch time).
+    private var metricKitStarted = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        TelemetryDeckSink.initialize()
-        MXMetricManager.shared.add(metricSubscriber)
+        startTelemetry()
         NSApp.setActivationPolicy(.accessory)
 
         let contentView = HubberPopoverView(store: store)
@@ -86,6 +90,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 self?.store.refreshPullRequests()
             }
+        }
+    }
+
+    // MARK: - Telemetry / crash reporting
+
+    /// Gates TelemetryDeck and MetricKit on the user/MDM privacy kill-switches.
+    ///
+    /// Both `analyticsEnabled` and `crashReportingEnabled` default to `true`.
+    /// MDM can force either to `false`; users can also toggle them in Privacy settings.
+    /// Sinks that are not started here are also not removed in `applicationWillTerminate`.
+    private func startTelemetry() {
+        if store.settings.analyticsEnabled {
+            TelemetryDeckSink.initialize()
+        }
+        if store.settings.crashReportingEnabled {
+            MXMetricManager.shared.add(metricSubscriber)
+            metricKitStarted = true
         }
     }
 
@@ -305,7 +326,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
-        MXMetricManager.shared.remove(metricSubscriber)
+        // Only remove the subscriber if it was actually added at launch.
+        // Gating on metricKitStarted (not the live setting) prevents a leak when the
+        // user disables crash reporting mid-session — the subscriber was registered
+        // and must be removed regardless of the current setting value.
+        if metricKitStarted {
+            MXMetricManager.shared.remove(metricSubscriber)
+        }
         if let appActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
         }
