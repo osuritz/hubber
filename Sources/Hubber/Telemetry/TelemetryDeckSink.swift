@@ -18,6 +18,11 @@ struct TelemetryDeckSink: TelemetrySink {
     /// Initializes the SDK and registers this sink.
     ///
     /// Call once at app launch (e.g. `applicationDidFinishLaunching`).
+    ///
+    /// **User identity / privacy note:** The TelemetryDeck SDK auto-generates an anonymized,
+    /// SHA-256-hashed user identifier derived from a random UUID that is persisted in
+    /// UserDefaults on macOS. Hubber never supplies a GitHub login, email address, or any
+    /// other PII as the user identifier — the SDK handles identification entirely on its own.
     static func initialize() {
         let config = TelemetryManagerConfiguration(appID: TelemetryConfig.appID)
         #if DEBUG
