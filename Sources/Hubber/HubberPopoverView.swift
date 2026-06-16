@@ -39,15 +39,35 @@ struct HubberPopoverView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Text("GitHub")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
+        VStack(spacing: 11) {
+            HStack(spacing: 0) {
+                // #31: Provider-switcher layout seam.
+                // The tap-target (minWidth: 44) is reserved for a future provider picker.
+                // Currently shows "GitHub · @login" as a static label.
+                // To add provider switching: wrap this in a Button/Menu with the same frame.
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.triangle.pull")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(HubberDesign.accent)
 
-                Text(store.usernameDisplay)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    // "GitHub · @login" — provider name + login
+                    HStack(spacing: 4) {
+                        Text("GitHub")
+                            .font(HubberType.headerTitle)
+                            .foregroundStyle(HubberDesign.text)
+
+                        Text("·")
+                            .font(.system(size: 13))
+                            .foregroundStyle(HubberDesign.text3)
+
+                        Text(store.usernameDisplay)
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(HubberDesign.text2)
+                    }
+                }
+                // Reserved provider-switcher tap-target (future: make this a Button/Menu)
+                .frame(minWidth: 44, alignment: .leading)
+                .contentShape(Rectangle())
 
                 Spacer()
 
@@ -64,11 +84,11 @@ struct HubberPopoverView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(store.canRefreshPullRequests ? .secondary : .tertiary)
+                .foregroundStyle(store.canRefreshPullRequests ? HubberDesign.text2 : HubberDesign.text3)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
                 .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
-                .help("Refresh pull requests")
+                .help("Refresh pull requests (⌘R)")
 
                 Button {
                     showSettings.toggle()
@@ -77,9 +97,11 @@ struct HubberPopoverView: View {
                         .font(.system(size: 13, weight: .medium))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(showSettings ? .primary : .secondary)
+                .foregroundStyle(showSettings ? HubberDesign.accent : HubberDesign.text2)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
+                .help("Settings (⌘,)")
+                .keyboardShortcut(",", modifiers: .command)
             }
 
             HubberTabBar(
@@ -87,16 +109,16 @@ struct HubberPopoverView: View {
                 showSettings: $showSettings,
                 counts: [
                     .incoming: store.data.incoming.count,
-                    .outgoing: store.data.outgoing.count,
+                    .outgoing: store.data.outgoing.count(where: { $0.ci == .failing || $0.unresolved > 0 }),
                     .drafts: store.data.drafts.count,
                 ]
             )
         }
         .padding(.horizontal, 14)
-        .padding(.top, 12)
+        .padding(.top, 13)
         .padding(.bottom, 10)
         .overlay(alignment: .bottom) {
-            Divider().opacity(0.55)
+            HubberDesign.sep.frame(height: 0.5)
         }
     }
 
@@ -208,33 +230,37 @@ struct HubberPopoverView: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 6) {
+            // Last-refresh status (per popover.jsx footer)
             if let rateLimitMessage = store.rateLimitMessage {
                 Text(rateLimitMessage).lineLimit(1)
             } else {
                 Text(refreshStatusText).lineLimit(1)
             }
-            Spacer()
-            Text(ReviewSLOPresentation.footerText(
-                isEnabled: store.settings.sloEnabled,
-                hours: store.settings.sloHours
-            ))
-            Text("⌘, Settings")
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .overlay(alignment: .top) {
-            Divider().opacity(0.55)
-        }
-        .background {
-            // ⌘R keyboard shortcut for manual refresh
-            Button("") {
+
+            Spacer(minLength: 8)
+
+            // ⌘R Refresh button (per popover.jsx "Refresh")
+            Button {
                 store.refreshPullRequests()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10, weight: .medium))
+                    Text("⌘R")
+                }
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(HubberDesign.text2)
+            .disabled(store.isRefreshingPullRequests)
             .keyboardShortcut("r", modifiers: .command)
-            .hidden()
+        }
+        .font(HubberType.footer)
+        .foregroundStyle(HubberDesign.text2)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .overlay(alignment: .top) {
+            HubberDesign.sep.frame(height: 0.5)
         }
     }
 
@@ -274,8 +300,6 @@ private struct ClickableRow<Content: View>: View {
 }
 
 private struct HubberTabBar: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     @Binding var selectedTab: WorkTab
     @Binding var showSettings: Bool
     let counts: [WorkTab: Int]
@@ -283,64 +307,59 @@ private struct HubberTabBar: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(WorkTab.allCases) { tab in
+                let isActive = selectedTab == tab && !showSettings
                 Button {
                     selectedTab = tab
                     showSettings = false
                 } label: {
                     HStack(spacing: 5) {
                         Text(tab.title)
-                        CountBadge(count: counts[tab, default: 0], isActive: selectedTab == tab && !showSettings)
+                        let badgeCount = counts[tab, default: 0]
+                        if badgeCount > 0 {
+                            CountBadge(count: badgeCount, isActive: isActive)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 5)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(selectedTab == tab && !showSettings ? .primary : .secondary)
-                .background(
-                    Group {
-                        if selectedTab == tab, !showSettings {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(HubberAppearance.selectedControlFill(for: colorScheme))
-                                .shadow(
-                                    color: HubberAppearance.controlShadow(for: colorScheme),
-                                    radius: 1,
-                                    y: 1
-                                )
-                        }
+                .font(.system(size: 12.5, weight: isActive ? .semibold : .medium))
+                .foregroundStyle(isActive ? HubberDesign.text : HubberDesign.text2)
+                .background {
+                    if isActive {
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .fill(HubberDesign.ctrlThumb)
+                            .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
                     }
-                )
+                }
             }
         }
         .padding(2)
         .background(
-            HubberAppearance.controlGroupFill(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            HubberDesign.ctrlTrack,
+            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
         )
     }
 }
 
 private struct CountBadge: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     let count: Int
     var isActive = false
 
     var body: some View {
         Text("\(count)")
-            .font(.system(size: 10, weight: .semibold).monospacedDigit())
-            .foregroundStyle(isActive ? .primary : .secondary)
-            .frame(minWidth: 15)
+            .font(HubberType.badge)
+            .foregroundStyle(isActive ? HubberDesign.text : HubberDesign.text2)
+            .frame(minWidth: 16)
             .padding(.horizontal, 5)
-            .padding(.vertical, 1)
+            .lineLimit(1)
             .background(
-                HubberAppearance.badgeFill(isActive: isActive, for: colorScheme),
-                in: Capsule()
+                isActive
+                    ? .white.opacity(0.16)
+                    : .black.opacity(0.06),
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
-            .overlay {
-                Capsule().stroke(HubberAppearance.hairline(for: colorScheme), lineWidth: 0.5)
-            }
     }
 }
 
