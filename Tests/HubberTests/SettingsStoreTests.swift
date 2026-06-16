@@ -340,4 +340,69 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.isLocked(ManagedKey.sloEnabled))
         XCTAssertFalse(store.isLocked(ManagedKey.notificationsEnabled))
     }
+
+    // MARK: - Task 3: Notification lock propagation
+
+    // When `defaultNotificationEvents` is forced, all per-type notify* keys report locked.
+    func testPerTypeLockedWhenDefaultNotificationEventsForced() {
+        let managed = InMemoryManagedPreferences([
+            ManagedKey.defaultNotificationEvents: ["newReview", "ciFailed"],
+        ])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked("notifyNewReview"))
+        XCTAssertTrue(store.isLocked("notifyReviewApproved"))
+        XCTAssertTrue(store.isLocked("notifyChangesRequested"))
+        XCTAssertTrue(store.isLocked("notifyCIFailed"))
+        XCTAssertTrue(store.isLocked("notifyPRMerged"))
+        // Composite key itself is also locked
+        XCTAssertTrue(store.isLocked(ManagedKey.defaultNotificationEvents))
+    }
+
+    // Values are resolved from the forced composite set.
+    func testEnabledNotificationTypesFromForcedComposite() {
+        let managed = InMemoryManagedPreferences([
+            ManagedKey.defaultNotificationEvents: ["newReview", "ciFailed"],
+        ])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.enabledNotificationTypes, [.newReview, .ciFailed])
+    }
+
+    // When `notificationsEnabled` is forced false, master + all per-type toggles are locked
+    // and enabledNotificationTypes is empty.
+    func testPerTypeLockedWhenNotificationsEnabledForcedFalse() {
+        let managed = InMemoryManagedPreferences([ManagedKey.notificationsEnabled: false])
+        let store = makeStore(managed: managed)
+        // Master toggle is locked
+        XCTAssertTrue(store.isLocked(ManagedKey.notificationsEnabled))
+        // Per-type toggles also report locked
+        XCTAssertTrue(store.isLocked("notifyNewReview"))
+        XCTAssertTrue(store.isLocked("notifyReviewApproved"))
+        XCTAssertTrue(store.isLocked("notifyChangesRequested"))
+        XCTAssertTrue(store.isLocked("notifyCIFailed"))
+        XCTAssertTrue(store.isLocked("notifyPRMerged"))
+        // enabledNotificationTypes empty because notificationsEnabled == false
+        XCTAssertTrue(store.enabledNotificationTypes.isEmpty)
+    }
+
+    // When notificationsEnabled is forced true, per-type values still resolve from composite.
+    func testPerTypeLockedWhenNotificationsEnabledForcedTrueWithComposite() {
+        let managed = InMemoryManagedPreferences([
+            ManagedKey.notificationsEnabled: true,
+            ManagedKey.defaultNotificationEvents: ["reviewApproved"],
+        ])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked("notifyNewReview"))
+        XCTAssertTrue(store.isLocked("notifyReviewApproved"))
+        XCTAssertEqual(store.enabledNotificationTypes, [.reviewApproved])
+    }
+
+    // When neither master nor composite is forced, per-type keys are not locked.
+    func testPerTypeNotLockedWhenNothingForced() {
+        let store = makeStore(managed: InMemoryManagedPreferences())
+        XCTAssertFalse(store.isLocked("notifyNewReview"))
+        XCTAssertFalse(store.isLocked("notifyReviewApproved"))
+        XCTAssertFalse(store.isLocked("notifyChangesRequested"))
+        XCTAssertFalse(store.isLocked("notifyCIFailed"))
+        XCTAssertFalse(store.isLocked("notifyPRMerged"))
+    }
 }

@@ -126,10 +126,33 @@ final class SettingsStore: ObservableObject {
     ///
     /// Pass either the UserDefaults persistence key (e.g. "reviewSLOEnabled") or the
     /// managed key (e.g. "sloEnabled") — both map to the same lock check.
+    ///
+    /// Per-type notification toggles (`notifyNewReview`, `notifyReviewApproved`, etc.) also
+    /// report locked when `defaultNotificationEvents` or `notificationsEnabled` is forced,
+    /// because either composite forces the entire notification configuration.
     func isLocked(_ key: String) -> Bool {
         // "reviewSLOEnabled" is the UserDefaults persistence key for the "sloEnabled" managed key.
         let managedKey = (key == "reviewSLOEnabled") ? ManagedKey.sloEnabled : key
+
+        // Per-type notification keys propagate the composite lock.
+        if Self.isPerTypeNotificationKey(managedKey) {
+            return managed.isForced(managedKey)
+                || managed.isForced(ManagedKey.defaultNotificationEvents)
+                || managed.isForced(ManagedKey.notificationsEnabled)
+        }
+
         return managed.isForced(managedKey)
+    }
+
+    /// Returns true when the key is a per-type notification UserDefaults key.
+    private static func isPerTypeNotificationKey(_ key: String) -> Bool {
+        switch key {
+        case "notifyNewReview", "notifyReviewApproved", "notifyChangesRequested",
+             "notifyCIFailed", "notifyPRMerged":
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - Per-repo SLO override (backlog)
