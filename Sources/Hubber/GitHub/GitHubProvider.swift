@@ -217,13 +217,19 @@ final class GitHubProvider: CodeHostProvider {
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        // GitHub GraphQL contract: a response may contain partial `data` together with `errors[]`
+        // (e.g. FORBIDDEN on fields the token can't access). Return data when present; parsers
+        // degrade gracefully on null fields (-> "No checks", 0 threads, etc.). Only throw when
+        // there is no usable data dict at all.
+        if let payload = json["data"] as? [String: Any] {
+            return payload
+        }
         if
             let errors = json["errors"] as? [[String: Any]],
             let message = errors.first?["message"] as? String {
             throw GitHubAuthError.github(message)
         }
-        guard let payload = json["data"] as? [String: Any] else { throw GitHubAuthError.invalidResponse }
-        return payload
+        throw GitHubAuthError.invalidResponse
     }
 
     // MARK: - Queries
