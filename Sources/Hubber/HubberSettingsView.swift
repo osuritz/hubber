@@ -142,6 +142,13 @@ struct SettingsView: View {
                 }
             }
 
+            // Notifications
+            SettingsSection(title: "Notifications") {
+                SettingsGroup {
+                    NotificationsSettingsView(store: store, settings: settings)
+                }
+            }
+
             // Developer (debug chip per settings.jsx)
             SettingsSection(title: "Developer", isLast: true, isDebug: true) {
                 DeveloperPanelView(store: store)

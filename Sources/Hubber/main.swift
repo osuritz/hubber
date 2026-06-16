@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import MetricKit
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -330,6 +331,34 @@ extension AppDelegate: NSWindowDelegate {
     }
 }
 
+// MARK: - Notification tap handling
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// Called when the user taps a notification while the app is in the foreground.
+    nonisolated func userNotificationCenter(
+        _: UNUserNotificationCenter,
+        willPresent _: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    /// Called when the user taps a notification to open the PR.
+    nonisolated func userNotificationCenter(
+        _: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let urlString = userInfo["prURL"] as? String, let url = URL(string: urlString) {
+            Task { @MainActor in
+                NSWorkspace.shared.open(url)
+            }
+        }
+        completionHandler()
+    }
+}
+
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(signOut(_:)) {
@@ -347,4 +376,9 @@ extension AppDelegate: NSMenuItemValidation {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
+
+// Register the UNUserNotificationCenter delegate for tap-to-open.
+// AppDelegate adopts UNUserNotificationCenterDelegate below.
+UNUserNotificationCenter.current().delegate = delegate
+
 app.run()

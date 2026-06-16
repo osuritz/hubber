@@ -274,19 +274,21 @@ final class GitHubAuthService: Sendable {
 
 @MainActor
 final class HubberStore: ObservableObject {
-    @Published private(set) var authState: HubberAuthState = .restoring
+    @Published var authState: HubberAuthState = .restoring
     @Published private(set) var viewerName: String?
     @Published private(set) var viewerAvatarURL: URL?
-    @Published private(set) var data = HubberData.sample
+    @Published var data = HubberData.sample
     @Published private(set) var isRefreshingPullRequests = false
     @Published private(set) var lastPullRequestRefresh: Date?
-    @Published private(set) var pullRequestRefreshError: String?
+    @Published var pullRequestRefreshError: String?
     /// Per-tab fetch errors. Nil when the last fetch for that tab succeeded.
-    @Published private(set) var incomingError: String?
-    @Published private(set) var outgoingError: String?
-    @Published private(set) var draftsError: String?
+    @Published var incomingError: String?
+    @Published var outgoingError: String?
+    @Published var draftsError: String?
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published private(set) var isPopoverOpen = false
+    /// True when the user has denied notification authorization.
+    @Published internal(set) var notificationsDenied = false
 
     var rateLimitMessage: String? {
         guard let until = rateLimitedUntil, until > Date() else { return nil }
@@ -297,11 +299,18 @@ final class HubberStore: ObservableObject {
     let telemetry: Telemetry // exposed so views can emit events
 
     private let authService: GitHubAuthService
-    private let provider: any CodeHostProvider
+    let provider: any CodeHostProvider
     private let tokenStore: any GitHubTokenStoring
     private let scheduler: RefreshScheduler
     private var authTask: Task<Void, Never>?
-    @Published private var rateLimitedUntil: Date?
+    @Published var rateLimitedUntil: Date?
+
+    // MARK: - Notification pipeline
+
+    let notificationCoordinator: NotificationCoordinator
+    let snapshotStore: SnapshotStore
+    /// Persisted baseline; nil on first run (initial load must not fire).
+    var notificationBaseline: ReviewSnapshot?
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
@@ -309,14 +318,19 @@ final class HubberStore: ObservableObject {
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
         settings: SettingsStore = SettingsStore(),
         idle: any MachineIdleProviding = SystemIdleProvider(),
-        telemetry: Telemetry = Telemetry(sink: TelemetryDeckSink())
+        telemetry: Telemetry = Telemetry(sink: TelemetryDeckSink()),
+        dispatcher: any NotificationDispatching = UNNotificationDispatcher(),
+        snapshotStore: SnapshotStore = SnapshotStore()
     ) {
         self.authService = authService
         self.provider = provider
         self.tokenStore = tokenStore
         self.settings = settings
         self.telemetry = telemetry
+        self.snapshotStore = snapshotStore
+        notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
         scheduler = RefreshScheduler(idle: idle)
+        notificationBaseline = snapshotStore.load()
         restoreSession()
     }
 
@@ -555,7 +569,7 @@ final class HubberStore: ObservableObject {
         startPullRequestRefreshLoop()
     }
 
-    private func stopPullRequestRefreshLoop() {
+    func stopPullRequestRefreshLoop() {
         scheduler.stop()
         isRefreshingPullRequests = false
     }
@@ -588,13 +602,14 @@ final class HubberStore: ObservableObject {
         }
 
         appendDeveloperLog("Refreshing all tabs for @\(login)")
-        let didStop = await fetchAllTabsIndependently(token: token, login: login)
+        let (didStop, tabSuccesses) = await fetchAllTabsIndependently(token: token, login: login)
         if !didStop {
             lastPullRequestRefresh = Date()
             pullRequestRefreshError = nil
             rateLimitedUntil = nil
             let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
             appendDeveloperLog("Fetched \(counts)")
+            await dispatchNotifications(tabSuccesses: tabSuccesses)
         }
     }
 
@@ -611,7 +626,7 @@ final class HubberStore: ObservableObject {
         return token
     }
 
-    private var signedInLogin: String? {
+    var signedInLogin: String? {
         if case let .signedIn(login) = authState {
             return login
         }
@@ -645,7 +660,7 @@ final class HubberStore: ObservableObject {
             .joined(separator: "\n")
     }
 
-    private func appendDeveloperLog(_ message: String) {
+    func appendDeveloperLog(_ message: String) {
         developerLog.insert(DeveloperLogEntry(timestamp: Date(), message: message), at: 0)
         if developerLog.count > 80 {
             developerLog.removeLast(developerLog.count - 80)
@@ -680,119 +695,10 @@ final class HubberStore: ObservableObject {
         }.value
     }
 
-    private func deleteStoredToken() async throws {
+    func deleteStoredToken() async throws {
         let tokenStore = tokenStore
         try await Task.detached(priority: .utility) {
             try tokenStore.delete()
         }.value
-    }
-}
-
-// MARK: - Per-tab independent refresh helpers
-
-@MainActor
-extension HubberStore {
-    /// Fans out three concurrent tab fetches; commits successful data before any global error handling.
-    func fetchAllTabsIndependently(token: GitHubStoredToken, login: String) async -> Bool {
-        let incomingResult = await fetchIncoming(token: token, login: login)
-        let outgoingResult = await fetchOutgoing(token: token, login: login)
-        let draftsResult = await fetchDrafts(token: token)
-        let errs = [incomingResult.failureError, outgoingResult.failureError, draftsResult.failureError]
-        if errs.compactMap(\.self).contains(where: { $0 is CancellationError }) {
-            appendDeveloperLog("Pull request refresh cancelled")
-            return true
-        }
-        let (newIncoming, incomingGlobal) = resolveTab(
-            incomingResult, existing: data.incoming, tab: .incoming, label: "Incoming"
-        )
-        let (newOutgoing, outgoingGlobal) = resolveTab(
-            outgoingResult, existing: data.outgoing, tab: .outgoing, label: "Outgoing"
-        )
-        let (newDrafts, draftsGlobal) = resolveTab(
-            draftsResult, existing: data.drafts, tab: .drafts, label: "Drafts"
-        )
-        data = HubberData(incoming: newIncoming, outgoing: newOutgoing, drafts: newDrafts)
-        if let globalError = incomingGlobal ?? outgoingGlobal ?? draftsGlobal {
-            await handleRefreshError(globalError, settingGlobalError: false)
-            return true
-        }
-        return false
-    }
-
-    private func fetchIncoming(token: GitHubStoredToken, login: String) async -> Result<[IncomingReview], Error> {
-        await catchingResult {
-            try await self.provider.fetchIncomingReviews(
-                accessToken: token.accessToken, viewerLogin: login, mode: self.settings.incomingMode
-            )
-        }
-    }
-
-    private func fetchOutgoing(token: GitHubStoredToken, login: String) async -> Result<[OutgoingReview], Error> {
-        await catchingResult {
-            try await self.provider.fetchOutgoingPullRequests(
-                accessToken: token.accessToken, viewerLogin: login, unresolvedMode: self.settings.unresolvedMode
-            )
-        }
-    }
-
-    private func fetchDrafts(token: GitHubStoredToken) async -> Result<[DraftReview], Error> {
-        await catchingResult {
-            try await self.provider.fetchDraftPullRequests(accessToken: token.accessToken, limit: 100)
-        }
-    }
-
-    private func resolveTab<T>(_ result: Result<T, Error>, existing: T, tab: WorkTab, label: String) -> (T, Error?) {
-        switch result {
-        case let .success(value):
-            setTabError(nil, for: tab)
-            return (value, nil)
-        case let .failure(error):
-            if isGlobalError(error) { return (existing, error) }
-            setTabError(error.localizedDescription, for: tab)
-            appendDeveloperLog("\(label) tab refresh failed: \(error.localizedDescription)")
-            return (existing, nil)
-        }
-    }
-
-    private func isGlobalError(_ error: Error) -> Bool {
-        if case GitHubAuthError.rateLimited = error { return true }
-        return Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) != nil
-    }
-
-    func setTabError(_ message: String?, for tab: WorkTab) {
-        switch tab {
-        case .incoming: incomingError = message
-        case .outgoing: outgoingError = message
-        case .drafts: draftsError = message
-        }
-    }
-
-    /// Handles rate-limit and credential errors; returns `true` for global errors.
-    @discardableResult
-    func handleRefreshError(_ error: Error, settingGlobalError: Bool = true) async -> Bool {
-        if case let GitHubAuthError.rateLimited(retryAfter) = error {
-            let delay = retryAfter ?? (15 * 60)
-            rateLimitedUntil = Date().addingTimeInterval(delay)
-            let minutes = Int((delay / 60).rounded(.up))
-            appendDeveloperLog("GitHub rate limited, backing off for \(minutes)m")
-            return true
-        }
-        guard let newState = Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) else {
-            if settingGlobalError {
-                pullRequestRefreshError = error.localizedDescription
-                appendDeveloperLog("Refresh failed: \(error.localizedDescription)")
-            }
-            return false
-        }
-        authState = newState
-        if case .sessionExpired = newState {
-            appendDeveloperLog("Refresh failed: session expired, showing re-auth prompt")
-            stopPullRequestRefreshLoop()
-        } else if case .signedOut = newState {
-            try? await deleteStoredToken()
-            appendDeveloperLog("Refresh failed: invalid credentials")
-            stopPullRequestRefreshLoop()
-        }
-        return true
     }
 }
