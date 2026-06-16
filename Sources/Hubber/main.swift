@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusMenu = NSMenu()
     private let store = HubberStore()
     private var appActivationObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
     private var eventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -59,7 +60,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             Task { @MainActor in
-                self?.panel.close()
+                self?.closePanel()
+            }
+        }
+
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.store.refreshPullRequests()
             }
         }
     }
@@ -102,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func togglePanel(_ sender: NSStatusBarButton) {
         if NSApp.currentEvent?.type == .rightMouseUp || NSApp.currentEvent?.type == .rightMouseDown {
-            panel.close()
+            closePanel()
             statusMenu.popUp(
                 positioning: nil,
                 at: NSPoint(x: 0, y: sender.bounds.height + 4),
@@ -112,11 +123,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if panel.isVisible {
-            panel.close()
+            closePanel()
         } else {
             panel.setFrameOrigin(panelOrigin(relativeTo: sender))
             panel.orderFrontRegardless()
+            store.setPopoverOpen(true)
         }
+    }
+
+    private func closePanel() {
+        panel.close()
+        store.setPopoverOpen(false)
     }
 
     private func closePanelForOutsideClick() {
@@ -124,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if panel.frame.contains(clickLocation) || statusButtonFrame()?.contains(clickLocation) == true {
             return
         }
-        panel.close()
+        closePanel()
     }
 
     private func panelOrigin(relativeTo sender: NSStatusBarButton) -> NSPoint {
@@ -161,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func signOut(_ sender: Any?) {
-        panel.close()
+        closePanel()
         store.signOut()
     }
 
