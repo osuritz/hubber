@@ -48,6 +48,7 @@ enum GitHubAuthError: LocalizedError, Equatable {
     case missingRefreshToken
     case keychain(OSStatus)
     case github(String)
+    case rateLimited(retryAfter: TimeInterval?)
 
     var errorDescription: String? {
         switch self {
@@ -67,6 +68,10 @@ enum GitHubAuthError: LocalizedError, Equatable {
             "Keychain returned status \(status)."
         case let .github(message):
             message
+        case let .rateLimited(retryAfter):
+            retryAfter.map { seconds in
+                "GitHub rate limit reached. Retry in \(Int((seconds / 60).rounded(.up)))m."
+            } ?? "GitHub rate limit reached."
         }
     }
 }

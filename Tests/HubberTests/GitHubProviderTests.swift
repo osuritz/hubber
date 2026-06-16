@@ -95,9 +95,13 @@ final class GitHubProviderTests: XCTestCase {
         return URLSession(configuration: config)
     }
 
-    private static func response(for request: URLRequest, statusCode: Int = 200) throws -> HTTPURLResponse {
+    private static func response(
+        for request: URLRequest,
+        statusCode: Int = 200,
+        headerFields: [String: String]? = nil
+    ) throws -> HTTPURLResponse {
         guard let url = request.url else { throw URLError(.badURL) }
-        guard let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)
+        guard let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)
         else { throw URLError(.badServerResponse) }
         return response
     }
@@ -358,4 +362,65 @@ final class GitHubProviderTests: XCTestCase {
       }
     }
     """.utf8)
+
+    // MARK: - Rate-limit detection
+
+    func testGraphQL429ThrowsRateLimitedWithRetryAfter() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request, statusCode: 429, headerFields: ["Retry-After": "30"]), Data())
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let GitHubAuthError.rateLimited(retryAfter) {
+            XCTAssertEqual(retryAfter, 30)
+        }
+    }
+
+    func testGraphQL403WithRateLimitRemainingZeroThrowsRateLimited() async throws {
+        MockURLProtocol.handler = { request in
+            try (
+                Self.response(
+                    for: request,
+                    statusCode: 403,
+                    headerFields: ["x-ratelimit-remaining": "0", "Retry-After": "60"]
+                ),
+                Data()
+            )
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let GitHubAuthError.rateLimited(retryAfter) {
+            XCTAssertEqual(retryAfter, 60)
+        }
+    }
+
+    func testGraphQL403WithoutRateLimitHeaderThrowsGitHub() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request, statusCode: 403), Data())
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected github error")
+        } catch GitHubAuthError.github {
+            // expected
+        }
+    }
+
+    func testGraphQL429WithoutRetryAfterHasNilRetryAfter() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request, statusCode: 429), Data())
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let GitHubAuthError.rateLimited(retryAfter) {
+            XCTAssertNil(retryAfter)
+        }
+    }
 }
