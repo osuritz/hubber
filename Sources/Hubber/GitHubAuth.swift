@@ -348,6 +348,16 @@ final class HubberStore: ObservableObject {
         return false
     }
 
+    /// True while the GitHub device-flow sign-in is awaiting user authorization.
+    /// The menu panel stays pinned open in this state so the user can read/copy the
+    /// device code and switch to the browser without the panel closing on them.
+    var isAuthenticating: Bool {
+        if case .waitingForUser = authState {
+            return true
+        }
+        return false
+    }
+
     func restoreSession() {
         appendDeveloperLog("Restoring saved GitHub session")
         appendDeveloperLog("Token storage: \(tokenStoreDescription)")
@@ -428,7 +438,6 @@ final class HubberStore: ObservableObject {
                 let deviceAuthorization = try await authService.startDeviceFlow()
                 authState = .waitingForUser(deviceAuthorization)
                 appendDeveloperLog("Waiting for GitHub device authorization")
-                NSWorkspace.shared.open(deviceAuthorization.verificationURI)
 
                 var token = try await authService.pollForToken(deviceAuthorization: deviceAuthorization)
                 let user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
