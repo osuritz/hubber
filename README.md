@@ -4,6 +4,28 @@ Hubber is a macOS menu-bar prototype for keeping GitHub review work visible at a
 
 It is currently a prototype with mock incoming/outgoing data and a live draft PR proof of concept. The app is focused on validating a native macOS popover experience for three GitHub work streams: incoming reviews, outgoing pull requests, and draft pull requests.
 
+## Install
+
+### Download (DMG or zip)
+
+1. Go to the [latest release](https://github.com/osuritz/hubber/releases/latest) and download `Hubber.dmg` or `Hubber.zip`.
+2. Open the DMG and drag **Hubber** to your **Applications** folder (or unzip and move `Hubber.app` to `/Applications`).
+3. **First launch: right-click → Open** (or go to **System Settings → Privacy & Security → "Open Anyway"**).
+   Hubber is ad-hoc-signed but not notarized, so macOS Gatekeeper will warn on the first browser-downloaded launch.
+4. When Hubber asks for notification permission, click **Allow** so review banners can appear.
+
+### One-liner installer (no Gatekeeper warning)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | bash
+```
+
+The installer downloads the release zip via `curl` (which bypasses Gatekeeper quarantine), strips the quarantine attribute, installs to `/Applications`, and opens the app automatically.
+
+> **Note:** Hubber is ad-hoc-signed, not notarized. Notarization (for a fully seamless download experience) requires a paid Apple Developer account and is planned for a future milestone.
+
+---
+
 ## Status
 
 Prototype. Hubber runs as a Swift Package Manager executable and is not packaged as a signed `.app` bundle yet.

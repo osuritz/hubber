@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: ['**']
+
+# Cancel superseded runs on the same ref. macOS minutes bill at 10x.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # macos-26 ships Xcode 26 / Swift 6.3, which this project requires.
+    # macos-latest currently pins Swift 6.1 and rejects valid 6.3-only code.
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      - name: SwiftLint
+        run: |
+          brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
+          make lint
+
+      - name: SwiftFormat (lint mode)
+        run: |
+          brew list swiftformat >/dev/null 2>&1 || brew install swiftformat
+          swiftformat --lint Sources/ Tests/
