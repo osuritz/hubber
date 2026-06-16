@@ -302,7 +302,7 @@ final class HubberStore: ObservableObject {
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published private(set) var isPopoverOpen = false
     /// True when the user has denied notification authorization.
-    @Published internal(set) var notificationsDenied = false
+    @Published var notificationsDenied = false
 
     var rateLimitMessage: String? {
         guard let until = rateLimitedUntil, until > Date() else { return nil }
@@ -453,7 +453,7 @@ final class HubberStore: ObservableObject {
             } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
                 await handleRestoreCredentialError(cachedLogin: cachedLogin)
             } catch {
-                await handleRestoreGenericError(error, cachedLogin: cachedLogin)
+                handleRestoreGenericError(error, cachedLogin: cachedLogin)
             }
         }
     }

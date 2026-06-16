@@ -76,12 +76,24 @@ struct GitHubAuthSettingsView: View {
                 } label: {
                     Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
                 }
+                .disabled(isRestricted)
+                .opacity(isRestricted ? 0.45 : 1)
 
                 Button("Sign out") {
                     store.signOut()
                 }
             }
             .controlSize(.small)
+
+            if isRestricted {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .regular))
+                    Text("Sign-in is restricted by your organization.")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(HubberDesign.text2)
+            }
         }
     }
 
@@ -200,12 +212,24 @@ struct GitHubAuthSettingsView: View {
                 Button("Try again") {
                     store.startSignIn()
                 }
+                .disabled(isRestricted)
+                .opacity(isRestricted ? 0.45 : 1)
 
                 Button("Clear") {
                     store.signOut()
                 }
             }
             .controlSize(.small)
+
+            if isRestricted {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .regular))
+                    Text("Sign-in is restricted by your organization.")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(HubberDesign.text2)
+            }
         }
     }
 }

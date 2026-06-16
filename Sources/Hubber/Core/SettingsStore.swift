@@ -311,8 +311,11 @@ final class SettingsStore: ObservableObject {
         managed: any ManagedPreferences,
         fallback: Bool
     ) -> Bool {
-        if managed.isForced(managedKey), let v = managed.value(managedKey) as? Bool {
-            return v
+        if managed.isForced(managedKey) {
+            // Bool-typed plist value (most MDM platforms)
+            if let v = managed.value(managedKey) as? Bool { return v }
+            // Integer-encoded boolean: some MDM platforms write <integer>0</integer> / <integer>1</integer>
+            if let v = managed.value(managedKey) as? Int { return v != 0 }
         }
         guard defaults.object(forKey: defaultsKey) != nil else { return fallback }
         return defaults.bool(forKey: defaultsKey)
