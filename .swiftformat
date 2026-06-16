@@ -22,7 +22,7 @@
 --wraparguments before-first
 --wrapparameters before-first
 --wrapcollections before-first
---wrapreturntype if-multiline
+--wrapreturntype preserve
 --maxwidth 150
 --wrapconditions before-first
 --wrapternary default
@@ -46,4 +46,4 @@
 --fractiongrouping disabled
 
 # Disabled rules (too opinionated or conflict with SwiftLint)
---disable blankLinesAtStartOfScope,blankLinesAtEndOfScope
+--disable blankLinesAtStartOfScope,blankLinesAtEndOfScope,wrapMultilineStatementBraces
