@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import MetricKit
 import SwiftUI
 
 @MainActor
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let statusMenu = NSMenu()
     private let store = HubberStore()
+    private let metricSubscriber = MetricSubscriber()
     private var appActivationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var eventMonitor: Any?
@@ -26,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         TelemetryDeckSink.initialize()
+        MXMetricManager.shared.add(metricSubscriber)
         NSApp.setActivationPolicy(.accessory)
 
         let contentView = HubberPopoverView(store: store)
@@ -295,6 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
+        MXMetricManager.shared.remove(metricSubscriber)
         if let appActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
         }
