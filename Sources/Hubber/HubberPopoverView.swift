@@ -107,65 +107,104 @@ struct HubberPopoverView: View {
         } else {
             switch selectedTab {
             case .incoming:
-                if let error = store.pullRequestRefreshError, store.data.incoming.isEmpty {
-                    EmptyStateRow(text: "Refresh failed: \(error)")
-                } else if store.isRefreshingPullRequests, store.data.incoming.isEmpty {
-                    EmptyStateRow(text: "Loading reviews…")
-                } else if store.data.incoming.isEmpty, store.lastPullRequestRefresh != nil {
-                    AllClearRow()
-                } else if store.data.incoming.isEmpty, store.lastPullRequestRefresh == nil {
-                    EmptyStateRow(text: "Loading reviews…")
-                } else {
-                    let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
-                    ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
-                        ClickableRow(url: review.url) {
-                            IncomingReviewRow(
-                                review: review,
-                                isSLOEnabled: store.settings.sloEnabled,
-                                sloHours: store.settings.sloHours(for: review.repo),
-                                sloDisplay: store.settings.sloDisplay,
-                                density: store.settings.rowDensity,
-                                isLast: index == sorted.count - 1
-                            )
-                        }
-                    }
-                }
+                incomingContent
             case .outgoing:
-                if let error = store.pullRequestRefreshError, store.data.outgoing.isEmpty {
-                    EmptyStateRow(text: "Refresh failed: \(error)")
-                } else if store.isRefreshingPullRequests, store.data.outgoing.isEmpty {
-                    EmptyStateRow(text: "Loading pull requests…")
-                } else if store.data.outgoing.isEmpty, store.lastPullRequestRefresh != nil {
-                    EmptyStateRow(text: "No open pull requests.")
-                } else if store.data.outgoing.isEmpty, store.lastPullRequestRefresh == nil {
-                    EmptyStateRow(text: "Loading pull requests…")
-                } else {
-                    ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
-                        ClickableRow(url: review.url) {
-                            OutgoingReviewRow(
-                                review: review,
-                                density: store.settings.rowDensity,
-                                isLast: index == store.data.outgoing.count - 1
-                            )
-                        }
-                    }
-                }
+                outgoingContent
             case .drafts:
-                if store.data.drafts.isEmpty {
-                    EmptyStateRow(text: draftEmptyText)
-                } else {
-                    ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
-                        ClickableRow(url: draft.url) {
-                            DraftPRRow(
-                                draft: draft,
-                                density: store.settings.rowDensity,
-                                isLast: index == store.data.drafts.count - 1
-                            )
-                        }
-                    }
+                draftsContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var incomingContent: some View {
+        if store.isRefreshingPullRequests, store.data.incoming.isEmpty {
+            LoadingState()
+        } else if let error = store.pullRequestRefreshError, store.data.incoming.isEmpty {
+            ErrorState(
+                message: "Couldn't load reviews",
+                lastUpdated: lastUpdatedText,
+                onRetry: { store.refreshPullRequests() }
+            )
+        } else if store.data.incoming.isEmpty {
+            AllClearState()
+        } else {
+            if let error = store.pullRequestRefreshError {
+                ErrorState(
+                    message: "Couldn't load reviews",
+                    lastUpdated: "Last refresh failed: \(error)"
+                )
+            }
+            let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
+            ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
+                ClickableRow(url: review.url) {
+                    IncomingReviewRow(
+                        review: review,
+                        isSLOEnabled: store.settings.sloEnabled,
+                        sloHours: store.settings.sloHours(for: review.repo),
+                        sloDisplay: store.settings.sloDisplay,
+                        density: store.settings.rowDensity,
+                        isLast: index == sorted.count - 1
+                    )
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var outgoingContent: some View {
+        if store.isRefreshingPullRequests, store.data.outgoing.isEmpty {
+            LoadingState()
+        } else if let error = store.pullRequestRefreshError, store.data.outgoing.isEmpty {
+            ErrorState(
+                message: "Couldn't load outgoing PRs",
+                lastUpdated: lastUpdatedText,
+                onRetry: { store.refreshPullRequests() }
+            )
+        } else if store.data.outgoing.isEmpty {
+            EmptyOutgoingState()
+        } else {
+            ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
+                ClickableRow(url: review.url) {
+                    OutgoingReviewRow(
+                        review: review,
+                        density: store.settings.rowDensity,
+                        isLast: index == store.data.outgoing.count - 1
+                    )
+                }
+            }
+        }
+    }
+
+    /// Drafts tab — #19: add error, loading, and empty states (matching Incoming/Outgoing).
+    @ViewBuilder
+    private var draftsContent: some View {
+        if store.isRefreshingPullRequests, store.data.drafts.isEmpty {
+            LoadingState()
+        } else if let error = store.pullRequestRefreshError, store.data.drafts.isEmpty {
+            ErrorState(
+                message: "Couldn't load drafts",
+                lastUpdated: lastUpdatedText,
+                onRetry: { store.refreshPullRequests() }
+            )
+        } else if store.data.drafts.isEmpty {
+            EmptyDraftsState()
+        } else {
+            ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
+                ClickableRow(url: draft.url) {
+                    DraftPRRow(
+                        draft: draft,
+                        density: store.settings.rowDensity,
+                        isLast: index == store.data.drafts.count - 1
+                    )
+                }
+            }
+        }
+    }
+
+    private var lastUpdatedText: String? {
+        guard let last = store.lastPullRequestRefresh else { return nil }
+        return "Updated \(elapsedText(hours: Date().timeIntervalSince(last) / 3600))"
     }
 
     private var footer: some View {
@@ -212,15 +251,6 @@ struct HubberPopoverView: View {
         return store.canRefreshPullRequests ? "Not refreshed yet" : "Mock data"
     }
 
-    private var draftEmptyText: String {
-        if let error = store.pullRequestRefreshError {
-            return "Refresh failed: \(error)"
-        }
-        if store.isRefreshingPullRequests {
-            return "Refreshing draft pull requests"
-        }
-        return store.canRefreshPullRequests ? "No accessible draft pull requests" : "No draft pull requests"
-    }
 }
 
 private struct ClickableRow<Content: View>: View {
@@ -314,43 +344,6 @@ private struct CountBadge: View {
     }
 }
 
-private struct EmptyStateRow: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity, minHeight: 70)
-    }
-}
-
-private struct AllClearRow: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(Color.hubberSuccess.opacity(0.15))
-                    .frame(width: 48, height: 48)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(Color.hubberSuccess)
-            }
-            Text("All clear")
-                .font(.system(size: 14, weight: .semibold))
-            Text("No reviews waiting on you. Enjoy the deep work.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 40)
-    }
-}
-
 // SettingsView and SettingsSection are in HubberSettingsView.swift
 // Row components (IncomingReviewRow, OutgoingReviewRow, DraftPRRow, etc.) are in HubberRows.swift
+// List states (AllClearState, ErrorState, LoadingState, etc.) are in HubberListStates.swift
