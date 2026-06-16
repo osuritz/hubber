@@ -7,7 +7,8 @@ final class AttentionStateTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeSettings(sloEnabled: Bool = true, sloHours: Double = 4.0) -> SettingsStore {
-        let defaults = UserDefaults(suiteName: "AttentionStateTests.\(UUID())")!
+        let suiteName = "AttentionStateTests.\(UUID())"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
         let store = SettingsStore(defaults: defaults)
         store.sloEnabled = sloEnabled
         store.sloHours = sloHours

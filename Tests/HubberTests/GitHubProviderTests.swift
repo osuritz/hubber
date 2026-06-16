@@ -101,8 +101,10 @@ final class GitHubProviderTests: XCTestCase {
         headerFields: [String: String]? = nil
     ) throws -> HTTPURLResponse {
         guard let url = request.url else { throw URLError(.badURL) }
-        guard let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)
-        else { throw URLError(.badServerResponse) }
+        guard
+            let response = HTTPURLResponse(
+                url: url, statusCode: statusCode, httpVersion: nil, headerFields: headerFields
+            ) else { throw URLError(.badServerResponse) }
         return response
     }
 
