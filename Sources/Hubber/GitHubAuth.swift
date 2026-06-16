@@ -48,6 +48,7 @@ enum GitHubAuthError: LocalizedError, Equatable {
     case missingRefreshToken
     case keychain(OSStatus)
     case github(String)
+    case rateLimited(retryAfter: TimeInterval?)
 
     var errorDescription: String? {
         switch self {
@@ -67,6 +68,10 @@ enum GitHubAuthError: LocalizedError, Equatable {
             "Keychain returned status \(status)."
         case let .github(message):
             message
+        case let .rateLimited(retryAfter):
+            retryAfter.map { seconds in
+                "GitHub rate limit reached. Retry in \(Int((seconds / 60).rounded(.up)))m."
+            } ?? "GitHub rate limit reached."
         }
     }
 }
@@ -345,26 +350,39 @@ final class HubberStore: ObservableObject {
     @Published private(set) var lastPullRequestRefresh: Date?
     @Published private(set) var pullRequestRefreshError: String?
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
+    @Published private(set) var isPopoverOpen = false
+
+    var rateLimitMessage: String? {
+        guard let until = rateLimitedUntil, until > Date() else { return nil }
+        return ReviewSLOPresentation.rateLimitFooter(secondsRemaining: until.timeIntervalSinceNow)
+    }
 
     let settings: SettingsStore // exposed so views can bind
 
     private let authService: GitHubAuthService
     private let provider: any CodeHostProvider
     private let tokenStore: any GitHubTokenStoring
+    private let scheduler: RefreshScheduler
     private var authTask: Task<Void, Never>?
-    private var pullRequestRefreshTask: Task<Void, Never>?
+    @Published private var rateLimitedUntil: Date?
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
         provider: any CodeHostProvider = CachingCodeHostProvider(wrapping: GitHubProvider()),
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
-        settings: SettingsStore = SettingsStore()
+        settings: SettingsStore = SettingsStore(),
+        idle: any MachineIdleProviding = SystemIdleProvider()
     ) {
         self.authService = authService
         self.provider = provider
         self.tokenStore = tokenStore
         self.settings = settings
+        scheduler = RefreshScheduler(idle: idle)
         restoreSession()
+    }
+
+    func setPopoverOpen(_ open: Bool) {
+        isPopoverOpen = open
     }
 
     var usernameDisplay: String {
@@ -540,9 +558,7 @@ final class HubberStore: ObservableObject {
         }
 
         appendDeveloperLog("Manual pull request refresh requested")
-        Task {
-            await refreshPullRequestsFromGitHub()
-        }
+        scheduler.reset()
     }
 
     func clearDeveloperLog() {
@@ -555,19 +571,21 @@ final class HubberStore: ObservableObject {
     }
 
     private func startPullRequestRefreshLoop() {
-        pullRequestRefreshTask?.cancel()
-        pullRequestRefreshTask = Task {
-            await refreshPullRequestsFromGitHub()
-
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(5 * 60))
-                } catch {
-                    break
-                }
-                await refreshPullRequestsFromGitHub()
+        scheduler.start(
+            context: { [weak self] in
+                guard let self else { return RefreshContext() }
+                let isRateLimited = rateLimitedUntil.map { $0 > Date() } ?? false
+                return RefreshContext(
+                    isRateLimited: isRateLimited,
+                    hasUrgentSLO: AttentionState.hasUrgentSLO(data: data, settings: settings),
+                    isPopoverOpen: isPopoverOpen,
+                    isAllGreen: AttentionState.isAllGreen(data: data, settings: settings)
+                )
+            },
+            refresh: { [weak self] in
+                await self?.refreshPullRequestsFromGitHub()
             }
-        }
+        )
     }
 
     private func useCachedLogin(_ login: String) {
@@ -582,13 +600,17 @@ final class HubberStore: ObservableObject {
     }
 
     private func stopPullRequestRefreshLoop() {
-        pullRequestRefreshTask?.cancel()
-        pullRequestRefreshTask = nil
+        scheduler.stop()
         isRefreshingPullRequests = false
     }
 
     private func refreshPullRequestsFromGitHub() async {
         guard canRefreshPullRequests, !isRefreshingPullRequests else { return }
+        guard rateLimitedUntil.map({ $0 > Date() }) != true else {
+            let until = rateLimitedUntil.map { Self.developerLogFormatter.string(from: $0) } ?? "unknown"
+            appendDeveloperLog("Skipped refresh: rate-limited until \(until)")
+            return
+        }
         guard let login = signedInLogin else {
             appendDeveloperLog("Skipped refresh: no signed-in login")
             return
@@ -624,6 +646,7 @@ final class HubberStore: ObservableObject {
 
             lastPullRequestRefresh = Date()
             pullRequestRefreshError = nil
+            rateLimitedUntil = nil
             let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
             appendDeveloperLog("Fetched \(counts)")
         } catch is CancellationError {
@@ -634,6 +657,15 @@ final class HubberStore: ObservableObject {
     }
 
     private func handleRefreshError(_ error: Error) async {
+        // Handle rate limiting: set rateLimitedUntil so next context has isRateLimited=true
+        if case let GitHubAuthError.rateLimited(retryAfter) = error {
+            let delay = retryAfter ?? (15 * 60)
+            rateLimitedUntil = Date().addingTimeInterval(delay)
+            let minutes = Int((delay / 60).rounded(.up))
+            appendDeveloperLog("GitHub rate limited, backing off for \(minutes)m")
+            return
+        }
+
         guard let newState = Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) else {
             pullRequestRefreshError = error.localizedDescription
             appendDeveloperLog("Refresh failed: \(error.localizedDescription)")

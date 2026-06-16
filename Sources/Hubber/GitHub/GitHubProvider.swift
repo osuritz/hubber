@@ -202,6 +202,16 @@ final class GitHubProvider: CodeHostProvider {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw GitHubAuthError.invalidResponse }
         if http.statusCode == 401 { throw GitHubAuthError.badCredentials }
+
+        // Rate-limit detection: 429, or 403 with x-ratelimit-remaining: 0
+        let isRateLimitedByHeader =
+            http.statusCode == 403 &&
+            http.value(forHTTPHeaderField: "x-ratelimit-remaining").flatMap(Int.init) == 0
+        if http.statusCode == 429 || isRateLimitedByHeader {
+            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
+            throw GitHubAuthError.rateLimited(retryAfter: retryAfter)
+        }
+
         guard (200..<300).contains(http.statusCode) else {
             throw GitHubAuthError.github("GitHub returned HTTP \(http.statusCode).")
         }
