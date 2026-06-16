@@ -19,27 +19,22 @@ protocol NotificationDispatching: Sendable {
 /// If the process has no bundle ID (SPM executable mode), UN may be unavailable
 /// and will error gracefully — no crash, no-op.
 final class UNNotificationDispatcher: NotificationDispatching {
-    /// UNUserNotificationCenter is not Sendable in the SDK headers; nonisolated(unsafe)
-    /// is safe here because the center is set once at init and used only via its own
-    /// async methods which are internally concurrency-safe.
-    private nonisolated(unsafe) let center: UNUserNotificationCenter
-
     // Cache the authorization result after the first request.
     // Two booleans avoid Optional<Bool> (lint: discouraged_optional_boolean).
     @MainActor private var authorizationDetermined = false
     @MainActor private var authorizationGranted = false
     @MainActor private(set) var notificationsDenied = false
 
-    init(center: UNUserNotificationCenter = .current()) {
-        self.center = center
-    }
+    init() {}
 
     nonisolated func ensureAuthorized() async -> Bool {
         // Fast path: already determined
         let (determined, granted) = await MainActor.run { (authorizationDetermined, authorizationGranted) }
         if determined { return granted }
 
-        // Slow path: request authorization for the first time
+        // Slow path: request authorization for the first time.
+        // Access center lazily here — avoids crash in SPM/test mode with no bundle.
+        let center = UNUserNotificationCenter.current()
         do {
             let result = try await center.requestAuthorization(options: [.alert, .sound])
             await MainActor.run {
@@ -49,7 +44,7 @@ final class UNNotificationDispatcher: NotificationDispatching {
             }
             return result
         } catch {
-            // UN may throw if there is no bundle ID (SPM executable pre-M4).
+            // UN throws when there is no bundle ID (SPM executable pre-M4).
             await MainActor.run {
                 authorizationDetermined = true
                 authorizationGranted = false
@@ -61,6 +56,7 @@ final class UNNotificationDispatcher: NotificationDispatching {
 
     nonisolated func post(_ content: NotificationContent) async {
         guard await ensureAuthorized() else { return }
+        let center = UNUserNotificationCenter.current()
         let unContent = UNMutableNotificationContent()
         unContent.title = content.title
         unContent.body = content.body
