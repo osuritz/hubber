@@ -211,6 +211,37 @@ final class GitHubProviderTests: XCTestCase {
         XCTAssertEqual(prs[0].unresolved, 2) // 2 open non-outdated threads
     }
 
+    func testFetchOutgoingPullRequestsCountsUnresolvedThreadsForReviewOnlyMode() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.outgoingWithUnresolvedResponse)
+        }
+
+        let prs = try await provider.fetchOutgoingPullRequests(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            unresolvedMode: .reviewOnly
+        )
+
+        // Thread 4 has pullRequestReview: null which MUST NOT count (regression test for NSNull fix).
+        // Thread 1 has a real CHANGES_REQUESTED review and counts. Result: 1.
+        XCTAssertEqual(prs[0].unresolved, 1)
+    }
+
+    func testFetchOutgoingPullRequestsCountsUnresolvedThreadsForChangesRequestedMode() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.outgoingWithUnresolvedResponse)
+        }
+
+        let prs = try await provider.fetchOutgoingPullRequests(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            unresolvedMode: .changesRequested
+        )
+
+        // Only thread 1 has a CHANGES_REQUESTED review. Result: 1.
+        XCTAssertEqual(prs[0].unresolved, 1)
+    }
+
     func testFetchOutgoingPullRequestsFiltersOutDrafts() async throws {
         MockURLProtocol.handler = { request in
             try (Self.response(for: request), Self.outgoingWithDraftResponse)

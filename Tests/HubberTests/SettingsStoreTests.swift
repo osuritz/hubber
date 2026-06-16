@@ -6,15 +6,17 @@ import XCTest
 final class SettingsStoreTests: XCTestCase {
     private var sut: SettingsStore!
     private var defaults: UserDefaults!
+    nonisolated(unsafe) private var suiteName: String!
 
-    override func setUp() {
-        super.setUp()
-        defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID())") ?? .standard
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        suiteName = "SettingsStoreTests-\(UUID())"
+        defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         sut = SettingsStore(defaults: defaults)
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: defaults.description)
+        defaults.removePersistentDomain(forName: suiteName)
         super.tearDown()
     }
 
