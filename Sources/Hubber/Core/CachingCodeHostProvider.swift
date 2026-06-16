@@ -14,7 +14,7 @@ actor CachingCodeHostProvider: CodeHostProvider {
         ttl: TimeInterval = 300,
         now: @Sendable @escaping () -> Date = { Date() }
     ) {
-        self.wrapped = provider
+        wrapped = provider
         self.ttl = ttl
         self.now = now
     }

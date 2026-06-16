@@ -15,7 +15,7 @@ final class TestClock: @unchecked Sendable {
     }
 
     init(now: Date = Date()) {
-        self._now = now
+        _now = now
     }
 }
 
@@ -108,7 +108,7 @@ actor SpyProvider: CodeHostProvider {
 final class CachingCodeHostProviderTests: XCTestCase {
     private let ttl: TimeInterval = 300 // 5 minutes
 
-    // a) Cache hit within TTL: spy called only once
+    /// a) Cache hit within TTL: spy called only once
     func testReturnsCachedResultWithinTTL() async throws {
         let spy = SpyProvider()
         let clock = TestClock(now: Date())
@@ -134,7 +134,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         XCTAssertEqual(first.map(\.id), second.map(\.id), "Both results should be equal")
     }
 
-    // b) After TTL expires, fetches again
+    /// b) After TTL expires, fetches again
     func testRefetchesAfterTTLExpires() async throws {
         let spy = SpyProvider()
         let clock = TestClock(now: Date())
@@ -163,7 +163,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         XCTAssertEqual(callCount, 2, "Spy should be called again after TTL expires")
     }
 
-    // c) Different keys cache independently
+    /// c) Different keys cache independently
     func testDistinctKeysCacheIndependently() async throws {
         let spy = SpyProvider()
         let clock = TestClock(now: Date())
@@ -188,7 +188,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         XCTAssertEqual(callCount, 2, "Different modes produce different cache keys")
     }
 
-    // d) Errors are never cached: second call within TTL should retry
+    /// d) Errors are never cached: second call within TTL should retry
     func testErrorsAreNotCached() async throws {
         let spy = SpyProvider()
         let clock = TestClock(now: Date())
@@ -222,7 +222,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         XCTAssertFalse(result.isEmpty, "Second call should succeed")
     }
 
-    // e) Outgoing cache hit within TTL
+    /// e) Outgoing cache hit within TTL
     func testOutgoingReturnsCachedResultWithinTTL() async throws {
         let spy = SpyProvider()
         let clock = TestClock(now: Date())
@@ -248,7 +248,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         XCTAssertEqual(first.map(\.id), second.map(\.id))
     }
 
-    // e) Drafts cache hit within TTL
+    /// e) Drafts cache hit within TTL
     func testDraftsReturnsCachedResultWithinTTL() async throws {
         let spy = SpyProvider()
         let clock = TestClock(now: Date())
