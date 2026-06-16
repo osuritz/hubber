@@ -606,7 +606,8 @@ final class HubberStore: ObservableObject {
 
             lastPullRequestRefresh = Date()
             pullRequestRefreshError = nil
-            appendDeveloperLog("Fetched \(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts")
+            let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
+            appendDeveloperLog("Fetched \(counts)")
         } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
             try? await deleteStoredToken()
             authState = .signedOut

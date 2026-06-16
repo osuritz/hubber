@@ -9,7 +9,7 @@ final class SettingsStoreTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID())")!
+        defaults = UserDefaults(suiteName: "SettingsStoreTests-\(UUID())") ?? .standard
         sut = SettingsStore(defaults: defaults)
     }
 

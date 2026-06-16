@@ -97,7 +97,9 @@ final class GitHubProviderTests: XCTestCase {
 
     private static func response(for request: URLRequest, statusCode: Int = 200) throws -> HTTPURLResponse {
         guard let url = request.url else { throw URLError(.badURL) }
-        return HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+        guard let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)
+        else { throw URLError(.badServerResponse) }
+        return response
     }
 
     // MARK: - Fixture JSON
@@ -281,10 +283,17 @@ final class GitHubProviderTests: XCTestCase {
               "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] },
               "reviewThreads": {
                 "nodes": [
-                  { "isResolved": false, "isOutdated": false, "comments": { "nodes": [{ "author": { "login": "tobi" }, "pullRequestReview": { "state": "CHANGES_REQUESTED", "author": { "login": "tobi" } } }] } },
-                  { "isResolved": true,  "isOutdated": false, "comments": { "nodes": [] } },
-                  { "isResolved": false, "isOutdated": true,  "comments": { "nodes": [] } },
-                  { "isResolved": false, "isOutdated": false, "comments": { "nodes": [{ "author": { "login": "ines" }, "pullRequestReview": null }] } }
+                  {
+                    "isResolved": false, "isOutdated": false,
+                    "comments": { "nodes": [{ "author": { "login": "tobi" },
+                      "pullRequestReview": { "state": "CHANGES_REQUESTED", "author": { "login": "tobi" } } }] }
+                  },
+                  { "isResolved": true, "isOutdated": false, "comments": { "nodes": [] } },
+                  { "isResolved": false, "isOutdated": true, "comments": { "nodes": [] } },
+                  {
+                    "isResolved": false, "isOutdated": false,
+                    "comments": { "nodes": [{ "author": { "login": "ines" }, "pullRequestReview": null }] }
+                  }
                 ]
               },
               "latestReviews": { "nodes": [] }

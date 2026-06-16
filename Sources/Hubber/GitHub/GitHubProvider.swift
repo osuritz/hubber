@@ -104,7 +104,9 @@ final class GitHubProvider: CodeHostProvider {
                 let login = reviewer?["login"] as? String
                 // Accept explicit user request or team request (no login field on Team).
                 if login == viewerLogin || login == nil {
-                    if reviewRequestedAt == nil || date < reviewRequestedAt! {
+                    if let prev = reviewRequestedAt {
+                        if date < prev { reviewRequestedAt = date }
+                    } else {
                         reviewRequestedAt = date
                     }
                 }
@@ -113,7 +115,9 @@ final class GitHubProvider: CodeHostProvider {
                     let dateStr = item["createdAt"] as? String,
                     let date = iso.date(from: dateStr)
                 else { continue }
-                if readyForReviewAt == nil || date > readyForReviewAt! {
+                if let prev = readyForReviewAt {
+                    if date > prev { readyForReviewAt = date }
+                } else {
                     readyForReviewAt = date
                 }
             default:
@@ -152,7 +156,12 @@ final class GitHubProvider: CodeHostProvider {
         return nodes.compactMap { Self.parseOutgoingPR($0, unresolvedMode: unresolvedMode) }
     }
 
-    private static func parseOutgoingPR(_ node: [String: Any], unresolvedMode: UnresolvedThreadMode) -> OutgoingReview? {
+    private static func parseOutgoingPR(
+        _ node: [String: Any],
+        unresolvedMode: UnresolvedThreadMode
+    )
+        -> OutgoingReview?
+    {
         guard
             node["isDraft"] as? Bool == false,
             let id = node["id"] as? String,
@@ -180,7 +189,8 @@ final class GitHubProvider: CodeHostProvider {
             ciDetail: ciDetail,
             unresolved: unresolved,
             approvals: approvals,
-            requiredApprovals: 1, // GitHub API doesn't expose branch-protection required count without admin scope; default 1
+            // GitHub API doesn't expose branch-protection required count without admin scope; default 1
+            requiredApprovals: 1,
             reviewers: reviewers,
             updatedAgoHours: max(0, Date().timeIntervalSince(updatedAt) / 3600),
             mergeable: mergeable
