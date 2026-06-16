@@ -60,9 +60,19 @@ final class MetricSubscriber: NSObject, MXMetricManagerSubscriber {
 
     /// Called with metric payloads (battery, performance, etc.) once per day.
     func didReceive(_ payloads: [MXMetricPayload]) {
-        // Metric payloads are logged at debug level for developer insight.
+        // Log only a controlled, non-PII subset of each metric payload at debug level.
+        // Full debugDescription may include device or user-identifiable fields, so it
+        // is kept private to the logging subsystem.
         for payload in payloads {
-            os_log(.debug, log: Self.log, "MetricKit metric payload received: %{public}@", payload.debugDescription)
+            let appVersion = payload.latestApplicationVersion
+            let osVersion = payload.metaData?.osVersion ?? "unknown"
+            os_log(
+                .debug,
+                log: Self.log,
+                "MetricKit metric payload received: appVersion=%{public}@ osVersion=%{public}@",
+                appVersion,
+                osVersion
+            )
         }
     }
 
