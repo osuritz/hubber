@@ -411,7 +411,7 @@ private struct OutgoingReviewRow: View {
                         Text(review.repo)
                         Text("·")
                         Text(review.ciDetail)
-                            .foregroundStyle(ciColor(review.ci))
+                            .foregroundStyle(HubberDesign.ciColor(for: review.ci))
 
                         if review.unresolved > 0 {
                             Text("·")
@@ -484,8 +484,8 @@ private struct DraftRow: View {
 
                 if density != .compact {
                     Text(draftStatusText)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(ciColor(draft.ci))
+                        .font(HubberType.ciDetail)
+                        .foregroundStyle(HubberDesign.ciColor(for: draft.ci))
                 }
             }
         }
@@ -589,34 +589,30 @@ private struct PRTitle: View {
 }
 
 private struct SLOPill: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     let status: SLOStatus
     let text: String
     let helpText: String?
 
     var body: some View {
-        HStack(spacing: 6) {
+        let tokens = HubberDesign.sloTokens(for: status)
+        HStack(spacing: 5) {
+            // Non-color cue: colored dot (shape) + text (label)
             Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-                .shadow(color: color.opacity(HubberAppearance.sloDotShadowOpacity(for: colorScheme)), radius: 3)
+                .fill(tokens.fg)
+                .frame(width: 6, height: 6)
 
             Text(text)
-                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .font(HubberType.sloPill)
+                .foregroundStyle(tokens.fg)
         }
-        .foregroundStyle(color)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3)
-        .background(color.opacity(HubberAppearance.sloFillOpacity(status, for: colorScheme)), in: Capsule())
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2.5)
+        .background(tokens.bg, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
-            Capsule().stroke(color.opacity(HubberAppearance.sloStrokeOpacity(status, for: colorScheme)), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(tokens.border, lineWidth: 0.5)
         }
         .help(helpText ?? text)
-    }
-
-    private var color: Color {
-        HubberAppearance.sloColor(status, for: colorScheme)
     }
 }
 
@@ -625,26 +621,34 @@ private struct CIBadge: View {
     let size: CGFloat
 
     var body: some View {
+        let color = HubberDesign.ciColor(for: ci)
         ZStack {
             switch ci {
             case .passing:
-                Circle().fill(ciColor(ci))
+                // Filled circle + checkmark (non-color cue: shape + icon)
+                Circle().fill(color)
                 Image(systemName: "checkmark")
-                    .font(.system(size: size * 0.55, weight: .bold))
+                    .font(.system(size: size * 0.50, weight: .bold))
                     .foregroundStyle(.white)
             case .failing:
-                Circle().fill(ciColor(ci))
+                // Filled circle + xmark (non-color cue: shape + icon)
+                Circle().fill(color)
                 Image(systemName: "xmark")
-                    .font(.system(size: size * 0.52, weight: .bold))
+                    .font(.system(size: size * 0.48, weight: .bold))
                     .foregroundStyle(.white)
             case .running:
+                // Neutral spinner (non-color cue: animation)
                 ProgressView()
                     .controlSize(.small)
-                    .tint(ciColor(ci))
+                    .tint(color)
                     .scaleEffect(size / 16)
             case .pending:
+                // Clock outline (non-color cue: clock icon = "pending/waiting")
                 Circle()
-                    .stroke(.secondary, lineWidth: 1.5)
+                    .stroke(color, lineWidth: 1.5)
+                Image(systemName: "clock")
+                    .font(.system(size: size * 0.44, weight: .regular))
+                    .foregroundStyle(color)
             }
         }
         .frame(width: size, height: size)
@@ -681,20 +685,6 @@ private struct ReviewerStack: View {
     }
 }
 
-private func ciColor(_ ci: PullRequestCI) -> Color {
-    switch ci {
-    case .passing: .hubberSuccess
-    case .failing: .hubberError
-    case .running: .hubberWarning
-    case .pending: .secondary
-    }
-}
-
 private func reviewerStateColor(_ state: ReviewerState) -> Color? {
-    switch state {
-    case .approved: Color(red: 0.20, green: 0.78, blue: 0.35)
-    case .changesRequested: Color(red: 1.00, green: 0.27, blue: 0.23)
-    case .commented: Color(red: 0.04, green: 0.52, blue: 1.00)
-    case .pending: nil
-    }
+    HubberDesign.reviewerColor(for: state)
 }
