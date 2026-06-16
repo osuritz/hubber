@@ -354,6 +354,13 @@ final class HubberStore: ObservableObject {
         appendDeveloperLog("Sent test notification (authorized=true)")
     }
 
+    /// Requests macOS notification authorization at login. `ensureAuthorized()` is idempotent —
+    /// it surfaces the system prompt only the first time and is a no-op once the user has decided.
+    func requestNotificationAuthorization() async {
+        _ = await dispatcher.ensureAuthorized()
+        notificationsDenied = dispatcher.notificationsDenied
+    }
+
     func setPopoverOpen(_ open: Bool) {
         isPopoverOpen = open
     }
@@ -587,6 +594,9 @@ final class HubberStore: ObservableObject {
         viewerAvatarURL = avatarUrl.flatMap { URL(string: $0) }
         appendDeveloperLog("Signed in as @\(login)")
         startPullRequestRefreshLoop()
+        // Ask for notification permission at login (idempotent — prompts only the first time)
+        // rather than lazily at the first diff event, so the ask happens at a predictable moment.
+        Task { await requestNotificationAuthorization() }
     }
 
     func stopPullRequestRefreshLoop() {
