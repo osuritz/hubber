@@ -63,6 +63,26 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(crashReportingEnabled, forKey: "crashReportingEnabled") }
     }
 
+    // MARK: - Provider access (#54)
+    //
+    // Controls which GitHub providers may connect. Today only github.com (personal) exists.
+    // `providerAllowlist` is a list of allowed host strings (empty = no restriction).
+    // `allowPersonalGitHub` is the per-provider override (default true).
+    // Both are managed-lockable via MDM; the computed `providerAccessPolicy` combines them.
+
+    @Published var providerAllowlist: [String] {
+        didSet { defaults.set(providerAllowlist, forKey: "providerAllowlist") }
+    }
+
+    @Published var allowPersonalGitHub: Bool {
+        didSet { defaults.set(allowPersonalGitHub, forKey: "allowPersonalGitHub") }
+    }
+
+    /// The effective provider access policy derived from `providerAllowlist` + `allowPersonalGitHub`.
+    var providerAccessPolicy: ProviderAccessPolicy {
+        ProviderAccessPolicy(allowPersonalGitHub: allowPersonalGitHub, allowlist: providerAllowlist)
+    }
+
     // MARK: - Notifications (#37)
 
     /// Master toggle — when false, no notifications are sent regardless of per-type flags.
@@ -141,6 +161,14 @@ final class SettingsStore: ObservableObject {
         notifyChangesRequested = perType.contains(.changesRequested)
         notifyCIFailed = perType.contains(.ciFailed)
         notifyPRMerged = perType.contains(.prMerged)
+        allowPersonalGitHub = Self.bool(
+            managedKey: ManagedKey.allowPersonalGitHub,
+            defaultsKey: ManagedKey.allowPersonalGitHub,
+            defaults: defaults,
+            managed: managed,
+            fallback: true
+        )
+        providerAllowlist = Self.resolveProviderAllowlist(defaults: defaults, managed: managed)
     }
 
     // MARK: - isLocked
@@ -362,5 +390,19 @@ final class SettingsStore: ObservableObject {
         if resolveFlag("notifyCIFailed", false) { types.insert(.ciFailed) }
         if resolveFlag("notifyPRMerged", false) { types.insert(.prMerged) }
         return types
+    }
+
+    /// Resolves the provider allowlist from the managed seam, then UserDefaults, then empty (no restriction).
+    ///
+    /// MDM profiles supply this as an array of host strings, e.g. `["github.com", "github.enterprise.example.com"]`.
+    private static func resolveProviderAllowlist(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> [String] {
+        if managed.isForced(ManagedKey.providerAllowlist),
+           let arr = managed.value(ManagedKey.providerAllowlist) as? [String] {
+            return arr
+        }
+        return (defaults.array(forKey: ManagedKey.providerAllowlist) as? [String]) ?? []
     }
 }
