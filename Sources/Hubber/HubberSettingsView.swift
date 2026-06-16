@@ -160,12 +160,11 @@ struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Section header: 11 / Semibold · UPPERCASE · +0.4 tracking
+            // Section header: Title Case · 13 / Regular · secondaryLabelColor (native macOS style)
             HStack(spacing: 7) {
-                Text(title.uppercased())
-                    .font(HubberType.section)
-                    .tracking(0.4)
-                    .foregroundStyle(HubberDesign.text2)
+                Text(title)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
 
                 if isDebug {
                     Text("DEBUG")
