@@ -167,56 +167,125 @@ function DraftRow({ pr, density = 2, dark, last }) {
 }
 
 // ── States ───────────────────────────────────────────────────
-function EmptyState({ dark, title = "All clear", body = "No reviews waiting on you. Enjoy the deep work." }) {
+// Shared centered panel: icon disc + title + body + optional meta + action.
+// Backs every empty / offline / error state across the three tabs.
+function StatePanel({ dark, icon, tone = "neutral", title, body, meta, action }) {
   const tk = window.T(dark);
+  const tones = {
+    green:   { bg: tk.slo.green.bg, border: tk.slo.green.border, fg: tk.slo.green.fg },
+    red:     { bg: tk.slo.red.bg,   border: tk.slo.red.border,   fg: tk.error },
+    neutral: { bg: tk.fill,         border: tk.sep,              fg: tk.text2 },
+  };
+  const c = tones[tone] || tones.neutral;
   return (
     <div style={{
       flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      gap: 10, padding: "40px 36px", textAlign: "center",
+      gap: 9, padding: "32px 40px", textAlign: "center", minHeight: 300,
     }}>
       <div style={{
-        width: 54, height: 54, borderRadius: "50%", background: tk.slo.green.bg,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        border: `0.5px solid ${tk.slo.green.border}`,
-      }}>
-        <svg width="28" height="28" viewBox="0 0 28 28">
-          <path d="M7 14.5l4.5 4.5L21 9" fill="none" stroke={tk.slo.green.fg} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </div>
+        width: 56, height: 56, borderRadius: "50%", background: c.bg,
+        border: `0.5px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center",
+        color: c.fg, marginBottom: 2,
+      }}>{icon}</div>
       <div style={{ fontFamily: window.HUB_FONT_D, fontSize: 15, fontWeight: 600, color: tk.text, letterSpacing: -0.2 }}>{title}</div>
-      <div style={{ fontFamily: window.HUB_FONT, fontSize: 12, color: tk.text2, maxWidth: 240, lineHeight: 1.45 }}>{body}</div>
+      <div style={{ fontFamily: window.HUB_FONT, fontSize: 12, color: tk.text2, maxWidth: 252, lineHeight: 1.45 }}>{body}</div>
+      {meta && <div style={{ fontFamily: window.HUB_FONT, fontSize: 11, color: tk.text3, marginTop: 1, fontVariantNumeric: "tabular-nums" }}>{meta}</div>}
+      {action && (
+        <button onClick={action.onClick} style={{
+          marginTop: 9, display: "inline-flex", alignItems: "center", gap: 6,
+          fontFamily: window.HUB_FONT, fontSize: 12.5, fontWeight: 560, color: "#fff",
+          background: tk.accent, border: "none", borderRadius: 7, padding: "7px 15px",
+          cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.16)",
+        }}>
+          {action.icon}<span>{action.label}</span>
+        </button>
+      )}
     </div>
   );
 }
 
-function ErrorState({ dark, onRetry }) {
+const TAB_NOUN = { reviews: "reviews", outgoing: "pull requests", drafts: "drafts" };
+
+// Per-tab empty states.
+function EmptyState({ dark, tab = "reviews", title, body }) {
   const tk = window.T(dark);
+  const cfg = {
+    reviews:  { tone: "green",   title: "All clear",         body: "No reviews waiting on you. Enjoy the deep work." },
+    outgoing: { tone: "neutral", title: "Nothing in flight", body: "Pull requests you open show up here with their CI status and review progress." },
+    drafts:   { tone: "neutral", title: "No drafts",          body: "Draft pull requests you\u2019re still shaping live here until you mark them ready." },
+  }[tab] || {};
+  let icon;
+  if (tab === "reviews") {
+    icon = (
+      <svg width="27" height="27" viewBox="0 0 28 28">
+        <path d="M7 14.5l4.5 4.5L21 9" fill="none" stroke={tk.slo.green.fg} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+  } else if (tab === "outgoing") {
+    icon = <window.SFIcon name="paperplane" size={26} color={tk.text2} weight={1.5}/>;
+  } else {
+    icon = (
+      <svg width="22" height="26" viewBox="0 0 18 22">
+        <path d="M3 1.2h8l4 4v13.6a1.6 1.6 0 01-1.6 1.6H3a1.6 1.6 0 01-1.6-1.6V2.8A1.6 1.6 0 013 1.2z" fill="none" stroke={tk.text2} strokeWidth="1.4" strokeDasharray="2.4 2"/>
+        <path d="M11 1.2V5h4" fill="none" stroke={tk.text2} strokeWidth="1.4" strokeLinejoin="round"/>
+      </svg>
+    );
+  }
+  return <StatePanel dark={dark} tone={cfg.tone} icon={icon} title={title || cfg.title} body={body || cfg.body}/>;
+}
+
+// Full-panel OFFLINE state (no cached data to fall back on).
+function OfflinePanel({ dark, tab = "reviews", lastSynced = "8m ago", onRetry }) {
+  const tk = window.T(dark);
+  return <StatePanel dark={dark} tone="neutral"
+    icon={<window.SFIcon name="wifiSlash" size={26} color={tk.text2} weight={1.6}/>}
+    title="You're offline"
+    body={`Hubber can\u2019t reach GitHub right now. Your ${TAB_NOUN[tab]} will refresh automatically once you\u2019re back online.`}
+    meta={`Last synced ${lastSynced}`}
+    action={{ label: "Try again", onClick: onRetry, icon: <window.SFIcon name="arrowClockwise" size={13} color="#fff" weight={1.8}/> }}/>;
+}
+
+// Full-panel ERROR state (request failed, no cached data).
+function ErrorPanel({ dark, tab = "reviews", code = "502", onRetry }) {
+  const tk = window.T(dark);
+  return <StatePanel dark={dark} tone="red"
+    icon={<window.SFIcon name="warning" size={27} color={tk.error} weight={1.7}/>}
+    title="Couldn't reach GitHub"
+    body={`Something went wrong loading your ${TAB_NOUN[tab]}. This is usually temporary \u2014 give it another try.`}
+    meta={`Error ${code} \u00b7 Last synced 3m ago`}
+    action={{ label: "Retry", onClick: onRetry, icon: <window.SFIcon name="arrowClockwise" size={13} color="#fff" weight={1.8}/> }}/>;
+}
+
+// Slim inline banner shown ABOVE stale rows when a refresh fails but cached
+// data is still on screen. kind: offline | error.
+function InlineBanner({ dark, kind = "offline", lastSynced = "8m ago", onRetry }) {
+  const tk = window.T(dark);
+  const isErr = kind === "error";
+  const c = isErr ? tk.slo.red : tk.slo.amber;
   return (
     <div style={{
-      margin: "10px 12px", padding: "10px 12px", borderRadius: 8,
-      background: tk.slo.red.bg, border: `0.5px solid ${tk.slo.red.border}`,
-      display: "flex", alignItems: "center", gap: 10,
+      margin: "9px 12px 3px", padding: "7px 9px 7px 11px", borderRadius: 8,
+      background: c.bg, border: `0.5px solid ${c.border}`,
+      display: "flex", alignItems: "center", gap: 9,
     }}>
-      <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
-        <circle cx="8" cy="8" r="7" fill="none" stroke={tk.error} strokeWidth="1.5"/>
-        <path d="M8 4.5V9" stroke={tk.error} strokeWidth="1.5" strokeLinecap="round"/>
-        <circle cx="8" cy="11.4" r="0.4" fill={tk.error}/>
-      </svg>
+      <window.SFIcon name={isErr ? "warning" : "wifiSlash"} size={15} color={c.fg} weight={1.6}/>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: window.HUB_FONT, fontSize: 12, fontWeight: 500, color: tk.text }}>
-          Couldn't load reviews
+        <div style={{ fontFamily: window.HUB_FONT, fontSize: 11.5, fontWeight: 560, color: tk.text, letterSpacing: -0.05 }}>
+          {isErr ? "Couldn\u2019t refresh" : "You\u2019re offline"}
         </div>
-        <div style={{ fontFamily: window.HUB_FONT, fontSize: 11, color: tk.text2, marginTop: 1 }}>
-          Last updated 3m ago
+        <div style={{ fontFamily: window.HUB_FONT, fontSize: 11, color: tk.text2, marginTop: 0.5, fontVariantNumeric: "tabular-nums" }}>
+          Showing data from {lastSynced}
         </div>
       </div>
-      <button style={{
-        fontFamily: window.HUB_FONT, fontSize: 12, fontWeight: 500, color: tk.accent,
-        background: "transparent", border: "none", cursor: "pointer", padding: "2px 4px",
+      <button onClick={onRetry} style={{
+        fontFamily: window.HUB_FONT, fontSize: 11.5, fontWeight: 560, color: c.fg,
+        background: "transparent", border: "none", cursor: "pointer", padding: "3px 5px", whiteSpace: "nowrap",
       }}>Retry</button>
     </div>
   );
 }
+
+
 
 function SkeletonRow({ dark, last }) {
   const tk = window.T(dark);
@@ -253,5 +322,6 @@ function SkeletonRow({ dark, last }) {
 
 Object.assign(window, {
   densityCfg, sloPillText, ReviewRow, OutgoingRow, DraftRow,
-  EmptyState, ErrorState, SkeletonRow,
+  StatePanel, EmptyState, OfflinePanel, ErrorPanel, InlineBanner, SkeletonRow,
+  ErrorState: InlineBanner, // back-compat alias
 });

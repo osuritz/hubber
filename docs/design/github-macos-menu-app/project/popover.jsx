@@ -53,6 +53,7 @@ function HubberPopover({ dark, init = {} }) {
   const sloMode = init.sloMode || "remaining";
   const sloHours = init.sloHours || 4;
   const listState = init.listState || "normal";
+  const signedOut = init.signedOut;
 
   const D = window.HUB_DATA;
 
@@ -68,7 +69,9 @@ function HubberPopover({ dark, init = {} }) {
       display: "flex", flexDirection: "column", fontFamily: window.HUB_FONT,
       position: "relative",
     }}>
-      {settingsOpen ? (
+      {signedOut ? (
+        <window.SignInScreen dark={dark}/>
+      ) : settingsOpen ? (
         <window.SettingsScreen dark={dark} onBack={() => setSettingsOpen(false)} init={init}/>
       ) : (
         <>
@@ -100,8 +103,8 @@ function HubberPopover({ dark, init = {} }) {
           {/* Body */}
           <div className="hub-scroll" style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
             {tab === "reviews" && <ReviewsScreen dark={dark} density={density} sloMode={sloMode} sloHours={sloHours} listState={listState}/>}
-            {tab === "outgoing" && <OutgoingScreen dark={dark} density={density}/>}
-            {tab === "drafts" && <DraftsScreen dark={dark} density={density}/>}
+            {tab === "outgoing" && <OutgoingScreen dark={dark} density={density} listState={listState}/>}
+            {tab === "drafts" && <DraftsScreen dark={dark} density={density} listState={listState}/>}
           </div>
 
           {/* Footer */}
@@ -126,48 +129,81 @@ function HubberPopover({ dark, init = {} }) {
   );
 }
 
-// ── Reviews screen ───────────────────────────────────────────
-function ReviewsScreen({ dark, density, sloMode, sloHours, listState }) {
-  const D = window.HUB_DATA;
-  if (listState === "loading") {
+// ── Sign-in (signed-out one-off) ─────────────────────────────
+function SignInScreen({ dark }) {
+  const tk = window.T(dark);
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      textAlign: "center", padding: "36px 40px" }}>
+      <div style={{
+        width: 64, height: 64, borderRadius: 16, background: dark ? "#0d1117" : "#1f2328",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 8px 22px rgba(0,0,0,0.30), inset 0 0.5px 0 rgba(255,255,255,0.12)", marginBottom: 20,
+      }}>
+        <window.SFIcon name="pullRequest" size={30} color="#fff" weight={1.8}/>
+      </div>
+      <div style={{ fontFamily: window.HUB_FONT_D, fontSize: 19, fontWeight: 650, color: tk.text, letterSpacing: -0.4, marginBottom: 8 }}>
+        Welcome to Hubber
+      </div>
+      <div style={{ fontFamily: window.HUB_FONT, fontSize: 12.5, color: tk.text2, maxWidth: 264, lineHeight: 1.5, marginBottom: 24 }}>
+        Keep an eye on your PR reviews, CI, and drafts — right from the menu bar. Sign in to get started.
+      </div>
+      <button style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        width: "100%", maxWidth: 264, padding: "10px 16px", borderRadius: 9, border: "none", cursor: "pointer",
+        background: dark ? "#f6f6f8" : "#1f2328", color: dark ? "#1f2328" : "#fff",
+        fontFamily: window.HUB_FONT, fontSize: 13.5, fontWeight: 590, letterSpacing: -0.1,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.20)",
+      }}>
+        <window.SFIcon name="githubMark" size={17} color={dark ? "#1f2328" : "#fff"}/>
+        <span>Sign in with GitHub</span>
+      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 16, color: tk.text3,
+        fontFamily: window.HUB_FONT, fontSize: 11 }}>
+        <window.SFIcon name="lock" size={12} color={tk.text3}/>
+        <span>Read-only access to your pull requests</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared tab-body renderer (handles every list state) ──────
+function TabBody({ dark, tab, items, listState, RowComp, rowProps = {} }) {
+  if (listState === "loading")
     return <div>{[0,1,2,3,4].map((i) => <window.SkeletonRow key={i} dark={dark} last={i === 4}/>)}</div>;
-  }
-  if (listState === "empty") {
-    return <window.EmptyState dark={dark}/>;
-  }
+  if (listState === "offline")
+    return <window.OfflinePanel dark={dark} tab={tab}/>;
+  if (listState === "error")
+    return <window.ErrorPanel dark={dark} tab={tab}/>;
+  if (listState === "empty" || items.length === 0)
+    return <window.EmptyState dark={dark} tab={tab}/>;
+  const cached = listState === "offlineCached" || listState === "errorCached";
   return (
     <div>
-      {listState === "error" && <window.ErrorState dark={dark}/>}
-      {D.incoming.map((pr, i) => (
-        <window.ReviewRow key={pr.id} pr={pr} density={density} dark={dark}
-          sloMode={sloMode} sloHours={sloHours} last={i === D.incoming.length - 1}/>
+      {cached && <window.InlineBanner dark={dark} kind={listState === "errorCached" ? "error" : "offline"}/>}
+      {items.map((pr, i) => (
+        <RowComp key={pr.id} pr={pr} dark={dark} last={i === items.length - 1} {...rowProps}/>
       ))}
     </div>
   );
+}
+
+// ── Reviews screen ───────────────────────────────────────────
+function ReviewsScreen({ dark, density, sloMode, sloHours, listState }) {
+  return <TabBody dark={dark} tab="reviews" items={window.HUB_DATA.incoming} listState={listState}
+    RowComp={window.ReviewRow} rowProps={{ density, sloMode, sloHours }}/>;
 }
 
 // ── Outgoing screen ──────────────────────────────────────────
-function OutgoingScreen({ dark, density }) {
-  const D = window.HUB_DATA;
-  return (
-    <div>
-      {D.outgoing.map((pr, i) => (
-        <window.OutgoingRow key={pr.id} pr={pr} density={density} dark={dark} last={i === D.outgoing.length - 1}/>
-      ))}
-    </div>
-  );
+function OutgoingScreen({ dark, density, listState }) {
+  return <TabBody dark={dark} tab="outgoing" items={window.HUB_DATA.outgoing} listState={listState}
+    RowComp={window.OutgoingRow} rowProps={{ density }}/>;
 }
 
 // ── Drafts screen ────────────────────────────────────────────
-function DraftsScreen({ dark, density }) {
-  const D = window.HUB_DATA;
-  return (
-    <div>
-      {D.drafts.map((pr, i) => (
-        <window.DraftRow key={pr.id} pr={pr} density={density} dark={dark} last={i === D.drafts.length - 1}/>
-      ))}
-    </div>
-  );
+function DraftsScreen({ dark, density, listState }) {
+  return <TabBody dark={dark} tab="drafts" items={window.HUB_DATA.drafts} listState={listState}
+    RowComp={window.DraftRow} rowProps={{ density }}/>;
 }
 
 if (typeof document !== "undefined" && !document.getElementById("hub-scroll-css")) {
@@ -182,4 +218,4 @@ if (typeof document !== "undefined" && !document.getElementById("hub-scroll-css"
   document.head.appendChild(st);
 }
 
-Object.assign(window, { Segmented, HubberPopover, ReviewsScreen, OutgoingScreen, DraftsScreen });
+Object.assign(window, { Segmented, HubberPopover, SignInScreen, TabBody, ReviewsScreen, OutgoingScreen, DraftsScreen });
