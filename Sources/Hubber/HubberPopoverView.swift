@@ -186,6 +186,12 @@ struct HubberPopoverView: View {
         } else if store.data.outgoing.isEmpty {
             EmptyOutgoingState()
         } else {
+            if let error = store.pullRequestRefreshError {
+                ErrorState(
+                    message: "Couldn't load outgoing PRs",
+                    lastUpdated: "Last refresh failed: \(error)"
+                )
+            }
             ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
                 ClickableRow(url: review.url) {
                     OutgoingReviewRow(
@@ -212,6 +218,12 @@ struct HubberPopoverView: View {
         } else if store.data.drafts.isEmpty {
             EmptyDraftsState()
         } else {
+            if let error = store.pullRequestRefreshError {
+                ErrorState(
+                    message: "Couldn't load drafts",
+                    lastUpdated: "Last refresh failed: \(error)"
+                )
+            }
             ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
                 ClickableRow(url: draft.url) {
                     DraftPRRow(
@@ -344,6 +356,7 @@ private struct HubberTabBar: View {
 }
 
 private struct CountBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
     let count: Int
     var isActive = false
 
@@ -355,9 +368,7 @@ private struct CountBadge: View {
             .padding(.horizontal, 5)
             .lineLimit(1)
             .background(
-                isActive
-                    ? .white.opacity(0.16)
-                    : .black.opacity(0.06),
+                HubberAppearance.badgeFill(isActive: isActive, for: colorScheme),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
     }

@@ -23,6 +23,7 @@ enum AvatarSize: CGFloat {
 // MARK: - AvatarView
 
 struct AvatarView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var image: NSImage?
 
     let user: GitHubUser
@@ -67,7 +68,7 @@ struct AvatarView: View {
                 .clipShape(Circle())
                 .overlay {
                     Circle().stroke(
-                        HubberAppearance.avatarStroke(for: .light),
+                        HubberAppearance.avatarStroke(for: colorScheme),
                         lineWidth: 0.5
                     )
                 }
