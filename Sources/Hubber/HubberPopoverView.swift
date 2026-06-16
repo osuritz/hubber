@@ -114,27 +114,43 @@ struct HubberPopoverView: View {
     private var content: some View {
         switch selectedTab {
         case .incoming:
-            let sorted = store.data.incoming.sorted { $0.assignedAgoHours > $1.assignedAgoHours }
-            ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
-                    IncomingReviewRow(
-                        review: review,
-                        isSLOEnabled: isSLOEnabled,
-                        sloHours: sloHours,
-                        sloDisplay: sloDisplay,
-                        density: rowDensity,
-                        isLast: index == sorted.count - 1
-                    )
+            if let error = store.pullRequestRefreshError, store.data.incoming.isEmpty {
+                EmptyStateRow(text: "Refresh failed: \(error)")
+            } else if store.isRefreshingPullRequests, store.data.incoming.isEmpty {
+                EmptyStateRow(text: "Loading reviews…")
+            } else if store.data.incoming.isEmpty, store.lastPullRequestRefresh != nil {
+                AllClearRow()
+            } else {
+                let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
+                ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
+                    ClickableRow(url: review.url) {
+                        IncomingReviewRow(
+                            review: review,
+                            isSLOEnabled: store.settings.sloEnabled,
+                            sloHours: store.settings.sloHours(for: review.repo),
+                            sloDisplay: store.settings.sloDisplay,
+                            density: store.settings.rowDensity,
+                            isLast: index == sorted.count - 1
+                        )
+                    }
                 }
             }
         case .outgoing:
-            ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
-                    OutgoingReviewRow(
-                        review: review,
-                        density: rowDensity,
-                        isLast: index == store.data.outgoing.count - 1
-                    )
+            if let error = store.pullRequestRefreshError, store.data.outgoing.isEmpty {
+                EmptyStateRow(text: "Refresh failed: \(error)")
+            } else if store.isRefreshingPullRequests, store.data.outgoing.isEmpty {
+                EmptyStateRow(text: "Loading pull requests…")
+            } else if store.data.outgoing.isEmpty, store.lastPullRequestRefresh != nil {
+                EmptyStateRow(text: "No open pull requests.")
+            } else {
+                ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
+                    ClickableRow(url: review.url) {
+                        OutgoingReviewRow(
+                            review: review,
+                            density: store.settings.rowDensity,
+                            isLast: index == store.data.outgoing.count - 1
+                        )
+                    }
                 }
             }
         case .drafts:
@@ -145,7 +161,7 @@ struct HubberPopoverView: View {
                     ClickableRow(url: draft.url) {
                         DraftRow(
                             draft: draft,
-                            density: rowDensity,
+                            density: store.settings.rowDensity,
                             isLast: index == store.data.drafts.count - 1
                         )
                     }
@@ -484,6 +500,30 @@ private struct EmptyStateRow: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 24)
             .frame(maxWidth: .infinity, minHeight: 70)
+    }
+}
+
+private struct AllClearRow: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(Color.hubberSuccess.opacity(0.15))
+                    .frame(width: 48, height: 48)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Color.hubberSuccess)
+            }
+            Text("All clear")
+                .font(.system(size: 14, weight: .semibold))
+            Text("No reviews waiting on you. Enjoy the deep work.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 40)
     }
 }
 
