@@ -137,7 +137,20 @@ final class GitHubDevelopmentFileTokenStore: GitHubTokenStoring {
     }
 }
 
-final class GitHubAuthService: Sendable {
+// MARK: - GitHubAuthServicing protocol
+//
+// Extracted from GitHubAuthService to allow injection of test spies. The real implementation
+// is GitHubAuthService; tests use a lightweight spy to verify call counts without hitting the
+// network or requiring a bundle / keychain.
+
+protocol GitHubAuthServicing: Sendable {
+    func startDeviceFlow() async throws -> GitHubDeviceAuthorization
+    func pollForToken(deviceAuthorization: GitHubDeviceAuthorization) async throws -> GitHubStoredToken
+    func refresh(_ token: GitHubStoredToken) async throws -> GitHubStoredToken
+    func fetchAuthenticatedUser(accessToken: String) async throws -> GitHubAuthenticatedUser
+}
+
+final class GitHubAuthService: GitHubAuthServicing, Sendable {
     private let clientID: String
     private let session: URLSession
 
@@ -298,7 +311,7 @@ final class HubberStore: ObservableObject {
     let settings: SettingsStore // exposed so views can bind
     let telemetry: Telemetry // exposed so views can emit events
 
-    private let authService: GitHubAuthService
+    private let authService: any GitHubAuthServicing
     let provider: any CodeHostProvider
     private let tokenStore: any GitHubTokenStoring
     private let scheduler: RefreshScheduler
@@ -314,7 +327,7 @@ final class HubberStore: ObservableObject {
     private let dispatcher: any NotificationDispatching
 
     init(
-        authService: GitHubAuthService = GitHubAuthService(),
+        authService: any GitHubAuthServicing = GitHubAuthService(),
         provider: any CodeHostProvider = CachingCodeHostProvider(wrapping: GitHubProvider()),
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
         settings: SettingsStore = SettingsStore(),
@@ -471,6 +484,18 @@ final class HubberStore: ObservableObject {
     }
 
     func startSignIn() {
+        // Defense in depth (#54): refuse before starting the device flow when the provider
+        // policy blocks github.com. The UI also disables the button, but enforcing here
+        // prevents any code path from bypassing the restriction.
+        let policy = settings.providerAccessPolicy
+        guard policy.canConnectGitHubDotCom else {
+            let reason = policy.blockedReason ?? "Sign-in is restricted by your organization."
+            appendDeveloperLog("Sign-in blocked by policy: \(reason)")
+            authTask?.cancel(); authTask = nil // prevent session-restore from overwriting error
+            authState = .error(reason)
+            return
+        }
+
         appendDeveloperLog("Starting GitHub device sign-in")
         authTask?.cancel()
         authTask = Task {
