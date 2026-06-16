@@ -70,7 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             Task { @MainActor in
-                self?.closePanel()
+                // Don't close the panel when the browser activates during device-flow
+                // sign-in — the user needs the floating code panel while they authorize.
+                guard let self, !self.store.isAuthenticating else { return }
+                self.closePanel()
             }
         }
 
@@ -248,6 +251,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func closePanelForOutsideClick() {
+        // Keep the panel pinned while device-flow sign-in is in progress so clicking
+        // into the browser to enter the code doesn't dismiss it.
+        if store.isAuthenticating { return }
         let clickLocation = NSEvent.mouseLocation
         if panel.frame.contains(clickLocation) || statusButtonFrame()?.contains(clickLocation) == true {
             return
