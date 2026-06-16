@@ -5,8 +5,16 @@ import Foundation
 final class AvatarCache {
     static let shared = AvatarCache()
 
+    /// `NSImage` is not `Sendable`, but every image here is created and consumed
+    /// on the main actor (`AvatarCache` is `@MainActor` and the fetch `Task`
+    /// inherits that isolation). This box carries the result across the
+    /// `nonisolated` `Task.value` accessor without an actual cross-actor hop.
+    private struct SendableImage: @unchecked Sendable {
+        let image: NSImage
+    }
+
     private let cache = NSCache<NSURL, NSImage>()
-    private var inFlight: [URL: Task<NSImage?, Never>] = [:]
+    private var inFlight: [URL: Task<SendableImage?, Never>] = [:]
     /// Number of callers currently awaiting each URL's in-flight Task.
     private var waiters: [URL: Int] = [:]
 
@@ -42,12 +50,12 @@ final class AvatarCache {
 
         if let existing = inFlight[url] {
             // Join the already-running fetch.
-            return await existing.value
+            return await existing.value?.image
         }
 
         let capturedSession = session
         let cacheRef = cache
-        let task = Task<NSImage?, Never> {
+        let task = Task<SendableImage?, Never> {
             guard !Task.isCancelled else { return nil }
             guard
                 let (data, _) = try? await capturedSession.data(from: url),
@@ -58,12 +66,12 @@ final class AvatarCache {
             if !Task.isCancelled {
                 cacheRef.setObject(image, forKey: url as NSURL)
             }
-            return Task.isCancelled ? nil : image
+            return Task.isCancelled ? nil : SendableImage(image: image)
         }
 
         inFlight[url] = task
         defer { inFlight.removeValue(forKey: url) }
-        return await task.value
+        return await task.value?.image
     }
 
     /// Cancel any in-flight fetch for `url` only when this is the last waiter.
