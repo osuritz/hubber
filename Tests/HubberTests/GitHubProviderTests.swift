@@ -425,4 +425,17 @@ final class GitHubProviderTests: XCTestCase {
             XCTAssertNil(retryAfter)
         }
     }
+
+    func testGraphQL429WithInvalidRetryAfterHasNilRetryAfter() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request, statusCode: 429, headerFields: ["Retry-After": "invalid"]), Data())
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let GitHubAuthError.rateLimited(retryAfter) {
+            XCTAssertNil(retryAfter, "Non-numeric Retry-After must yield nil retryAfter")
+        }
+    }
 }
