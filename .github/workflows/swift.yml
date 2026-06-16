@@ -20,7 +20,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # Pin to macos-26 (Xcode 26 / Swift 6.3), the toolchain this project targets
+    # per AGENTS.md and uses locally. macos-latest (currently macos-15) ships
+    # Xcode 16.4 / Swift 6.1, which rejects valid Swift 6.2+ actor-isolation in
+    # the test target ("passes locally, fails in CI").
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
