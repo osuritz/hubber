@@ -3,7 +3,7 @@ import Combine
 import Foundation
 import Security
 
-struct GitHubDeviceAuthorization: Equatable, Sendable {
+struct GitHubDeviceAuthorization: Equatable {
     let deviceCode: String
     let userCode: String
     let verificationURI: URL
@@ -15,7 +15,7 @@ struct GitHubDeviceAuthorization: Equatable, Sendable {
     }
 }
 
-struct GitHubStoredToken: Codable, Equatable, Sendable {
+struct GitHubStoredToken: Codable, Equatable {
     var accessToken: String
     var accessTokenExpiresAt: Date?
     var refreshToken: String?
@@ -35,11 +35,11 @@ struct GitHubStoredToken: Codable, Equatable, Sendable {
     }
 }
 
-struct GitHubAuthenticatedUser: Decodable, Equatable, Sendable {
+struct GitHubAuthenticatedUser: Decodable, Equatable {
     let login: String
 }
 
-enum GitHubAuthError: LocalizedError, Equatable, Sendable {
+enum GitHubAuthError: LocalizedError, Equatable {
     case invalidResponse
     case authorizationExpired
     case authorizationDenied
@@ -346,20 +346,24 @@ final class HubberStore: ObservableObject {
     @Published private(set) var pullRequestRefreshError: String?
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
 
+    let settings: SettingsStore // exposed so views can bind
+
     private let authService: GitHubAuthService
-    private let pullRequestService: GitHubPullRequestService
+    private let provider: any CodeHostProvider
     private let tokenStore: any GitHubTokenStoring
     private var authTask: Task<Void, Never>?
     private var pullRequestRefreshTask: Task<Void, Never>?
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
-        pullRequestService: GitHubPullRequestService = GitHubPullRequestService(),
-        tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault()
+        provider: any CodeHostProvider = GitHubProvider(),
+        tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
+        settings: SettingsStore = SettingsStore()
     ) {
         self.authService = authService
-        self.pullRequestService = pullRequestService
+        self.provider = provider
         self.tokenStore = tokenStore
+        self.settings = settings
         restoreSession()
     }
 
@@ -550,13 +554,11 @@ final class HubberStore: ObservableObject {
 
     private func useCachedLogin(_ login: String) {
         authState = .signedIn(login: login)
-        clearDraftMocks()
         appendDeveloperLog("Using cached GitHub login @\(login)")
     }
 
     private func finishSignedInSession(login: String) {
         authState = .signedIn(login: login)
-        clearDraftMocks()
         appendDeveloperLog("Signed in as @\(login)")
         startPullRequestRefreshLoop()
     }
@@ -567,23 +569,10 @@ final class HubberStore: ObservableObject {
         isRefreshingPullRequests = false
     }
 
-    private func clearDraftMocks() {
-        guard lastPullRequestRefresh == nil else {
-            return
-        }
-        data = HubberData(
-            incoming: data.incoming,
-            outgoing: data.outgoing,
-            drafts: []
-        )
-    }
-
     private func refreshPullRequestsFromGitHub() async {
-        guard canRefreshPullRequests, !isRefreshingPullRequests else {
-            return
-        }
+        guard canRefreshPullRequests, !isRefreshingPullRequests else { return }
         guard let login = signedInLogin else {
-            appendDeveloperLog("Skipped refresh because no signed-in login was available")
+            appendDeveloperLog("Skipped refresh: no signed-in login")
             return
         }
 
@@ -592,27 +581,42 @@ final class HubberStore: ObservableObject {
 
         do {
             let token = try await freshStoredToken()
-            appendDeveloperLog("Fetching draft PRs for @\(token.login ?? login)")
-            let drafts = try await pullRequestService.fetchDraftPullRequests(accessToken: token.accessToken)
-            data = HubberData(
-                incoming: data.incoming,
-                outgoing: data.outgoing,
+            appendDeveloperLog("Refreshing all tabs for @\(login)")
+
+            async let incoming = provider.fetchIncomingReviews(
+                accessToken: token.accessToken,
+                viewerLogin: login,
+                mode: settings.incomingMode
+            )
+            async let outgoing = provider.fetchOutgoingPullRequests(
+                accessToken: token.accessToken,
+                viewerLogin: login,
+                unresolvedMode: settings.unresolvedMode
+            )
+            async let drafts = provider.fetchDraftPullRequests(
+                accessToken: token.accessToken,
+                limit: 100
+            )
+
+            data = try await HubberData(
+                incoming: incoming,
+                outgoing: outgoing,
                 drafts: drafts
             )
+
             lastPullRequestRefresh = Date()
             pullRequestRefreshError = nil
-            appendDeveloperLog("Fetched \(drafts.count) draft PRs")
+            appendDeveloperLog("Fetched \(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts")
         } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
             try? await deleteStoredToken()
             authState = .signedOut
-            appendDeveloperLog("Refresh failed because saved credentials are invalid")
+            appendDeveloperLog("Refresh failed: invalid credentials")
             stopPullRequestRefreshLoop()
         } catch is CancellationError {
             appendDeveloperLog("Pull request refresh cancelled")
-            return
         } catch {
             pullRequestRefreshError = error.localizedDescription
-            appendDeveloperLog("Pull request refresh failed: \(error.localizedDescription)")
+            appendDeveloperLog("Refresh failed: \(error.localizedDescription)")
         }
     }
 
@@ -687,7 +691,7 @@ final class HubberStore: ObservableObject {
     }
 }
 
-enum HubberAuthState: Equatable, Sendable {
+enum HubberAuthState: Equatable {
     case restoring
     case signedOut
     case waitingForUser(GitHubDeviceAuthorization)
