@@ -579,7 +579,7 @@ final class HubberStore: ObservableObject {
                     isRateLimited: isRateLimited,
                     hasUrgentSLO: AttentionState.hasUrgentSLO(data: data, settings: settings),
                     isPopoverOpen: isPopoverOpen,
-                    isAllGreen: AttentionState.isAllGreen(data: data, settings: settings)
+                    isAllGreen: AttentionState.isAllGreen(data: data)
                 )
             },
             refresh: { [weak self] in
