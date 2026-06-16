@@ -358,6 +358,82 @@ final class NotificationDifferTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
+    // MARK: - prMerged carries real metadata from snapshot (A)
+
+    func testPRMergedEventCarriesRepoNumberTitleAndURL() throws {
+        // Build snapshot via snapshot(from:) so metadata is persisted from the OutgoingReview
+        let pr = makeOutgoing(id: "pr-42", repo: "acme/web", number: 42, title: "Ship feature")
+        let data = HubberData(incoming: [], outgoing: [pr], drafts: [])
+        let baseline = NotificationDiffer.snapshot(from: data)
+        // Now the PR disappears (merged)
+        let emptyData = HubberData(incoming: [], outgoing: [], drafts: [])
+        let events = NotificationDiffer.events(previous: baseline, current: emptyData, enabled: [.prMerged])
+        XCTAssertEqual(events.count, 1)
+        let event = try XCTUnwrap(events.first)
+        XCTAssertEqual(event.type, .prMerged)
+        XCTAssertFalse(event.repo.isEmpty, "repo must be non-empty")
+        XCTAssertEqual(event.repo, "acme/web")
+        XCTAssertEqual(event.number, 42)
+        XCTAssertEqual(event.title, "Ship feature")
+        XCTAssertNotNil(event.url, "url must be set from snapshot")
+    }
+
+    func testPRMergedBatchedBodyIsNonBlank() {
+        let pr = makeOutgoing(id: "pr-42", repo: "acme/web", number: 42, title: "Ship feature")
+        let data = HubberData(incoming: [], outgoing: [pr], drafts: [])
+        let baseline = NotificationDiffer.snapshot(from: data)
+        let emptyData = HubberData(incoming: [], outgoing: [], drafts: [])
+        let events = NotificationDiffer.events(previous: baseline, current: emptyData, enabled: [.prMerged])
+        let contents = NotificationBatcher.contents(from: events)
+        XCTAssertEqual(contents.count, 1)
+        XCTAssertFalse(contents[0].body.isEmpty, "batched body must not be blank")
+        XCTAssertTrue(contents[0].body.contains("acme/web"), "body must contain repo")
+        XCTAssertTrue(contents[0].body.contains("42"), "body must contain PR number")
+    }
+
+    // MARK: - disabled → excluded (F: changesRequested, ciFailed, prMerged)
+
+    func testChangesRequestedDisabledExcludesEvent() {
+        let prevOutgoing = OutgoingSnapshot(
+            reviewerStates: ["bob": "pending"],
+            ci: "passing",
+            mergeable: true,
+            approved: false
+        )
+        let baseline = ReviewSnapshot(incomingIDs: [], outgoing: ["pr-42": prevOutgoing])
+        let outgoing = makeOutgoing(id: "pr-42", reviewers: [reviewer(.bob, state: .changesRequested)])
+        let data = HubberData(incoming: [], outgoing: [outgoing], drafts: [])
+        let events = NotificationDiffer.events(previous: baseline, current: data, enabled: [])
+        XCTAssertFalse(events.contains { $0.type == .changesRequested })
+    }
+
+    func testCIFailedDisabledExcludesEvent() {
+        let prevOutgoing = OutgoingSnapshot(
+            reviewerStates: [:],
+            ci: "passing",
+            mergeable: true,
+            approved: false
+        )
+        let baseline = ReviewSnapshot(incomingIDs: [], outgoing: ["pr-42": prevOutgoing])
+        let outgoing = makeOutgoing(id: "pr-42", ci: .failing)
+        let data = HubberData(incoming: [], outgoing: [outgoing], drafts: [])
+        let events = NotificationDiffer.events(previous: baseline, current: data, enabled: [])
+        XCTAssertFalse(events.contains { $0.type == .ciFailed })
+    }
+
+    func testPRMergedDisabledExcludesEvent() {
+        let prevOutgoing = OutgoingSnapshot(
+            reviewerStates: [:],
+            ci: "passing",
+            mergeable: true,
+            approved: false
+        )
+        let baseline = ReviewSnapshot(incomingIDs: [], outgoing: ["pr-42": prevOutgoing])
+        let data = HubberData(incoming: [], outgoing: [], drafts: [])
+        let events = NotificationDiffer.events(previous: baseline, current: data, enabled: [])
+        XCTAssertFalse(events.contains { $0.type == .prMerged })
+    }
+
     // MARK: - unchanged → no events
 
     func testUnchangedDataProducesNoEvents() {
