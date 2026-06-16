@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# Cancel any in-flight run for the same ref so we don't burn macOS minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Needed so the job can create/upload GitHub Releases.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # macos-26 ships Xcode 26 / Swift 6.3, which this project requires.
+    # macos-latest currently pins Swift 6.1 and rejects valid 6.3-only code.
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Universal release build
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Verify universal binary
+        run: lipo -info .build/apple/Products/Release/Hubber
+
+      - name: Assemble Hubber.app and package artifacts
+        run: make dist
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/Hubber.dmg \
+            dist/Hubber.zip \
+            --generate-notes \
+            --title "Hubber $GITHUB_REF_NAME"
