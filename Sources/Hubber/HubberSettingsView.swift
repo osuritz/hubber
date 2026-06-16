@@ -58,13 +58,12 @@ struct SettingsView: View {
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(settings.sloEnabled ? HubberDesign.text : HubberDesign.text3)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("", selection: $settings.sloDisplay) {
-                            ForEach(SLODisplay.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        .disabled(!settings.sloEnabled)
+                        NativeSegmentedPicker(
+                            SLODisplay.self,
+                            selection: $settings.sloDisplay,
+                            isEnabled: settings.sloEnabled && !settings.isLocked("sloDisplay"),
+                            title: \.title
+                        )
                         .opacity(settings.sloEnabled ? 1 : 0.45)
                     }
 
@@ -74,13 +73,12 @@ struct SettingsView: View {
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("", selection: $settings.incomingMode) {
-                            ForEach(IncomingReviewMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        .disabled(settings.isLocked("incomingMode"))
+                        NativeSegmentedPicker(
+                            IncomingReviewMode.self,
+                            selection: $settings.incomingMode,
+                            isEnabled: !settings.isLocked("incomingMode"),
+                            title: \.title
+                        )
                     }
                 }
             }
@@ -98,13 +96,12 @@ struct SettingsView: View {
                                 .foregroundStyle(HubberDesign.text2)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("", selection: $settings.unresolvedMode) {
-                            ForEach(UnresolvedThreadMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        .disabled(settings.isLocked("unresolvedThreadMode"))
+                        NativeSegmentedPicker(
+                            UnresolvedThreadMode.self,
+                            selection: $settings.unresolvedMode,
+                            isEnabled: !settings.isLocked("unresolvedThreadMode"),
+                            title: \.title
+                        )
                     }
                 }
             }
@@ -117,13 +114,12 @@ struct SettingsView: View {
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("", selection: $settings.rowDensity) {
-                            ForEach(RowDensity.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        .disabled(settings.isLocked("rowDensity"))
+                        NativeSegmentedPicker(
+                            RowDensity.self,
+                            selection: $settings.rowDensity,
+                            isEnabled: !settings.isLocked("rowDensity"),
+                            title: \.title
+                        )
                     }
                 }
             }
@@ -136,13 +132,12 @@ struct SettingsView: View {
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("", selection: $settings.badgeMode) {
-                            ForEach(BadgeMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        .disabled(settings.isLocked("badgeMode"))
+                        NativeSegmentedPicker(
+                            BadgeMode.self,
+                            selection: $settings.badgeMode,
+                            isEnabled: !settings.isLocked("badgeMode"),
+                            title: \.title
+                        )
                     }
                 }
             }
