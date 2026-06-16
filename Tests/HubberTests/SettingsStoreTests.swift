@@ -205,7 +205,7 @@ final class SettingsStoreTests: XCTestCase {
 
     // MARK: - Task 2: Forced managed values override UserDefaults + hardcoded defaults
 
-    // sloEnabled — managed key "sloEnabled"; persistence key "reviewSLOEnabled"
+    /// sloEnabled — managed key "sloEnabled"; persistence key "reviewSLOEnabled"
     func testForcedSloEnabledFalseOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.sloEnabled: false])
         let store = makeStore(managed: managed)
@@ -213,10 +213,10 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func testForcedSloEnabledOverridesUserDefaults() {
-        defaults.set(false, forKey: "reviewSLOEnabled")  // UserDefaults says false
-        let managed = InMemoryManagedPreferences([ManagedKey.sloEnabled: true])  // MDM says true
+        defaults.set(false, forKey: "reviewSLOEnabled") // UserDefaults says false
+        let managed = InMemoryManagedPreferences([ManagedKey.sloEnabled: true]) // MDM says true
         let store = makeStore(managed: managed)
-        XCTAssertTrue(store.sloEnabled)  // MDM wins
+        XCTAssertTrue(store.sloEnabled) // MDM wins
     }
 
     func testIsLockedReviewSLOEnabledWhenSloEnabledForced() {
@@ -233,7 +233,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.isLocked("reviewSLOEnabled"))
     }
 
-    // sloWindowHours
+    /// sloWindowHours
     func testForcedSloWindowHoursOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.sloWindowHours: 2])
         let store = makeStore(managed: managed)
@@ -246,7 +246,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.sloWindowHours))
     }
 
-    // sloDisplay
+    /// sloDisplay
     func testForcedSloDisplayOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.sloDisplay: SLODisplay.elapsed.rawValue])
         let store = makeStore(managed: managed)
@@ -259,7 +259,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.sloDisplay))
     }
 
-    // badgeMode
+    /// badgeMode
     func testForcedBadgeModeOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.badgeMode: BadgeMode.off.rawValue])
         let store = makeStore(managed: managed)
@@ -272,7 +272,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.badgeMode))
     }
 
-    // incomingMode
+    /// incomingMode
     func testForcedIncomingModeOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.incomingMode: IncomingReviewMode.team.rawValue])
         let store = makeStore(managed: managed)
@@ -285,7 +285,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.incomingMode))
     }
 
-    // unresolvedThreadMode
+    /// unresolvedThreadMode
     func testForcedUnresolvedThreadModeOverridesDefault() {
         let managed = InMemoryManagedPreferences(
             [ManagedKey.unresolvedThreadMode: UnresolvedThreadMode.changesRequested.rawValue]
@@ -300,14 +300,14 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.unresolvedThreadMode))
     }
 
-    // rowDensity — accepts Int rawValue
+    /// rowDensity — accepts Int rawValue
     func testForcedRowDensityIntOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.rowDensity: RowDensity.compact.rawValue])
         let store = makeStore(managed: managed)
         XCTAssertEqual(store.rowDensity, .compact)
     }
 
-    // rowDensity — accepts String ("compact"|"normal"|"spacious")
+    /// rowDensity — accepts String ("compact"|"normal"|"spacious")
     func testForcedRowDensityStringOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.rowDensity: "spacious"])
         let store = makeStore(managed: managed)
@@ -320,7 +320,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.rowDensity))
     }
 
-    // notificationsEnabled
+    /// notificationsEnabled
     func testForcedNotificationsEnabledFalseOverridesDefault() {
         let managed = InMemoryManagedPreferences([ManagedKey.notificationsEnabled: false])
         let store = makeStore(managed: managed)
@@ -333,7 +333,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.notificationsEnabled))
     }
 
-    // Unforced key → not locked
+    /// Unforced key → not locked
     func testIsLockedReturnsFalseForUnforcedKey() {
         let store = makeStore(managed: InMemoryManagedPreferences())
         XCTAssertFalse(store.isLocked(ManagedKey.badgeMode))
@@ -343,7 +343,7 @@ final class SettingsStoreTests: XCTestCase {
 
     // MARK: - Task 3: Notification lock propagation
 
-    // When `defaultNotificationEvents` is forced, all per-type notify* keys report locked.
+    /// When `defaultNotificationEvents` is forced, all per-type notify* keys report locked.
     func testPerTypeLockedWhenDefaultNotificationEventsForced() {
         let managed = InMemoryManagedPreferences([
             ManagedKey.defaultNotificationEvents: ["newReview", "ciFailed"],
@@ -358,7 +358,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLocked(ManagedKey.defaultNotificationEvents))
     }
 
-    // Values are resolved from the forced composite set.
+    /// Values are resolved from the forced composite set.
     func testEnabledNotificationTypesFromForcedComposite() {
         let managed = InMemoryManagedPreferences([
             ManagedKey.defaultNotificationEvents: ["newReview", "ciFailed"],
@@ -367,8 +367,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.enabledNotificationTypes, [.newReview, .ciFailed])
     }
 
-    // When `notificationsEnabled` is forced false, master + all per-type toggles are locked
-    // and enabledNotificationTypes is empty.
+    /// When `notificationsEnabled` is forced false, master + all per-type toggles are locked
+    /// and enabledNotificationTypes is empty.
     func testPerTypeLockedWhenNotificationsEnabledForcedFalse() {
         let managed = InMemoryManagedPreferences([ManagedKey.notificationsEnabled: false])
         let store = makeStore(managed: managed)
@@ -384,7 +384,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.enabledNotificationTypes.isEmpty)
     }
 
-    // When notificationsEnabled is forced true, per-type values still resolve from composite.
+    /// When notificationsEnabled is forced true, per-type values still resolve from composite.
     func testPerTypeLockedWhenNotificationsEnabledForcedTrueWithComposite() {
         let managed = InMemoryManagedPreferences([
             ManagedKey.notificationsEnabled: true,
@@ -396,7 +396,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.enabledNotificationTypes, [.reviewApproved])
     }
 
-    // When neither master nor composite is forced, per-type keys are not locked.
+    /// When neither master nor composite is forced, per-type keys are not locked.
     func testPerTypeNotLockedWhenNothingForced() {
         let store = makeStore(managed: InMemoryManagedPreferences())
         XCTAssertFalse(store.isLocked("notifyNewReview"))
@@ -451,10 +451,10 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func testForcedAnalyticsEnabledWinsOverUserDefaults() {
-        defaults.set(false, forKey: "analyticsEnabled")  // UserDefaults says false
-        let managed = InMemoryManagedPreferences([ManagedKey.analyticsEnabled: true])  // MDM says true
+        defaults.set(false, forKey: "analyticsEnabled") // UserDefaults says false
+        let managed = InMemoryManagedPreferences([ManagedKey.analyticsEnabled: true]) // MDM says true
         let store = makeStore(managed: managed)
-        XCTAssertTrue(store.analyticsEnabled)  // MDM wins
+        XCTAssertTrue(store.analyticsEnabled) // MDM wins
     }
 
     func testIsLockedAnalyticsEnabled() {

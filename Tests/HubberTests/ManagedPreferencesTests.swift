@@ -3,6 +3,7 @@ import XCTest
 @testable import Hubber
 
 // MARK: - ManagedPreferencesTests
+
 //
 // Uses InMemoryManagedPreferences (the test fake) to verify the protocol contract:
 //   • isForced returns true iff the key is present in the fake's dictionary.
@@ -61,6 +62,7 @@ final class ManagedPreferencesTests: XCTestCase {
     }
 
     // MARK: - ManagedKey registry coverage
+
     //
     // Verifies that every PRD-defined managed key constant is present and non-empty.
     // This acts as a regression guard against accidental key renames.

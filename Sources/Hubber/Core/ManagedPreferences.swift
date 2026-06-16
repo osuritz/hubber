@@ -2,6 +2,7 @@ import CoreFoundation
 import Foundation
 
 // MARK: - ManagedPreferences protocol
+
 //
 // Injectable seam for MDM managed-preference reads. The real implementation calls
 // CFPreferences; the test fake uses an in-memory dictionary.
@@ -48,6 +49,7 @@ struct CFManagedPreferences: ManagedPreferences {
 }
 
 // MARK: - ManagedKey registry (single source of truth)
+
 //
 // Maps PRD-documented IT-facing key names to constants. The managed-key name is the
 // IT-facing contract and must match the PRD/profile exactly. UserDefaults persistence

@@ -138,6 +138,7 @@ final class GitHubDevelopmentFileTokenStore: GitHubTokenStoring {
 }
 
 // MARK: - GitHubAuthServicing protocol
+
 //
 // Extracted from GitHubAuthService to allow injection of test spies. The real implementation
 // is GitHubAuthService; tests use a lightweight spy to verify call counts without hitting the
@@ -491,7 +492,8 @@ final class HubberStore: ObservableObject {
         guard policy.canConnectGitHubDotCom else {
             let reason = policy.blockedReason ?? "Sign-in is restricted by your organization."
             appendDeveloperLog("Sign-in blocked by policy: \(reason)")
-            authTask?.cancel(); authTask = nil // prevent session-restore from overwriting error
+            authTask?.cancel()
+            authTask = nil // prevent session-restore from overwriting error
             authState = .error(reason)
             return
         }

@@ -1,6 +1,7 @@
 import Foundation
 
 // MARK: - ProviderAccessPolicy
+
 //
 // Pure, Sendable value type. Encapsulates the IT/MDM-controlled rules that determine
 // whether a GitHub.com (personal) sign-in is permitted on this device.
@@ -19,7 +20,7 @@ import Foundation
 // The policy is read-only and evaluated synchronously. It contains no async operations
 // and no mutable state — safe to use from any context.
 
-struct ProviderAccessPolicy: Sendable {
+struct ProviderAccessPolicy {
     /// When true, github.com personal accounts are permitted (unless the allowlist is active
     /// and explicitly excludes github.com). Defaults to `true`.
     let allowPersonalGitHub: Bool

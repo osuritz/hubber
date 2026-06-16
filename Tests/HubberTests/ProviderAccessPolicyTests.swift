@@ -3,6 +3,7 @@ import XCTest
 @testable import Hubber
 
 // MARK: - ProviderAccessPolicyTests
+
 //
 // Full allow/block matrix for ProviderAccessPolicy:
 //

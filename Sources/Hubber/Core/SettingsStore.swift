@@ -9,6 +9,7 @@ final class SettingsStore: ObservableObject {
     private let managed: any ManagedPreferences
 
     // MARK: - SLO
+
     //
     // Note: the managed key is "sloEnabled" (PRD / IT-facing) but the UserDefaults
     // persistence key is "reviewSLOEnabled" (kept to avoid migrating existing user data).
@@ -51,6 +52,7 @@ final class SettingsStore: ObservableObject {
     }
 
     // MARK: - Privacy / Telemetry kill-switches (#53)
+
     //
     // Both default to true. Managed-lockable via MDM; user-toggleable in the Privacy settings
     // section. Gated at app launch in applicationDidFinishLaunching (main.swift).
@@ -64,6 +66,7 @@ final class SettingsStore: ObservableObject {
     }
 
     // MARK: - Provider access (#54)
+
     //
     // Controls which GitHub providers may connect. Today only github.com (personal) exists.
     // `providerAllowlist` is a list of allowed host strings (empty = no restriction).
@@ -172,6 +175,7 @@ final class SettingsStore: ObservableObject {
     }
 
     // MARK: - isLocked
+
     //
     // Maps UI / UserDefaults keys to their managed-key equivalents. The split exists
     // because "reviewSLOEnabled" (UserDefaults) corresponds to "sloEnabled" (MDM PRD key).
@@ -204,9 +208,9 @@ final class SettingsStore: ObservableObject {
         switch key {
         case "notifyNewReview", "notifyReviewApproved", "notifyChangesRequested",
              "notifyCIFailed", "notifyPRMerged":
-            return true
+            true
         default:
-            return false
+            false
         }
     }
 
@@ -338,8 +342,9 @@ final class SettingsStore: ObservableObject {
     private static func resolveRowDensity(defaults: UserDefaults, managed: any ManagedPreferences) -> RowDensity {
         if managed.isForced(ManagedKey.rowDensity) {
             // Int rawValue path
-            if let intVal = managed.value(ManagedKey.rowDensity) as? Int,
-               let density = RowDensity(rawValue: intVal) {
+            if
+                let intVal = managed.value(ManagedKey.rowDensity) as? Int,
+                let density = RowDensity(rawValue: intVal) {
                 return density
             }
             // String label path: "compact" | "normal" | "spacious"
@@ -399,8 +404,9 @@ final class SettingsStore: ObservableObject {
         defaults: UserDefaults,
         managed: any ManagedPreferences
     ) -> [String] {
-        if managed.isForced(ManagedKey.providerAllowlist),
-           let arr = managed.value(ManagedKey.providerAllowlist) as? [String] {
+        if
+            managed.isForced(ManagedKey.providerAllowlist),
+            let arr = managed.value(ManagedKey.providerAllowlist) as? [String] {
             return arr
         }
         return (defaults.array(forKey: ManagedKey.providerAllowlist) as? [String]) ?? []

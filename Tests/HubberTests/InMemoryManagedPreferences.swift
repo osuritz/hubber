@@ -2,6 +2,7 @@ import Foundation
 @testable import Hubber
 
 // MARK: - InMemoryManagedPreferences (test fake)
+
 //
 // Backed by a [String: Any] dictionary. Presence of a key implies it is forced.
 // Used in unit tests where CFPreferencesAppValueIsForced cannot be forced by the system.

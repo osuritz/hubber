@@ -3,6 +3,7 @@ import XCTest
 @testable import Hubber
 
 // MARK: - Spy auth service
+
 //
 // Captures whether `startDeviceFlow()` was called, for use in policy-enforcement tests.
 // Throws `GitHubAuthError.deviceFlowDisabled` if actually called (so the Task in
