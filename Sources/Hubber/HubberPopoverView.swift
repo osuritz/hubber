@@ -17,27 +17,70 @@ struct HubberPopoverView: View {
             HubberAppearance.panelFill(for: colorScheme)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
-
-                ScrollView {
-                    VStack(spacing: 0) {
-                        if showSettings {
-                            SettingsView(store: store, settings: store.settings)
-                        } else {
-                            content
-                        }
-                    }
-                }
-                .scrollIndicators(.visible)
-                .frame(maxHeight: .infinity)
-
-                footer
-            }
+            authBranchedBody
         }
         .foregroundStyle(.primary)
         .onChange(of: selectedTab) { _, newTab in
             store.telemetry.tabSwitched(to: newTab)
+        }
+    }
+
+    // MARK: - Auth-state branching
+
+    /// Top-level branch on auth state. Only `.signedIn` and `.sessionExpired`
+    /// show the normal header + tabs + content + footer chrome.
+    @ViewBuilder
+    private var authBranchedBody: some View {
+        switch store.authState {
+        case .restoring:
+            RestoringScreen()
+
+        case .signedOut:
+            SignInScreen(store: store)
+
+        case let .error(message):
+            SignInScreen(store: store)
+                .overlay(alignment: .top) {
+                    authErrorBanner(message: message)
+                }
+
+        case let .waitingForUser(authorization):
+            DeviceCodeScreen(store: store, authorization: authorization)
+
+        case .signedIn, .sessionExpired:
+            normalChrome
+        }
+    }
+
+    private func authErrorBanner(message: String) -> some View {
+        Text(message)
+            .font(.system(size: 11))
+            .foregroundStyle(HubberDesign.sloRed.fg)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(HubberDesign.sloRed.bg)
+    }
+
+    /// The normal popover chrome (header + tabs + scrollable content + footer).
+    private var normalChrome: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    if showSettings {
+                        SettingsView(store: store, settings: store.settings)
+                    } else {
+                        content
+                    }
+                }
+            }
+            .scrollIndicators(.visible)
+            .frame(maxHeight: .infinity)
+
+            footer
         }
     }
 
