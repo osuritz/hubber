@@ -83,16 +83,18 @@ final class SettingsStore: ObservableObject {
     // MARK: - MDM → UserDefaults → default priority
 
     private static func string(key: String, defaults: UserDefaults, fallback: String) -> String {
-        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? String {
+        if
+            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? String {
             return managed
         }
         return defaults.string(forKey: key) ?? fallback
     }
 
     private static func bool(key: String, defaults: UserDefaults, fallback: Bool) -> Bool {
-        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Bool {
+        if
+            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Bool {
             return managed
         }
         guard defaults.object(forKey: key) != nil else { return fallback }
@@ -100,8 +102,9 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func double(key: String, defaults: UserDefaults, fallback: Double) -> Double {
-        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Double {
+        if
+            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Double {
             return managed
         }
         guard defaults.object(forKey: key) != nil else { return fallback }
@@ -109,8 +112,9 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func int(key: String, defaults: UserDefaults, fallback: Int) -> Int {
-        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Int {
+        if
+            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Int {
             return managed
         }
         guard defaults.object(forKey: key) != nil else { return fallback }
