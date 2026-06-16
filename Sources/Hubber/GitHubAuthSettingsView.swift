@@ -51,11 +51,16 @@ struct GitHubAuthSettingsView: View {
                 .foregroundStyle(Color.hubberWarning)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button {
-                store.startSignIn()
-            } label: {
-                Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 8) {
+                Button {
+                    store.startSignIn()
+                } label: {
+                    Label("Sign in with GitHub", systemImage: "person.crop.circle.badge.checkmark")
+                }
+
+                Button("Sign out") {
+                    store.signOut()
+                }
             }
             .controlSize(.small)
         }

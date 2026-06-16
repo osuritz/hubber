@@ -183,10 +183,12 @@ private final class HubberMenuPanel: NSPanel {
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(signOut(_:)) {
-            if case .signedIn = store.authState {
+            switch store.authState {
+            case .signedIn, .sessionExpired:
                 return true
+            default:
+                return false
             }
-            return false
         }
         return true
     }
