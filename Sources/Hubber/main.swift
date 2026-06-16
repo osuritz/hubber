@@ -84,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostingView.layer?.masksToBounds = true
 
         panel.contentView = hostingView
+        panel.delegate = self
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
@@ -185,6 +186,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit(_ sender: Any?) {
         NSApp.terminate(sender)
     }
+
+    func applicationWillTerminate(_: Notification) {
+        if let appActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
+        }
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
+    }
 }
 
 private final class HubberMenuPanel: NSPanel {
@@ -194,6 +204,12 @@ private final class HubberMenuPanel: NSPanel {
 
     override var canBecomeMain: Bool {
         false
+    }
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_: Notification) {
+        store.setPopoverOpen(false)
     }
 }
 
