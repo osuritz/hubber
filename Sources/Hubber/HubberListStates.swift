@@ -106,6 +106,25 @@ struct LoadingState: View {
 struct SkeletonRow: View {
     var isLast = false
 
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var shimmerPulse = false
+
+    private var shimmerBase: Color {
+        colorScheme == .dark
+            ? .white.opacity(0.05)
+            : .black.opacity(0.04)
+    }
+
+    private var shimmerHighlight: Color {
+        colorScheme == .dark
+            ? .white.opacity(0.11)
+            : .black.opacity(0.09)
+    }
+
+    private var shimmerColor: Color {
+        shimmerPulse ? shimmerHighlight : shimmerBase
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
             // Avatar placeholder
@@ -142,14 +161,11 @@ struct SkeletonRow: View {
                 HubberDesign.sep.frame(height: 0.5)
             }
         }
-    }
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var shimmerColor: Color {
-        colorScheme == .dark
-            ? .white.opacity(0.08)
-            : .black.opacity(0.05)
+        .animation(
+            .easeInOut(duration: 1.4).repeatForever(autoreverses: true),
+            value: shimmerPulse
+        )
+        .onAppear { shimmerPulse = true }
     }
 }
 
@@ -200,41 +216,5 @@ struct EmptyOutgoingState: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
         .padding(.vertical, 40)
-    }
-}
-
-// MARK: - ReauthBanner
-
-/// Session-expired banner shown in-popover (not a full screen takeover).
-struct ReauthBanner: View {
-    var body: some View {
-        HStack(spacing: 10) {
-            // Lock icon (non-color cue: lock shape + "expired" text)
-            ZStack {
-                Circle()
-                    .fill(HubberDesign.sloAmber.bg)
-                    .overlay {
-                        Circle().stroke(HubberDesign.sloAmber.border, lineWidth: 0.5)
-                    }
-                    .frame(width: 34, height: 34)
-
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(HubberDesign.sloAmber.fg)
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Session expired")
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(HubberDesign.text)
-
-                Text("Sign in again to keep syncing")
-                    .font(HubberType.secondary)
-                    .foregroundStyle(HubberDesign.text2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
     }
 }
