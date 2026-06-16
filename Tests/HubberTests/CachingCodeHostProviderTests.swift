@@ -248,7 +248,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         XCTAssertEqual(first.map(\.id), second.map(\.id))
     }
 
-    /// e) Drafts cache hit within TTL
+    /// f) Drafts cache hit within TTL
     func testDraftsReturnsCachedResultWithinTTL() async throws {
         let spy = SpyProvider()
         let clock = TestClock(now: Date())
@@ -264,5 +264,66 @@ final class CachingCodeHostProviderTests: XCTestCase {
         let callCount = await spy.draftsCallCount
         XCTAssertEqual(callCount, 1, "Drafts spy should be called only once within TTL")
         XCTAssertEqual(first.map(\.id), second.map(\.id))
+    }
+
+    /// g) At exactly TTL (not TTL+1), the cache is expired because the guard is strict `< ttl`
+    func testRefetchesAtExactTTLBoundary() async throws {
+        let spy = SpyProvider()
+        let clock = TestClock(now: Date())
+        let sut = CachingCodeHostProvider(
+            wrapping: spy,
+            ttl: ttl,
+            now: { clock.now }
+        )
+
+        _ = try await sut.fetchIncomingReviews(
+            accessToken: "tok",
+            viewerLogin: "alice",
+            mode: .explicit
+        )
+
+        // Advance clock by EXACTLY ttl — the guard `< ttl` fails, so a refetch is required
+        clock.now = clock.now.addingTimeInterval(ttl)
+
+        _ = try await sut.fetchIncomingReviews(
+            accessToken: "tok",
+            viewerLogin: "alice",
+            mode: .explicit
+        )
+
+        let callCount = await spy.incomingCallCount
+        XCTAssertEqual(callCount, 2, "Cache guard is strict < ttl, so exactly ttl triggers a refetch")
+    }
+
+    /// h) invalidateAll forces a refetch even within TTL
+    func testInvalidateAllForcesRefetch() async throws {
+        let spy = SpyProvider()
+        let clock = TestClock(now: Date())
+        let sut = CachingCodeHostProvider(
+            wrapping: spy,
+            ttl: ttl,
+            now: { clock.now }
+        )
+
+        _ = try await sut.fetchIncomingReviews(
+            accessToken: "tok",
+            viewerLogin: "alice",
+            mode: .explicit
+        )
+
+        let firstCallCount = await spy.incomingCallCount
+        XCTAssertEqual(firstCallCount, 1, "Initial fetch should call spy once")
+
+        // Invalidate all caches — clock stays within TTL
+        await sut.invalidateAll()
+
+        _ = try await sut.fetchIncomingReviews(
+            accessToken: "tok",
+            viewerLogin: "alice",
+            mode: .explicit
+        )
+
+        let secondCallCount = await spy.incomingCallCount
+        XCTAssertEqual(secondCallCount, 2, "After invalidateAll, spy must be called again even within TTL")
     }
 }

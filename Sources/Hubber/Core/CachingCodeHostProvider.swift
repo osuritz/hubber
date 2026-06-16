@@ -1,6 +1,6 @@
 import Foundation
 
-actor CachingCodeHostProvider: CodeHostProvider {
+actor CachingCodeHostProvider: CodeHostProvider, CodeHostCacheInvalidating {
     private let wrapped: any CodeHostProvider
     private let ttl: TimeInterval
     private let now: @Sendable () -> Date
@@ -71,5 +71,13 @@ actor CachingCodeHostProvider: CodeHostProvider {
         )
         drafts[key] = (now(), value)
         return value
+    }
+
+    // MARK: - CodeHostCacheInvalidating
+
+    func invalidateAll() {
+        incoming.removeAll()
+        outgoing.removeAll()
+        drafts.removeAll()
     }
 }

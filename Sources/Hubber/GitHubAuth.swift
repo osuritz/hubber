@@ -504,6 +504,9 @@ final class HubberStore: ObservableObject {
         stopPullRequestRefreshLoop()
         authTask = Task {
             do {
+                if let invalidating = provider as? CodeHostCacheInvalidating {
+                    await invalidating.invalidateAll()
+                }
                 try await deleteStoredToken()
                 authState = .signedOut
                 data = HubberData.sample

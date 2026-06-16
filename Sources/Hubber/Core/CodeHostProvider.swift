@@ -21,3 +21,10 @@ protocol CodeHostProvider: Sendable {
     ) async throws
         -> [DraftReview]
 }
+
+/// Adopted by providers that support evicting their in-memory cache on demand.
+/// Call `invalidateAll()` on sign-out to prevent a newly-signed-in account from
+/// seeing the previous user's cached data within the remaining TTL window.
+protocol CodeHostCacheInvalidating: Sendable {
+    func invalidateAll() async
+}
