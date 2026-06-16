@@ -33,6 +33,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(unresolvedMode.rawValue, forKey: "unresolvedThreadMode") }
     }
 
+    // MARK: - Menubar badge
+
+    @Published var badgeMode: BadgeMode {
+        didSet { defaults.set(badgeMode.rawValue, forKey: "badgeMode") }
+    }
+
     // MARK: - Appearance
 
     @Published var rowDensity: RowDensity {
@@ -68,6 +74,13 @@ final class SettingsStore: ObservableObject {
         rowDensity = RowDensity(
             rawValue: Self.int(key: "rowDensity", defaults: defaults, fallback: RowDensity.normal.rawValue)
         ) ?? .normal
+        badgeMode = BadgeMode(
+            rawValue: Self.string(
+                key: "badgeMode",
+                defaults: defaults,
+                fallback: BadgeMode.attentionNeeded.rawValue
+            )
+        ) ?? .attentionNeeded
     }
 
     /// Returns true when a key is locked via MDM managed preferences.

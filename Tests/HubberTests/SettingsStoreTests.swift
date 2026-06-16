@@ -61,4 +61,26 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults)
         XCTAssertEqual(store.sloHours, 12.0)
     }
+
+    // MARK: - badgeMode
+
+    func testDefaultBadgeModeIsAttentionNeeded() {
+        XCTAssertEqual(sut.badgeMode, .attentionNeeded)
+    }
+
+    func testBadgeModePersistedToUserDefaults() {
+        sut.badgeMode = .incomingCount
+        XCTAssertEqual(defaults.string(forKey: "badgeMode"), BadgeMode.incomingCount.rawValue)
+    }
+
+    func testBadgeModeOffPersistedToUserDefaults() {
+        sut.badgeMode = .off
+        XCTAssertEqual(defaults.string(forKey: "badgeMode"), BadgeMode.off.rawValue)
+    }
+
+    func testUserDefaultsValueOverridesBadgeModeDefault() {
+        defaults.set(BadgeMode.incomingCount.rawValue, forKey: "badgeMode")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.badgeMode, .incomingCount)
+    }
 }

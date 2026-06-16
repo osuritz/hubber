@@ -90,6 +90,24 @@ enum IncomingReviewMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum BadgeMode: String, CaseIterable, Identifiable {
+    case incomingCount
+    case attentionNeeded
+    case off
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .incomingCount: "Incoming"
+        case .attentionNeeded: "Attention"
+        case .off: "Off"
+        }
+    }
+}
+
 enum UnresolvedThreadMode: String, CaseIterable, Identifiable {
     case allOpen
     case reviewOnly
