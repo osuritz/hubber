@@ -126,16 +126,27 @@ A ready-to-edit sample profile is at
 
 ### Deploying via Jamf Pro
 
+**Option A — Upload the full mobileconfig (recommended):**
+
 1. Go to **Computers → Configuration Profiles → New**.
 2. In **General**, give the profile a name (e.g. "Hubber MDM Settings").
-3. Add the **Application & Custom Settings** payload.
-4. Choose **External Applications** (custom domain).
-5. Enter the Preference Domain: `com.hubber.app`.
-6. Upload the `.plist` content from the sample profile (or paste PLIST XML directly).
-7. Save and scope to the target computers.
+3. Click **Upload** and select the edited `hubber-managed.mobileconfig` file.
+4. Save and scope to the target computers.
+
+**Option B — Application & Custom Settings / External Applications:**
+
+1. Go to **Computers → Configuration Profiles → New**.
+2. In **General**, give the profile a name.
+3. Add the **Application & Custom Settings** payload, choose **External Applications**.
+4. Enter the Preference Domain: `com.hubber.app`.
+5. In the PLIST editor, paste **only the inner `mcx_preference_settings` dictionary**
+   (the `<dict>` containing your key/value pairs from the sample profile).
+   Jamf wraps this content in the correct MCX structure automatically.
+6. Save and scope to the target computers.
 
 > **Jamf note:** The "External Applications" option appears in Jamf Pro 10.35+. Earlier versions
-> use "Application & Custom Settings → Custom Schema" with manual PLIST upload.
+> use "Application & Custom Settings → Custom Schema" with manual PLIST upload. When in doubt,
+> use Option A (full mobileconfig upload) to ensure the correct MCX nesting is preserved.
 
 ### Deploying via Kandji
 

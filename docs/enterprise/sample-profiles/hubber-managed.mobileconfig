@@ -12,6 +12,11 @@
     4. Uncomment and edit the keys you want to force. Remove keys you do not want
        to manage (leaving a key absent lets the user configure it freely).
     5. Upload to your MDM (Jamf / Kandji / Mosyle) as a Custom Profile.
+       - For Jamf Pro "External Applications / custom domain": upload only the
+         inner preferences dict (the mcx_preference_settings dict) with domain
+         com.hubber.app, OR use the "Custom Profile" upload flow with this full
+         mobileconfig file (recommended — preserves the correct MCX nesting).
+       - For Kandji / Mosyle: upload this full mobileconfig file directly.
 
   DOMAIN:
     com.hubber.app — deliberately decoupled from the bundle id (com.osuritz.hubber)
@@ -64,7 +69,9 @@
     <key>PayloadContent</key>
     <array>
         <dict>
-            <!-- Custom Settings payload for domain com.hubber.app -->
+            <!-- Custom Settings payload for domain com.hubber.app            -->
+            <!-- Uses com.apple.ManagedClient.preferences with the standard   -->
+            <!-- MCX nesting: domain dict → Forced array → mcx_preference_settings -->
             <key>PayloadType</key>
             <string>com.apple.ManagedClient.preferences</string>
 
@@ -83,141 +90,153 @@
             <key>PayloadDisplayName</key>
             <string>Hubber Preferences</string>
 
-            <!-- ============================================================ -->
-            <!-- Forced (managed) preferences — keyed to com.hubber.app       -->
-            <!-- Only keys listed here are forced; absent keys are user-editable -->
-            <!-- ============================================================ -->
             <key>PayloadEnabled</key>
             <true/>
 
-            <key>Forced</key>
-            <array>
-                <dict>
-                    <key>mcx_preference_settings</key>
+            <!-- ============================================================ -->
+            <!-- MCX preference nesting required by profilesserviced:         -->
+            <!--   PayloadContent(dict)                                        -->
+            <!--     com.hubber.app(dict)                                      -->
+            <!--       Forced(array)                                           -->
+            <!--         dict                                                  -->
+            <!--           mcx_preference_settings(dict of key→value)         -->
+            <!-- Only keys inside mcx_preference_settings are forced; absent  -->
+            <!-- keys are left user-editable.                                 -->
+            <!-- ============================================================ -->
+            <key>com.hubber.app</key>
+            <dict>
+                <key>Forced</key>
+                <array>
                     <dict>
+                        <key>mcx_preference_settings</key>
+                        <dict>
 
-                        <!-- ------------------------------------------------ -->
-                        <!-- TELEMETRY KILL-SWITCHES                           -->
-                        <!-- Disable both to comply with privacy policies.     -->
-                        <!-- ------------------------------------------------ -->
+                            <!-- -------------------------------------------- -->
+                            <!-- TELEMETRY KILL-SWITCHES                        -->
+                            <!-- Disable both to comply with privacy policies.  -->
+                            <!-- -------------------------------------------- -->
 
-                        <!-- analyticsEnabled: Bool (default true)             -->
-                        <!-- false = TelemetryDeck SDK never initialised       -->
-                        <key>analyticsEnabled</key>
-                        <false/>
+                            <!-- analyticsEnabled: Bool (default true)          -->
+                            <!-- false = TelemetryDeck SDK never initialised    -->
+                            <key>analyticsEnabled</key>
+                            <false/>
 
-                        <!-- crashReportingEnabled: Bool (default true)        -->
-                        <!-- false = MetricKit subscriber never registered     -->
-                        <key>crashReportingEnabled</key>
-                        <false/>
+                            <!-- crashReportingEnabled: Bool (default true)     -->
+                            <!-- false = MetricKit subscriber never registered  -->
+                            <key>crashReportingEnabled</key>
+                            <false/>
 
-                        <!-- ------------------------------------------------ -->
-                        <!-- PROVIDER ACCESS CONTROL                           -->
-                        <!-- Uncomment to block personal GitHub sign-in.      -->
-                        <!-- ------------------------------------------------ -->
+                            <!-- -------------------------------------------- -->
+                            <!-- PROVIDER ACCESS CONTROL                        -->
+                            <!-- Uncomment to block personal GitHub sign-in.   -->
+                            <!-- -------------------------------------------- -->
 
-                        <!-- allowPersonalGitHub: Bool (default true)          -->
-                        <!-- false = github.com sign-in is blocked; UI shows  -->
-                        <!--         "restricted by your organization" message -->
-                        <key>allowPersonalGitHub</key>
-                        <false/>
+                            <!-- allowPersonalGitHub: Bool (default true)       -->
+                            <!-- false = github.com sign-in is blocked; UI     -->
+                            <!--         shows "restricted by your org" message -->
+                            <key>allowPersonalGitHub</key>
+                            <false/>
 
-                        <!-- providerAllowlist: Array<String> (default [])     -->
-                        <!-- Non-empty = only listed hosts permitted.         -->
-                        <!-- Replace with your GitHub Enterprise hostname(s). -->
-                        <!-- Remove this key to allow all hosts.              -->
-                        <key>providerAllowlist</key>
-                        <array>
-                            <string>github.yourcompany.com</string>
-                        </array>
+                            <!-- providerAllowlist: Array<String> (default [])  -->
+                            <!-- Non-empty = only listed hosts permitted.      -->
+                            <!-- Replace with your GitHub Enterprise hostname.  -->
+                            <!-- Remove this key to allow all hosts.           -->
+                            <key>providerAllowlist</key>
+                            <array>
+                                <string>github.yourcompany.com</string>
+                            </array>
 
-                        <!-- ------------------------------------------------ -->
-                        <!-- SLO SETTINGS                                      -->
-                        <!-- ------------------------------------------------ -->
+                            <!-- -------------------------------------------- -->
+                            <!-- SLO SETTINGS                                   -->
+                            <!-- -------------------------------------------- -->
 
-                        <!-- sloWindowHours: Integer (default 24)              -->
-                        <!-- Enforce a 48-hour SLO window org-wide.           -->
-                        <key>sloWindowHours</key>
-                        <integer>48</integer>
+                            <!-- sloWindowHours: Integer (default 4)            -->
+                            <!-- Enforce a 48-hour SLO window org-wide.        -->
+                            <key>sloWindowHours</key>
+                            <integer>48</integer>
 
-                        <!-- sloEnabled: Bool (default true)                   -->
-                        <!-- Uncomment to force-enable or force-disable SLO.  -->
-                        <!--
-                        <key>sloEnabled</key>
-                        <true/>
-                        -->
+                            <!-- sloEnabled: Bool (default true)                -->
+                            <!-- Uncomment to force-enable or force-disable.   -->
+                            <!--
+                            <key>sloEnabled</key>
+                            <true/>
+                            -->
 
-                        <!-- sloDisplay: String (default "badge")              -->
-                        <!-- Values: "badge" | "menu" | "both"                -->
-                        <!--
-                        <key>sloDisplay</key>
-                        <string>both</string>
-                        -->
+                            <!-- sloDisplay: String (default "remaining")       -->
+                            <!-- Values: "remaining" | "elapsed" | "traffic"   -->
+                            <!--
+                            <key>sloDisplay</key>
+                            <string>remaining</string>
+                            -->
 
-                        <!-- ------------------------------------------------ -->
-                        <!-- NOTIFICATIONS                                     -->
-                        <!-- ------------------------------------------------ -->
+                            <!-- -------------------------------------------- -->
+                            <!-- NOTIFICATIONS                                  -->
+                            <!-- -------------------------------------------- -->
 
-                        <!-- notificationsEnabled: Bool (default true)         -->
-                        <!-- false = all notifications off and toggles locked  -->
-                        <key>notificationsEnabled</key>
-                        <true/>
+                            <!-- notificationsEnabled: Bool (default true)      -->
+                            <!-- false = all notifications off + toggles locked -->
+                            <key>notificationsEnabled</key>
+                            <true/>
 
-                        <!-- defaultNotificationEvents: Array<String>         -->
-                        <!-- Restrict which event types trigger notifications. -->
-                        <!-- When forced, per-type toggles are all locked.    -->
-                        <!-- Available codes:                                  -->
-                        <!--   review_requested, mentioned, assigned, push,   -->
-                        <!--   resolved, closed                                -->
-                        <!-- Uncomment to restrict to critical events only:   -->
-                        <!--
-                        <key>defaultNotificationEvents</key>
-                        <array>
-                            <string>review_requested</string>
-                            <string>mentioned</string>
-                        </array>
-                        -->
+                            <!-- defaultNotificationEvents: Array<String>      -->
+                            <!-- Restrict which event types trigger notifs.    -->
+                            <!-- When forced, per-type toggles are all locked. -->
+                            <!-- Available codes:                               -->
+                            <!--   newReview, reviewApproved, changesRequested -->
+                            <!--   ciFailed, prMerged                          -->
+                            <!-- Uncomment to restrict to critical events only: -->
+                            <!--
+                            <key>defaultNotificationEvents</key>
+                            <array>
+                                <string>newReview</string>
+                                <string>ciFailed</string>
+                            </array>
+                            -->
 
-                        <!-- ------------------------------------------------ -->
-                        <!-- APPEARANCE / BADGE                                -->
-                        <!-- ------------------------------------------------ -->
+                            <!-- -------------------------------------------- -->
+                            <!-- APPEARANCE / BADGE                             -->
+                            <!-- -------------------------------------------- -->
 
-                        <!-- badgeMode: String (default "count")               -->
-                        <!-- Values: "count" | "dot" | "none"                 -->
-                        <!--
-                        <key>badgeMode</key>
-                        <string>count</string>
-                        -->
+                            <!-- badgeMode: String (default "attentionNeeded") -->
+                            <!-- Values: "incomingCount" | "attentionNeeded"  -->
+                            <!--         | "off"                               -->
+                            <!--
+                            <key>badgeMode</key>
+                            <string>attentionNeeded</string>
+                            -->
 
-                        <!-- rowDensity: String or Int (default "normal" / 1) -->
-                        <!-- String: "compact" | "normal" | "spacious"        -->
-                        <!-- Int:    0          | 1        | 2                 -->
-                        <!--
-                        <key>rowDensity</key>
-                        <string>normal</string>
-                        -->
+                            <!-- rowDensity: String or Int                     -->
+                            <!-- String: "compact" | "normal" | "spacious"    -->
+                            <!-- Int:     1         | 2        | 3             -->
+                            <!-- default: "normal" (2)                        -->
+                            <!--
+                            <key>rowDensity</key>
+                            <string>normal</string>
+                            -->
 
-                        <!-- ------------------------------------------------ -->
-                        <!-- PR MODES                                          -->
-                        <!-- ------------------------------------------------ -->
+                            <!-- -------------------------------------------- -->
+                            <!-- PR MODES                                       -->
+                            <!-- -------------------------------------------- -->
 
-                        <!-- incomingMode: String (default "all")              -->
-                        <!-- Values: "all" | "assigned" | "team"              -->
-                        <!--
-                        <key>incomingMode</key>
-                        <string>all</string>
-                        -->
+                            <!-- incomingMode: String (default "explicit")     -->
+                            <!-- Values: "explicit" | "team"                  -->
+                            <!--
+                            <key>incomingMode</key>
+                            <string>explicit</string>
+                            -->
 
-                        <!-- unresolvedThreadMode: String (default "badge")   -->
-                        <!-- Values: "badge" | "none"                         -->
-                        <!--
-                        <key>unresolvedThreadMode</key>
-                        <string>badge</string>
-                        -->
+                            <!-- unresolvedThreadMode: String (default "allOpen") -->
+                            <!-- Values: "allOpen" | "reviewOnly"             -->
+                            <!--         | "changesRequested"                  -->
+                            <!--
+                            <key>unresolvedThreadMode</key>
+                            <string>allOpen</string>
+                            -->
 
+                        </dict>
                     </dict>
-                </dict>
-            </array>
+                </array>
+            </dict>
 
         </dict>
     </array>
