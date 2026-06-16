@@ -57,11 +57,13 @@ struct SettingsView: View {
                         Text("Show SLO as")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(settings.sloEnabled ? HubberDesign.text : HubberDesign.text3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Picker("", selection: $settings.sloDisplay) {
                             ForEach(SLODisplay.allCases) { Text($0.title).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
+                        .frame(maxWidth: .infinity)
                         .disabled(!settings.sloEnabled)
                         .opacity(settings.sloEnabled ? 1 : 0.45)
                     }
@@ -71,11 +73,13 @@ struct SettingsView: View {
                         Text("Incoming requests")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Picker("", selection: $settings.incomingMode) {
                             ForEach(IncomingReviewMode.allCases) { Text($0.title).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
+                        .frame(maxWidth: .infinity)
                         .disabled(settings.isLocked("incomingMode"))
                     }
                 }
@@ -93,11 +97,13 @@ struct SettingsView: View {
                                 .font(HubberType.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Picker("", selection: $settings.unresolvedMode) {
                             ForEach(UnresolvedThreadMode.allCases) { Text($0.title).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
+                        .frame(maxWidth: .infinity)
                         .disabled(settings.isLocked("unresolvedThreadMode"))
                     }
                 }
@@ -110,11 +116,13 @@ struct SettingsView: View {
                         Text("Row density")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Picker("", selection: $settings.rowDensity) {
                             ForEach(RowDensity.allCases) { Text($0.title).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
+                        .frame(maxWidth: .infinity)
                         .disabled(settings.isLocked("rowDensity"))
                     }
                 }
@@ -127,11 +135,13 @@ struct SettingsView: View {
                         Text("Badge shows")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Picker("", selection: $settings.badgeMode) {
                             ForEach(BadgeMode.allCases) { Text($0.title).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
+                        .frame(maxWidth: .infinity)
                         .disabled(settings.isLocked("badgeMode"))
                     }
                 }
