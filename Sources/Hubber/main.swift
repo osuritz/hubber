@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pulsePhase: Double = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        TelemetryDeckSink.initialize()
         NSApp.setActivationPolicy(.accessory)
 
         let contentView = HubberPopoverView(store: store)
@@ -208,6 +209,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.setFrameOrigin(panelOrigin(relativeTo: sender))
             panel.orderFrontRegardless()
             store.setPopoverOpen(true)
+            emitSessionOpenedEvents()
+        }
+    }
+
+    private func emitSessionOpenedEvents() {
+        let data = store.data
+        let settings = store.settings
+        store.telemetry.sessionOpened()
+        store.telemetry.sessionCounts(
+            incoming: data.incoming.count,
+            outgoing: data.outgoing.count,
+            drafts: data.drafts.count
+        )
+        // Emit SLO distribution only when SLO is enabled.
+        if settings.sloEnabled {
+            let sloHours = settings.sloHours
+            var green = 0, amber = 0, red = 0
+            for review in data.incoming {
+                let ratio = review.assignedAgoHours / sloHours
+                if ratio < 0.5 {
+                    green += 1
+                } else if ratio < 1.0 {
+                    amber += 1
+                } else {
+                    red += 1
+                }
+            }
+            store.telemetry.sloDistribution(green: green, amber: amber, red: red)
         }
     }
 

@@ -36,6 +36,9 @@ struct HubberPopoverView: View {
             }
         }
         .foregroundStyle(.primary)
+        .onChange(of: selectedTab) { _, newTab in
+            store.telemetry.tabSwitched(to: newTab)
+        }
     }
 
     private var header: some View {
@@ -159,7 +162,7 @@ struct HubberPopoverView: View {
             }
             let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
             ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
+                ClickableRow(url: review.url, onOpen: { store.telemetry.itemOpened(in: .incoming) }) {
                     IncomingReviewRow(
                         review: review,
                         isSLOEnabled: store.settings.sloEnabled,
@@ -193,7 +196,7 @@ struct HubberPopoverView: View {
                 )
             }
             ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
-                ClickableRow(url: review.url) {
+                ClickableRow(url: review.url, onOpen: { store.telemetry.itemOpened(in: .outgoing) }) {
                     OutgoingReviewRow(
                         review: review,
                         density: store.settings.rowDensity,
@@ -225,7 +228,7 @@ struct HubberPopoverView: View {
                 )
             }
             ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
-                ClickableRow(url: draft.url) {
+                ClickableRow(url: draft.url, onOpen: { store.telemetry.itemOpened(in: .drafts) }) {
                     DraftPRRow(
                         draft: draft,
                         density: store.settings.rowDensity,
@@ -293,11 +296,13 @@ struct HubberPopoverView: View {
 
 private struct ClickableRow<Content: View>: View {
     let url: URL?
+    var onOpen: (() -> Void)?
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         if let url {
             Button {
+                onOpen?()
                 NSWorkspace.shared.open(url)
             } label: {
                 content()

@@ -358,6 +358,7 @@ final class HubberStore: ObservableObject {
     }
 
     let settings: SettingsStore // exposed so views can bind
+    let telemetry: Telemetry // exposed so views can emit events
 
     private let authService: GitHubAuthService
     private let provider: any CodeHostProvider
@@ -371,12 +372,14 @@ final class HubberStore: ObservableObject {
         provider: any CodeHostProvider = CachingCodeHostProvider(wrapping: GitHubProvider()),
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
         settings: SettingsStore = SettingsStore(),
-        idle: any MachineIdleProviding = SystemIdleProvider()
+        idle: any MachineIdleProviding = SystemIdleProvider(),
+        telemetry: Telemetry = Telemetry(sink: TelemetryDeckSink())
     ) {
         self.authService = authService
         self.provider = provider
         self.tokenStore = tokenStore
         self.settings = settings
+        self.telemetry = telemetry
         scheduler = RefreshScheduler(idle: idle)
         restoreSession()
     }
@@ -558,6 +561,7 @@ final class HubberStore: ObservableObject {
         }
 
         appendDeveloperLog("Manual pull request refresh requested")
+        telemetry.manualRefresh()
         scheduler.reset()
     }
 
