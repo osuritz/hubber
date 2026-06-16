@@ -169,4 +169,153 @@ final class GitHubProviderTests: XCTestCase {
     static let emptySearchResponse = Data("""
     { "data": { "search": { "nodes": [] } } }
     """.utf8)
+
+    // MARK: - Outgoing
+
+    func testFetchOutgoingPullRequestsMapsGraphQLNodes() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.outgoingPRsResponse)
+        }
+
+        let prs = try await provider.fetchOutgoingPullRequests(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        XCTAssertEqual(prs.count, 1)
+        XCTAssertEqual(prs[0].number, 9830)
+        XCTAssertEqual(prs[0].title, "Webhook rotation")
+        XCTAssertEqual(prs[0].ci, .passing)
+        XCTAssertEqual(prs[0].ciDetail, "12/12 checks")
+        XCTAssertEqual(prs[0].unresolved, 0)
+        XCTAssertEqual(prs[0].approvals, 1)
+        XCTAssertEqual(prs[0].requiredApprovals, 1)
+        XCTAssertEqual(prs[0].reviewers.count, 1)
+        XCTAssertEqual(prs[0].reviewers[0].state, .approved)
+    }
+
+    func testFetchOutgoingPullRequestsCountsUnresolvedThreadsForAllOpenMode() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.outgoingWithUnresolvedResponse)
+        }
+
+        let prs = try await provider.fetchOutgoingPullRequests(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        XCTAssertEqual(prs[0].unresolved, 2) // 2 open non-outdated threads
+    }
+
+    func testFetchOutgoingPullRequestsFiltersOutDrafts() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.outgoingWithDraftResponse)
+        }
+
+        let prs = try await provider.fetchOutgoingPullRequests(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        XCTAssertTrue(prs.isEmpty)
+    }
+
+    static let outgoingPRsResponse = Data("""
+    {
+      "data": {
+        "viewer": {
+          "pullRequests": {
+            "nodes": [{
+              "id": "PR_9830",
+              "number": 9830,
+              "title": "Webhook rotation",
+              "url": "https://github.com/acme/api/pull/9830",
+              "isDraft": false,
+              "updatedAt": "2026-06-15T09:00:00Z",
+              "mergeable": "MERGEABLE",
+              "repository": { "nameWithOwner": "acme/api" },
+              "commits": {
+                "nodes": [{
+                  "commit": {
+                    "statusCheckRollup": {
+                      "state": "SUCCESS",
+                      "contexts": {
+                        "totalCount": 12,
+                        "nodes": []
+                      }
+                    }
+                  }
+                }]
+              },
+              "reviewThreads": { "nodes": [] },
+              "latestReviews": {
+                "nodes": [{
+                  "author": { "login": "kenji", "avatarUrl": null },
+                  "state": "APPROVED"
+                }]
+              }
+            }]
+          }
+        }
+      }
+    }
+    """.utf8)
+
+    static let outgoingWithUnresolvedResponse = Data("""
+    {
+      "data": {
+        "viewer": {
+          "pullRequests": {
+            "nodes": [{
+              "id": "PR_9826",
+              "number": 9826,
+              "title": "Search debounce",
+              "url": "https://github.com/acme/web/pull/9826",
+              "isDraft": false,
+              "updatedAt": "2026-06-15T08:00:00Z",
+              "mergeable": "MERGEABLE",
+              "repository": { "nameWithOwner": "acme/web" },
+              "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] },
+              "reviewThreads": {
+                "nodes": [
+                  { "isResolved": false, "isOutdated": false, "comments": { "nodes": [{ "author": { "login": "tobi" }, "pullRequestReview": { "state": "CHANGES_REQUESTED", "author": { "login": "tobi" } } }] } },
+                  { "isResolved": true,  "isOutdated": false, "comments": { "nodes": [] } },
+                  { "isResolved": false, "isOutdated": true,  "comments": { "nodes": [] } },
+                  { "isResolved": false, "isOutdated": false, "comments": { "nodes": [{ "author": { "login": "ines" }, "pullRequestReview": null }] } }
+                ]
+              },
+              "latestReviews": { "nodes": [] }
+            }]
+          }
+        }
+      }
+    }
+    """.utf8)
+
+    static let outgoingWithDraftResponse = Data("""
+    {
+      "data": {
+        "viewer": {
+          "pullRequests": {
+            "nodes": [{
+              "id": "PR_9835",
+              "number": 9835,
+              "title": "Draft spike",
+              "url": "https://github.com/acme/api/pull/9835",
+              "isDraft": true,
+              "updatedAt": "2026-06-15T07:00:00Z",
+              "mergeable": "UNKNOWN",
+              "repository": { "nameWithOwner": "acme/api" },
+              "commits": { "nodes": [] },
+              "reviewThreads": { "nodes": [] },
+              "latestReviews": { "nodes": [] }
+            }]
+          }
+        }
+      }
+    }
+    """.utf8)
 }
