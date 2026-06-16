@@ -25,7 +25,7 @@ enum PullRequestCI: String {
     case pending
 }
 
-enum ReviewerState {
+enum ReviewerState: String {
     case approved
     case changesRequested
     case commented
