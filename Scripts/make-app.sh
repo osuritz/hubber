@@ -89,10 +89,16 @@ PLIST
 # Note: no app icon (.icns) yet — follow-up in M4b.
 
 # ---------------------------------------------------------------------------
-# 3. Ad-hoc code signing (no --options runtime; that requires notarization)
+# 3. Code signing (no --options runtime; that requires notarization).
+#    Defaults to ad-hoc ("-"). Set HUBBER_SIGN_IDENTITY to a stable self-signed
+#    code-signing certificate name to keep the signature consistent across
+#    rebuilds — that stops the repeated Keychain "allow access" prompts that
+#    ad-hoc causes (its signature changes every build). Gatekeeper still needs
+#    "Open Anyway" for a self-signed identity.
 # ---------------------------------------------------------------------------
-echo "==> Ad-hoc signing $APP"
-codesign --force --deep --sign - "$APP"
+SIGN_IDENTITY="${HUBBER_SIGN_IDENTITY:--}"
+echo "==> Code signing $APP (identity: $SIGN_IDENTITY)"
+codesign --force --deep --sign "$SIGN_IDENTITY" "$APP"
 
 # ---------------------------------------------------------------------------
 # 4. Verify signature
