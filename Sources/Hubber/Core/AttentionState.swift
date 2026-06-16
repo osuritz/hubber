@@ -5,7 +5,7 @@ enum AttentionState {
     /// Returns the set of PR ids that need action: every incoming review
     /// plus outgoing with failing CI plus outgoing with unresolved > 0.
     @MainActor
-    static func attentionItems(data: HubberData, settings: SettingsStore) -> Set<String> {
+    static func attentionItems(data: HubberData) -> Set<String> {
         var ids = Set<String>()
         for review in data.incoming {
             ids.insert(review.id)
@@ -20,7 +20,7 @@ enum AttentionState {
 
     @MainActor
     static func attentionCount(data: HubberData, settings: SettingsStore) -> Int {
-        attentionItems(data: data, settings: settings).count
+        attentionItems(data: data).count
     }
 
     @MainActor
