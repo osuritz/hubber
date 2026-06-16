@@ -110,20 +110,64 @@ struct GitHubAuthSettingsView: View {
     }
 
     private func signedInView(login: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color.hubberSuccess)
+        HStack(spacing: 10) {
+            AvatarView(
+                user: GitHubUser(
+                    login: login,
+                    initials: initials(for: store.viewerName ?? login),
+                    color: avatarColor(for: login),
+                    avatarURL: store.viewerAvatarURL
+                ),
+                size: AvatarSize.row.rawValue
+            )
 
-            Text("@\(login)")
-                .font(.system(size: 13, weight: .semibold))
+            VStack(alignment: .leading, spacing: 1) {
+                if let name = store.viewerName, !name.isEmpty {
+                    Text(name)
+                        .font(HubberType.title)
+                        .foregroundStyle(HubberDesign.text)
+                    Text("@\(login)")
+                        .font(HubberType.secondary)
+                        .foregroundStyle(HubberDesign.text2)
+                } else {
+                    Text("@\(login)")
+                        .font(HubberType.title)
+                        .foregroundStyle(HubberDesign.text)
+                }
+            }
 
             Spacer()
 
             Button("Sign out") {
                 store.signOut()
             }
+            .buttonStyle(.bordered)
             .controlSize(.small)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Avatar helpers
+
+    private func initials(for name: String) -> String {
+        let words = name.split(separator: " ").prefix(2)
+        if
+            words.count >= 2,
+            let first = words[0].first,
+            let second = words[1].first {
+            return "\(first)\(second)".uppercased()
+        } else if let first = name.first {
+            return String(first).uppercased()
+        }
+        return "?"
+    }
+
+    /// Deterministic hue from login — mirrors the GitHubProvider avatar color approach.
+    private func avatarColor(for login: String) -> Color {
+        let hue = Double(abs(login.hashValue) % 360) / 360.0
+        return Color(hue: hue, saturation: 0.55, brightness: 0.70)
     }
 
     private func errorView(message: String) -> some View {
