@@ -45,6 +45,45 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rowDensity.rawValue, forKey: "rowDensity") }
     }
 
+    // MARK: - Notifications (#37)
+
+    /// Master toggle — when false, no notifications are sent regardless of per-type flags.
+    @Published var notificationsEnabled: Bool {
+        didSet { defaults.set(notificationsEnabled, forKey: "notificationsEnabled") }
+    }
+
+    @Published var notifyNewReview: Bool {
+        didSet { defaults.set(notifyNewReview, forKey: "notifyNewReview") }
+    }
+
+    @Published var notifyReviewApproved: Bool {
+        didSet { defaults.set(notifyReviewApproved, forKey: "notifyReviewApproved") }
+    }
+
+    @Published var notifyChangesRequested: Bool {
+        didSet { defaults.set(notifyChangesRequested, forKey: "notifyChangesRequested") }
+    }
+
+    @Published var notifyCIFailed: Bool {
+        didSet { defaults.set(notifyCIFailed, forKey: "notifyCIFailed") }
+    }
+
+    @Published var notifyPRMerged: Bool {
+        didSet { defaults.set(notifyPRMerged, forKey: "notifyPRMerged") }
+    }
+
+    /// The set of enabled event types (empty when `notificationsEnabled == false`).
+    var enabledNotificationTypes: Set<NotificationEventType> {
+        guard notificationsEnabled else { return [] }
+        var types: Set<NotificationEventType> = []
+        if notifyNewReview { types.insert(.newReview) }
+        if notifyReviewApproved { types.insert(.reviewApproved) }
+        if notifyChangesRequested { types.insert(.changesRequested) }
+        if notifyCIFailed { types.insert(.ciFailed) }
+        if notifyPRMerged { types.insert(.prMerged) }
+        return types
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -81,6 +120,12 @@ final class SettingsStore: ObservableObject {
                 fallback: BadgeMode.attentionNeeded.rawValue
             )
         ) ?? .attentionNeeded
+        notificationsEnabled = Self.bool(key: "notificationsEnabled", defaults: defaults, fallback: true)
+        notifyNewReview = Self.bool(key: "notifyNewReview", defaults: defaults, fallback: true)
+        notifyReviewApproved = Self.bool(key: "notifyReviewApproved", defaults: defaults, fallback: false)
+        notifyChangesRequested = Self.bool(key: "notifyChangesRequested", defaults: defaults, fallback: false)
+        notifyCIFailed = Self.bool(key: "notifyCIFailed", defaults: defaults, fallback: false)
+        notifyPRMerged = Self.bool(key: "notifyPRMerged", defaults: defaults, fallback: false)
     }
 
     /// Returns true when a key is locked via MDM managed preferences.

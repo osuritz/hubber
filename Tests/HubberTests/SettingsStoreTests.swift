@@ -89,4 +89,79 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults)
         XCTAssertEqual(store.badgeMode, .off)
     }
+
+    // MARK: - Notification settings (#37)
+
+    func testDefaultNotificationsEnabledIsTrue() {
+        XCTAssertTrue(sut.notificationsEnabled)
+    }
+
+    func testDefaultEnabledNotificationTypesContainsOnlyNewReview() {
+        XCTAssertEqual(sut.enabledNotificationTypes, [.newReview])
+    }
+
+    func testDefaultNotifyNewReviewIsTrue() {
+        XCTAssertTrue(sut.notifyNewReview)
+    }
+
+    func testDefaultNotifyReviewApprovedIsFalse() {
+        XCTAssertFalse(sut.notifyReviewApproved)
+    }
+
+    func testDefaultNotifyChangesRequestedIsFalse() {
+        XCTAssertFalse(sut.notifyChangesRequested)
+    }
+
+    func testDefaultNotifyCIFailedIsFalse() {
+        XCTAssertFalse(sut.notifyCIFailed)
+    }
+
+    func testDefaultNotifyPRMergedIsFalse() {
+        XCTAssertFalse(sut.notifyPRMerged)
+    }
+
+    func testNotificationsEnabledPersistedToUserDefaults() {
+        sut.notificationsEnabled = false
+        XCTAssertFalse(defaults.bool(forKey: "notificationsEnabled"))
+    }
+
+    func testNotifyNewReviewPersistedToUserDefaults() {
+        sut.notifyNewReview = false
+        XCTAssertFalse(defaults.bool(forKey: "notifyNewReview"))
+    }
+
+    func testNotifyReviewApprovedPersistedToUserDefaults() {
+        sut.notifyReviewApproved = true
+        XCTAssertTrue(defaults.bool(forKey: "notifyReviewApproved"))
+    }
+
+    func testEnabledNotificationTypesReflectsPerTypeFlags() {
+        sut.notifyReviewApproved = true
+        sut.notifyCIFailed = true
+        let types = sut.enabledNotificationTypes
+        XCTAssertTrue(types.contains(.newReview))
+        XCTAssertTrue(types.contains(.reviewApproved))
+        XCTAssertTrue(types.contains(.ciFailed))
+        XCTAssertFalse(types.contains(.changesRequested))
+        XCTAssertFalse(types.contains(.prMerged))
+    }
+
+    func testNotificationsDisabledMakesEnabledTypesEmpty() {
+        sut.notifyNewReview = true
+        sut.notifyReviewApproved = true
+        sut.notificationsEnabled = false
+        XCTAssertTrue(sut.enabledNotificationTypes.isEmpty)
+    }
+
+    func testUserDefaultsNotificationsEnabledOverride() {
+        defaults.set(false, forKey: "notificationsEnabled")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertFalse(store.notificationsEnabled)
+    }
+
+    func testUserDefaultsNotifyReviewApprovedOverride() {
+        defaults.set(true, forKey: "notifyReviewApproved")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertTrue(store.notifyReviewApproved)
+    }
 }
