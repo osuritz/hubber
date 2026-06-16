@@ -8,6 +8,7 @@ struct HubberPopoverView: View {
 
     @State private var selectedTab: WorkTab = .incoming
     @State private var showSettings = false
+    @State private var showSignInSuccess = false
 
     var body: some View {
         ZStack {
@@ -22,6 +23,19 @@ struct HubberPopoverView: View {
         .foregroundStyle(.primary)
         .onChange(of: selectedTab) { _, newTab in
             store.telemetry.tabSwitched(to: newTab)
+        }
+        .onChange(of: store.authState) { oldState, newState in
+            // Only trigger on the in-panel device flow: waitingForUser → signedIn.
+            // Do NOT trigger on cold-launch restore (restoring → signedIn).
+            if case .waitingForUser = oldState, case .signedIn = newState {
+                showSignInSuccess = true
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1.3))
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showSignInSuccess = false
+                    }
+                }
+            }
         }
     }
 
@@ -47,7 +61,16 @@ struct HubberPopoverView: View {
         case let .waitingForUser(authorization):
             DeviceCodeScreen(store: store, authorization: authorization)
 
-        case .signedIn, .sessionExpired:
+        case let .signedIn(login):
+            if showSignInSuccess {
+                SignInSuccessScreen(login: login)
+                    .transition(.opacity)
+            } else {
+                normalChrome
+                    .transition(.opacity)
+            }
+
+        case .sessionExpired:
             normalChrome
         }
     }

@@ -238,3 +238,125 @@ struct RestoringScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+// MARK: - SignInSuccessScreen
+
+/// Full-panel Apple-style animated sign-in success screen.
+/// Shown briefly after a successful device-flow sign-in before revealing the main app.
+/// The parent controls dismissal — this view does not auto-dismiss.
+struct SignInSuccessScreen: View {
+    /// Optional login name from `.signedIn(login:)` to show below the checkmark.
+    var login: String?
+
+    // MARK: Animation state
+
+    @State private var circleScale: CGFloat = 0.4
+    @State private var circleOpacity: Double = 0
+    @State private var checkProgress: CGFloat = 0
+    @State private var pulseScale: CGFloat = 1.0
+    @State private var pulseOpacity: Double = 0
+    @State private var labelOpacity: Double = 0
+    @State private var labelOffset: CGFloat = 4
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                // Pulse ring — scales outward and fades once the check draws on
+                Circle()
+                    .stroke(HubberDesign.sloGreen.fg.opacity(0.35), lineWidth: 1.5)
+                    .frame(width: 64, height: 64)
+                    .scaleEffect(pulseScale)
+                    .opacity(pulseOpacity)
+
+                // Green circle background
+                Circle()
+                    .fill(HubberDesign.sloGreen.bg)
+                    .frame(width: 62, height: 62)
+                    .scaleEffect(circleScale)
+                    .opacity(circleOpacity)
+
+                // Draw-on checkmark
+                CheckmarkShape()
+                    .trim(from: 0, to: checkProgress)
+                    .stroke(
+                        HubberDesign.sloGreen.fg,
+                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round)
+                    )
+                    .frame(width: 28, height: 28)
+                    .opacity(circleOpacity) // hide until circle is visible
+            }
+            .frame(width: 64, height: 64)
+
+            // "Signed in" label
+            Group {
+                if let login {
+                    Text("@\(login)")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(HubberDesign.text)
+                } else {
+                    Text("Signed in")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(HubberDesign.text)
+                }
+            }
+            .opacity(labelOpacity)
+            .offset(y: labelOffset)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { startAnimation() }
+    }
+
+    private func startAnimation() {
+        // Step 1: Circle springs in (t=0)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.62)) {
+            circleScale = 1.0
+            circleOpacity = 1.0
+        }
+
+        // Step 2: Pulse ring expands and fades (t=0.12s, slightly after circle)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            pulseOpacity = 0.8
+            withAnimation(.easeOut(duration: 0.55)) {
+                pulseScale = 1.55
+                pulseOpacity = 0
+            }
+        }
+
+        // Step 3: Checkmark strokes on (t=0.12s, concurrent with pulse)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.easeOut(duration: 0.32)) {
+                checkProgress = 1.0
+            }
+        }
+
+        // Step 4: Label fades and slides up (t=0.55s, after check completes)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            withAnimation(.easeOut(duration: 0.22)) {
+                labelOpacity = 1.0
+                labelOffset = 0
+            }
+        }
+    }
+}
+
+// MARK: - CheckmarkShape
+
+/// A 2-segment polyline checkmark normalized to its bounding rect.
+/// The path travels:  left-third at mid-height  →  lower vertex  →  upper-right corner.
+/// Designed to be used with `.trim(from:to:)` for the Apple-style draw-on animation.
+private struct CheckmarkShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        // Start: left ~28% across, ~58% down
+        let start = CGPoint(x: rect.minX + rect.width * 0.18, y: rect.minY + rect.height * 0.52)
+        // Vertex: ~42% across, ~74% down — the bottom of the check
+        let vertex = CGPoint(x: rect.minX + rect.width * 0.42, y: rect.minY + rect.height * 0.74)
+        // End: right ~87% across, ~28% down — the upper-right tip
+        let end = CGPoint(x: rect.minX + rect.width * 0.87, y: rect.minY + rect.height * 0.26)
+
+        path.move(to: start)
+        path.addLine(to: vertex)
+        path.addLine(to: end)
+        return path
+    }
+}
