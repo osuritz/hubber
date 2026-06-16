@@ -150,9 +150,15 @@ enum NotificationDiffer {
             .filter { prID, prevSnap in
                 currentOutgoing[prID] == nil && (prevSnap.mergeable || prevSnap.approved)
             }
-            .map { prID, _ in
-                // repo/number/title not stored in snapshot — enriched by coordinator if needed
-                NotificationEvent(type: .prMerged, prID: prID, repo: "", number: 0, title: "", url: nil)
+            .map { prID, prevSnap in
+                NotificationEvent(
+                    type: .prMerged,
+                    prID: prID,
+                    repo: prevSnap.repo,
+                    number: prevSnap.number,
+                    title: prevSnap.title,
+                    url: prevSnap.url
+                )
             }
     }
 }
@@ -166,7 +172,11 @@ private extension OutgoingSnapshot {
             reviewerStates: reviewerStates,
             ci: pr.ci.rawValue,
             mergeable: pr.mergeable,
-            approved: pr.approvals >= pr.requiredApprovals
+            approved: pr.approvals >= pr.requiredApprovals,
+            repo: pr.repo,
+            number: pr.number,
+            title: pr.title,
+            url: pr.url
         )
     }
 }

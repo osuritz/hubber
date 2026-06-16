@@ -38,4 +38,9 @@ struct OutgoingSnapshot: Codable, Equatable {
     var mergeable: Bool
     /// approvals >= requiredApprovals (or any reviewer approved)
     var approved: Bool
+    // Metadata preserved for notification copy (A); default-empty for Codable back-compat.
+    var repo = ""
+    var number = 0
+    var title = ""
+    var url: URL?
 }
