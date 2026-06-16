@@ -356,7 +356,7 @@ final class HubberStore: ObservableObject {
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
-        provider: any CodeHostProvider = GitHubProvider(),
+        provider: any CodeHostProvider = CachingCodeHostProvider(wrapping: GitHubProvider()),
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
         settings: SettingsStore = SettingsStore()
     ) {
