@@ -10,13 +10,13 @@ import XCTest
 /// (meaning the preceding refresh() has completed).  That removes all real-time
 /// polling from the tests.
 private actor ControlledSleeper {
-    // Intervals requested so far (for cadence assertions).
+    /// Intervals requested so far (for cadence assertions).
     private(set) var requestedIntervals: [TimeInterval] = []
 
-    // Waiters that want to know when we next park.
+    /// Waiters that want to know when we next park.
     private var parkWaiters: [CheckedContinuation<Void, Never>] = []
 
-    // The in-flight sleep continuation (nil when not sleeping).
+    /// The in-flight sleep continuation (nil when not sleeping).
     private var sleeping: CheckedContinuation<Void, Error>?
 
     /// Called by the scheduler loop instead of Task.sleep.
@@ -26,7 +26,9 @@ private actor ControlledSleeper {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 sleeping = cont
                 // Wake all test waiters that are blocked in awaitParked().
-                for waiter in parkWaiters { waiter.resume() }
+                for waiter in parkWaiters {
+                    waiter.resume()
+                }
                 parkWaiters.removeAll()
             }
         } onCancel: {
