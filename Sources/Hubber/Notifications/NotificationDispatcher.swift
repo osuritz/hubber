@@ -10,6 +10,9 @@ protocol NotificationDispatching: Sendable {
 
     /// Posts a notification. No-ops gracefully if not authorized or UN is unavailable.
     func post(_ content: NotificationContent) async
+
+    /// True when the user has explicitly denied notification authorization.
+    @MainActor var notificationsDenied: Bool { get }
 }
 
 // MARK: - UNNotificationDispatcher

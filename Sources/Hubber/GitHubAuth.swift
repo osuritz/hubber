@@ -288,7 +288,7 @@ final class HubberStore: ObservableObject {
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published private(set) var isPopoverOpen = false
     /// True when the user has denied notification authorization.
-    @Published private(set) var notificationsDenied = false
+    @Published internal(set) var notificationsDenied = false
 
     var rateLimitMessage: String? {
         guard let until = rateLimitedUntil, until > Date() else { return nil }
@@ -328,10 +328,7 @@ final class HubberStore: ObservableObject {
         self.settings = settings
         self.telemetry = telemetry
         self.snapshotStore = snapshotStore
-        notificationCoordinator = NotificationCoordinator(
-            dispatcher: dispatcher,
-            snapshotStore: snapshotStore
-        )
+        notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
         scheduler = RefreshScheduler(idle: idle)
         notificationBaseline = snapshotStore.load()
         restoreSession()

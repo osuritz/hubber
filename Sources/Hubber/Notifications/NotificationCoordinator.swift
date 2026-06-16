@@ -3,22 +3,22 @@ import Foundation
 // MARK: - NotificationCoordinator
 
 /// Orchestrates the diff → batch → dispatch pipeline.
-/// Pure logic; inject `dispatcher` and `snapshotStore` for testing.
+/// Pure logic; inject `dispatcher` for testing.
 @MainActor
 final class NotificationCoordinator {
     private let dispatcher: any NotificationDispatching
-    private let snapshotStore: SnapshotStore
 
-    init(
-        dispatcher: any NotificationDispatching = UNNotificationDispatcher(),
-        snapshotStore: SnapshotStore = SnapshotStore()
-    ) {
+    init(dispatcher: any NotificationDispatching = UNNotificationDispatcher()) {
         self.dispatcher = dispatcher
-        self.snapshotStore = snapshotStore
+    }
+
+    /// True when the user has explicitly denied notification authorization.
+    var notificationsDenied: Bool {
+        dispatcher.notificationsDenied
     }
 
     /// Run diff → batch → dispatch for `data` relative to `baseline`.
-    /// Returns the new baseline snapshot (already persisted if provided snapshotStore is real).
+    /// Returns the new baseline snapshot.
     @discardableResult
     func processRefresh(
         data: HubberData,
