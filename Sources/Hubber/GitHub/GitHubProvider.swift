@@ -289,7 +289,7 @@ final class GitHubProvider: CodeHostProvider {
                 return true
             case .reviewOnly:
                 let comment = (thread["comments"] as? [String: Any])?["nodes"] as? [[String: Any]]
-                return comment?.first?["pullRequestReview"] != nil
+                return comment?.first?["pullRequestReview"] as? [String: Any] != nil
             case .changesRequested:
                 let comment = (thread["comments"] as? [String: Any])?["nodes"] as? [[String: Any]]
                 let review = comment?.first?["pullRequestReview"] as? [String: Any]
@@ -391,7 +391,7 @@ final class GitHubProvider: CodeHostProvider {
               login
               ... on User { avatarUrl }
             }
-            timelineItems(first: 50, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) {
+            timelineItems(first: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) {
               nodes {
                 __typename
                 ... on ReviewRequestedEvent {
@@ -429,7 +429,7 @@ final class GitHubProvider: CodeHostProvider {
                 commit {
                   statusCheckRollup {
                     state
-                    contexts(first: 30) {
+                    contexts(first: 100) {
                       totalCount
                       nodes {
                         ... on CheckRun { status conclusion }

@@ -72,9 +72,7 @@ final class SettingsStore: ObservableObject {
 
     /// Returns true when a key is locked via MDM managed preferences.
     func isLocked(_ key: String) -> Bool {
-        // A key is MDM-locked when it appears in the managed preferences domain
-        // (pushed via com.apple.managed.preferences or MCX).
-        CFPreferencesCopyAppValue(key as CFString, Self.managedDomain) != nil
+        CFPreferencesAppValueIsForced(key as CFString, Self.managedDomain)
     }
 
     /// SLO window in hours for a given repo. Per-repo overrides slot in here (backlog).
@@ -85,14 +83,16 @@ final class SettingsStore: ObservableObject {
     // MARK: - MDM → UserDefaults → default priority
 
     private static func string(key: String, defaults: UserDefaults, fallback: String) -> String {
-        if let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? String {
+        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? String {
             return managed
         }
         return defaults.string(forKey: key) ?? fallback
     }
 
     private static func bool(key: String, defaults: UserDefaults, fallback: Bool) -> Bool {
-        if let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Bool {
+        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Bool {
             return managed
         }
         guard defaults.object(forKey: key) != nil else { return fallback }
@@ -100,7 +100,8 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func double(key: String, defaults: UserDefaults, fallback: Double) -> Double {
-        if let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Double {
+        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Double {
             return managed
         }
         guard defaults.object(forKey: key) != nil else { return fallback }
@@ -108,7 +109,8 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func int(key: String, defaults: UserDefaults, fallback: Int) -> Int {
-        if let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Int {
+        if CFPreferencesAppValueIsForced(key as CFString, managedDomain),
+           let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Int {
             return managed
         }
         guard defaults.object(forKey: key) != nil else { return fallback }

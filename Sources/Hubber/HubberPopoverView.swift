@@ -110,6 +110,8 @@ struct HubberPopoverView: View {
                 EmptyStateRow(text: "Loading reviews…")
             } else if store.data.incoming.isEmpty, store.lastPullRequestRefresh != nil {
                 AllClearRow()
+            } else if store.data.incoming.isEmpty, store.lastPullRequestRefresh == nil {
+                EmptyStateRow(text: "Loading reviews…")
             } else {
                 let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
                 ForEach(Array(sorted.enumerated()), id: \.element.id) { index, review in
@@ -132,6 +134,8 @@ struct HubberPopoverView: View {
                 EmptyStateRow(text: "Loading pull requests…")
             } else if store.data.outgoing.isEmpty, store.lastPullRequestRefresh != nil {
                 EmptyStateRow(text: "No open pull requests.")
+            } else if store.data.outgoing.isEmpty, store.lastPullRequestRefresh == nil {
+                EmptyStateRow(text: "Loading pull requests…")
             } else {
                 ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
                     ClickableRow(url: review.url) {
