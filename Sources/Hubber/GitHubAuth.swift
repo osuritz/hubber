@@ -311,6 +311,7 @@ final class HubberStore: ObservableObject {
     let snapshotStore: SnapshotStore
     /// Persisted baseline; nil on first run (initial load must not fire).
     var notificationBaseline: ReviewSnapshot?
+    private let dispatcher: any NotificationDispatching
 
     init(
         authService: GitHubAuthService = GitHubAuthService(),
@@ -328,10 +329,29 @@ final class HubberStore: ObservableObject {
         self.settings = settings
         self.telemetry = telemetry
         self.snapshotStore = snapshotStore
+        self.dispatcher = dispatcher
         notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
         scheduler = RefreshScheduler(idle: idle)
         notificationBaseline = snapshotStore.load()
         restoreSession()
+    }
+
+    /// Sends a test notification through the real dispatcher.
+    /// Surfaces the macOS permission prompt on first run and updates `notificationsDenied`.
+    func sendTestNotification() async {
+        let authorized = await dispatcher.ensureAuthorized()
+        notificationsDenied = dispatcher.notificationsDenied
+        guard authorized else {
+            appendDeveloperLog("Sent test notification (authorized=false)")
+            return
+        }
+        await dispatcher.post(NotificationContent(
+            id: "hubber-test-notification",
+            title: "Hubber",
+            body: "Test notification — notifications are working.",
+            url: nil
+        ))
+        appendDeveloperLog("Sent test notification (authorized=true)")
     }
 
     func setPopoverOpen(_ open: Bool) {

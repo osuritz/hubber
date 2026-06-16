@@ -34,6 +34,12 @@ struct DeveloperPanelView: View {
             }
             .disabled(store.developerLog.isEmpty)
 
+            Button {
+                Task { await store.sendTestNotification() }
+            } label: {
+                Label("Send test notification", systemImage: "bell")
+            }
+
             Spacer()
         }
         .controlSize(.small)
