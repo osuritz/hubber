@@ -287,6 +287,8 @@ final class HubberStore: ObservableObject {
     @Published private(set) var draftsError: String?
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published private(set) var isPopoverOpen = false
+    /// True when the user has denied notification authorization.
+    @Published private(set) var notificationsDenied = false
 
     var rateLimitMessage: String? {
         guard let until = rateLimitedUntil, until > Date() else { return nil }
