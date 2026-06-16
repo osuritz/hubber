@@ -145,7 +145,7 @@ struct HubberPopoverView: View {
     private var incomingContent: some View {
         if store.isRefreshingPullRequests, store.data.incoming.isEmpty {
             LoadingState()
-        } else if let error = store.pullRequestRefreshError, store.data.incoming.isEmpty {
+        } else if let _ = store.incomingError, store.data.incoming.isEmpty {
             ErrorState(
                 message: "Couldn't load reviews",
                 lastUpdated: lastUpdatedText,
@@ -154,7 +154,7 @@ struct HubberPopoverView: View {
         } else if store.data.incoming.isEmpty {
             AllClearState()
         } else {
-            if let error = store.pullRequestRefreshError {
+            if let error = store.incomingError {
                 ErrorState(
                     message: "Couldn't load reviews",
                     lastUpdated: "Last refresh failed: \(error)"
@@ -180,7 +180,7 @@ struct HubberPopoverView: View {
     private var outgoingContent: some View {
         if store.isRefreshingPullRequests, store.data.outgoing.isEmpty {
             LoadingState()
-        } else if let error = store.pullRequestRefreshError, store.data.outgoing.isEmpty {
+        } else if let _ = store.outgoingError, store.data.outgoing.isEmpty {
             ErrorState(
                 message: "Couldn't load outgoing PRs",
                 lastUpdated: lastUpdatedText,
@@ -189,7 +189,7 @@ struct HubberPopoverView: View {
         } else if store.data.outgoing.isEmpty {
             EmptyOutgoingState()
         } else {
-            if let error = store.pullRequestRefreshError {
+            if let error = store.outgoingError {
                 ErrorState(
                     message: "Couldn't load outgoing PRs",
                     lastUpdated: "Last refresh failed: \(error)"
@@ -212,7 +212,7 @@ struct HubberPopoverView: View {
     private var draftsContent: some View {
         if store.isRefreshingPullRequests, store.data.drafts.isEmpty {
             LoadingState()
-        } else if let error = store.pullRequestRefreshError, store.data.drafts.isEmpty {
+        } else if let _ = store.draftsError, store.data.drafts.isEmpty {
             ErrorState(
                 message: "Couldn't load drafts",
                 lastUpdated: lastUpdatedText,
@@ -221,7 +221,7 @@ struct HubberPopoverView: View {
         } else if store.data.drafts.isEmpty {
             EmptyDraftsState()
         } else {
-            if let error = store.pullRequestRefreshError {
+            if let error = store.draftsError {
                 ErrorState(
                     message: "Couldn't load drafts",
                     lastUpdated: "Last refresh failed: \(error)"
@@ -283,7 +283,11 @@ struct HubberPopoverView: View {
         if store.isRefreshingPullRequests {
             return "Refreshing PRs..."
         }
-        if store.pullRequestRefreshError != nil {
+        let hasAnyError = store.pullRequestRefreshError != nil
+            || store.incomingError != nil
+            || store.outgoingError != nil
+            || store.draftsError != nil
+        if hasAnyError {
             return "Refresh failed"
         }
         if let lastPullRequestRefresh = store.lastPullRequestRefresh {
