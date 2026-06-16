@@ -15,6 +15,13 @@ final class SettingsStoreTests: XCTestCase {
         sut = SettingsStore(defaults: defaults)
     }
 
+    // MARK: - Helper
+
+    /// Returns a fresh SettingsStore using a fresh UserDefaults suite + the given managed prefs.
+    private func makeStore(managed: InMemoryManagedPreferences = InMemoryManagedPreferences()) -> SettingsStore {
+        SettingsStore(defaults: defaults, managed: managed)
+    }
+
     override func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
         super.tearDown()
@@ -194,5 +201,143 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set(false, forKey: "notifyPRMerged")
         let store = SettingsStore(defaults: defaults)
         XCTAssertEqual(store.enabledNotificationTypes, [.newReview, .ciFailed])
+    }
+
+    // MARK: - Task 2: Forced managed values override UserDefaults + hardcoded defaults
+
+    // sloEnabled — managed key "sloEnabled"; persistence key "reviewSLOEnabled"
+    func testForcedSloEnabledFalseOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.sloEnabled: false])
+        let store = makeStore(managed: managed)
+        XCTAssertFalse(store.sloEnabled)
+    }
+
+    func testForcedSloEnabledOverridesUserDefaults() {
+        defaults.set(false, forKey: "reviewSLOEnabled")  // UserDefaults says false
+        let managed = InMemoryManagedPreferences([ManagedKey.sloEnabled: true])  // MDM says true
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.sloEnabled)  // MDM wins
+    }
+
+    func testIsLockedReviewSLOEnabledWhenSloEnabledForced() {
+        let managed = InMemoryManagedPreferences([ManagedKey.sloEnabled: true])
+        let store = makeStore(managed: managed)
+        // The UI key is "reviewSLOEnabled" (UserDefaults persistence key)
+        XCTAssertTrue(store.isLocked("reviewSLOEnabled"))
+        // Also true for the managed key itself
+        XCTAssertTrue(store.isLocked(ManagedKey.sloEnabled))
+    }
+
+    func testIsLockedReviewSLOEnabledFalseWhenNotForced() {
+        let store = makeStore(managed: InMemoryManagedPreferences())
+        XCTAssertFalse(store.isLocked("reviewSLOEnabled"))
+    }
+
+    // sloWindowHours
+    func testForcedSloWindowHoursOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.sloWindowHours: 2])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.sloHours, 2.0)
+    }
+
+    func testIsLockedSloWindowHours() {
+        let managed = InMemoryManagedPreferences([ManagedKey.sloWindowHours: 8])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.sloWindowHours))
+    }
+
+    // sloDisplay
+    func testForcedSloDisplayOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.sloDisplay: SLODisplay.elapsed.rawValue])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.sloDisplay, .elapsed)
+    }
+
+    func testIsLockedSloDisplay() {
+        let managed = InMemoryManagedPreferences([ManagedKey.sloDisplay: "elapsed"])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.sloDisplay))
+    }
+
+    // badgeMode
+    func testForcedBadgeModeOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.badgeMode: BadgeMode.off.rawValue])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.badgeMode, .off)
+    }
+
+    func testIsLockedBadgeMode() {
+        let managed = InMemoryManagedPreferences([ManagedKey.badgeMode: "off"])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.badgeMode))
+    }
+
+    // incomingMode
+    func testForcedIncomingModeOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.incomingMode: IncomingReviewMode.team.rawValue])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.incomingMode, .team)
+    }
+
+    func testIsLockedIncomingMode() {
+        let managed = InMemoryManagedPreferences([ManagedKey.incomingMode: "team"])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.incomingMode))
+    }
+
+    // unresolvedThreadMode
+    func testForcedUnresolvedThreadModeOverridesDefault() {
+        let managed = InMemoryManagedPreferences(
+            [ManagedKey.unresolvedThreadMode: UnresolvedThreadMode.changesRequested.rawValue]
+        )
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.unresolvedMode, .changesRequested)
+    }
+
+    func testIsLockedUnresolvedThreadMode() {
+        let managed = InMemoryManagedPreferences([ManagedKey.unresolvedThreadMode: "reviewOnly"])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.unresolvedThreadMode))
+    }
+
+    // rowDensity — accepts Int rawValue
+    func testForcedRowDensityIntOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.rowDensity: RowDensity.compact.rawValue])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.rowDensity, .compact)
+    }
+
+    // rowDensity — accepts String ("compact"|"normal"|"spacious")
+    func testForcedRowDensityStringOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.rowDensity: "spacious"])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.rowDensity, .spacious)
+    }
+
+    func testIsLockedRowDensity() {
+        let managed = InMemoryManagedPreferences([ManagedKey.rowDensity: 1])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.rowDensity))
+    }
+
+    // notificationsEnabled
+    func testForcedNotificationsEnabledFalseOverridesDefault() {
+        let managed = InMemoryManagedPreferences([ManagedKey.notificationsEnabled: false])
+        let store = makeStore(managed: managed)
+        XCTAssertFalse(store.notificationsEnabled)
+    }
+
+    func testIsLockedNotificationsEnabled() {
+        let managed = InMemoryManagedPreferences([ManagedKey.notificationsEnabled: false])
+        let store = makeStore(managed: managed)
+        XCTAssertTrue(store.isLocked(ManagedKey.notificationsEnabled))
+    }
+
+    // Unforced key → not locked
+    func testIsLockedReturnsFalseForUnforcedKey() {
+        let store = makeStore(managed: InMemoryManagedPreferences())
+        XCTAssertFalse(store.isLocked(ManagedKey.badgeMode))
+        XCTAssertFalse(store.isLocked(ManagedKey.sloEnabled))
+        XCTAssertFalse(store.isLocked(ManagedKey.notificationsEnabled))
     }
 }

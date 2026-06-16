@@ -3,11 +3,16 @@ import Foundation
 
 @MainActor
 final class SettingsStore: ObservableObject {
-    private static let managedDomain = "com.hubber.app" as CFString
-
     private let defaults: UserDefaults
+    /// Injectable seam for MDM managed-preference reads. Production uses CFManagedPreferences;
+    /// tests inject InMemoryManagedPreferences to exercise all enforcement paths.
+    private let managed: any ManagedPreferences
 
     // MARK: - SLO
+    //
+    // Note: the managed key is "sloEnabled" (PRD / IT-facing) but the UserDefaults
+    // persistence key is "reviewSLOEnabled" (kept to avoid migrating existing user data).
+    // isLocked("reviewSLOEnabled") delegates to the "sloEnabled" managed key.
 
     @Published var sloEnabled: Bool {
         didSet { defaults.set(sloEnabled, forKey: "reviewSLOEnabled") }
@@ -84,44 +89,26 @@ final class SettingsStore: ObservableObject {
         return types
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, managed: any ManagedPreferences = CFManagedPreferences()) {
         self.defaults = defaults
+        self.managed = managed
 
-        sloEnabled = Self.bool(key: "reviewSLOEnabled", defaults: defaults, fallback: true)
-        sloHours = Self.double(key: "sloWindowHours", defaults: defaults, fallback: 4.0)
-        sloDisplay = SLODisplay(
-            rawValue: Self.string(
-                key: "sloDisplay",
-                defaults: defaults,
-                fallback: SLODisplay.remaining.rawValue
-            )
-        ) ?? .remaining
-        incomingMode = IncomingReviewMode(
-            rawValue: Self.string(
-                key: "incomingMode",
-                defaults: defaults,
-                fallback: IncomingReviewMode.explicit.rawValue
-            )
-        ) ?? .explicit
-        unresolvedMode = UnresolvedThreadMode(
-            rawValue: Self.string(
-                key: "unresolvedThreadMode",
-                defaults: defaults,
-                fallback: UnresolvedThreadMode.allOpen.rawValue
-            )
-        ) ?? .allOpen
-        rowDensity = RowDensity(
-            rawValue: Self.int(key: "rowDensity", defaults: defaults, fallback: RowDensity.normal.rawValue)
-        ) ?? .normal
-        badgeMode = BadgeMode(
-            rawValue: Self.string(
-                key: "badgeMode",
-                defaults: defaults,
-                fallback: BadgeMode.attentionNeeded.rawValue
-            )
-        ) ?? .attentionNeeded
-        notificationsEnabled = Self.bool(key: "notificationsEnabled", defaults: defaults, fallback: true)
-        let perType = Self.resolvePerTypeFlags(defaults: defaults)
+        // Resolve all setting values through MDM seam → UserDefaults → hardcoded default.
+        sloEnabled = Self.resolveSloEnabled(defaults: defaults, managed: managed)
+        sloHours = Self.resolveSloHours(defaults: defaults, managed: managed)
+        sloDisplay = Self.resolveSloDisplay(defaults: defaults, managed: managed)
+        incomingMode = Self.resolveIncomingMode(defaults: defaults, managed: managed)
+        unresolvedMode = Self.resolveUnresolvedMode(defaults: defaults, managed: managed)
+        rowDensity = Self.resolveRowDensity(defaults: defaults, managed: managed)
+        badgeMode = Self.resolveBadgeMode(defaults: defaults, managed: managed)
+        notificationsEnabled = Self.bool(
+            managedKey: ManagedKey.notificationsEnabled,
+            defaultsKey: ManagedKey.notificationsEnabled,
+            defaults: defaults,
+            managed: managed,
+            fallback: true
+        )
+        let perType = Self.resolvePerTypeFlags(defaults: defaults, managed: managed)
         notifyNewReview = perType.contains(.newReview)
         notifyReviewApproved = perType.contains(.reviewApproved)
         notifyChangesRequested = perType.contains(.changesRequested)
@@ -129,79 +116,201 @@ final class SettingsStore: ObservableObject {
         notifyPRMerged = perType.contains(.prMerged)
     }
 
-    /// Resolves per-type notification flags.
-    /// The MDM composite key `defaultNotificationEvents` (comma-separated rawValues) takes
-    /// priority when forced; otherwise per-type UserDefaults keys are used (#D).
-    private static func resolvePerTypeFlags(defaults: UserDefaults) -> Set<NotificationEventType> {
-        let compositeKey = "defaultNotificationEvents" as CFString
-        if
-            CFPreferencesAppValueIsForced(compositeKey, managedDomain),
-            let raw = CFPreferencesCopyAppValue(compositeKey, managedDomain) as? String {
-            return Set(
-                raw.split(separator: ",")
-                    .map { $0.trimmingCharacters(in: CharacterSet.whitespaces) }
-                    .compactMap { NotificationEventType(rawValue: String($0)) }
-            )
-        }
-        var types = Set<NotificationEventType>()
-        if Self.bool(key: "notifyNewReview", defaults: defaults, fallback: true) { types.insert(.newReview) }
-        if Self.bool(key: "notifyReviewApproved", defaults: defaults, fallback: false) { types.insert(.reviewApproved) }
-        if Self.bool(key: "notifyChangesRequested", defaults: defaults, fallback: false) {
-            types.insert(.changesRequested)
-        }
-        if Self.bool(key: "notifyCIFailed", defaults: defaults, fallback: false) { types.insert(.ciFailed) }
-        if Self.bool(key: "notifyPRMerged", defaults: defaults, fallback: false) { types.insert(.prMerged) }
-        return types
+    // MARK: - isLocked
+    //
+    // Maps UI / UserDefaults keys to their managed-key equivalents. The split exists
+    // because "reviewSLOEnabled" (UserDefaults) corresponds to "sloEnabled" (MDM PRD key).
+    // All other keys share their name between the two layers.
+
+    /// Returns true when the given key is locked by MDM managed preferences.
+    ///
+    /// Pass either the UserDefaults persistence key (e.g. "reviewSLOEnabled") or the
+    /// managed key (e.g. "sloEnabled") — both map to the same lock check.
+    func isLocked(_ key: String) -> Bool {
+        // "reviewSLOEnabled" is the UserDefaults persistence key for the "sloEnabled" managed key.
+        let managedKey = (key == "reviewSLOEnabled") ? ManagedKey.sloEnabled : key
+        return managed.isForced(managedKey)
     }
 
-    /// Returns true when a key is locked via MDM managed preferences.
-    func isLocked(_ key: String) -> Bool {
-        CFPreferencesAppValueIsForced(key as CFString, Self.managedDomain)
-    }
+    // MARK: - Per-repo SLO override (backlog)
 
     /// SLO window in hours for a given repo. Per-repo overrides slot in here (backlog).
     func sloHours(for repo: String) -> Double {
         sloHours
     }
 
-    // MARK: - MDM → UserDefaults → default priority
+    // MARK: - Per-field resolution helpers (called only from init)
 
-    private static func string(key: String, defaults: UserDefaults, fallback: String) -> String {
-        if
-            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? String {
-            return managed
-        }
-        return defaults.string(forKey: key) ?? fallback
+    private static func resolveSloEnabled(defaults: UserDefaults, managed: any ManagedPreferences) -> Bool {
+        bool(
+            managedKey: ManagedKey.sloEnabled,
+            defaultsKey: "reviewSLOEnabled",
+            defaults: defaults,
+            managed: managed,
+            fallback: true
+        )
     }
 
-    private static func bool(key: String, defaults: UserDefaults, fallback: Bool) -> Bool {
-        if
-            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Bool {
-            return managed
-        }
-        guard defaults.object(forKey: key) != nil else { return fallback }
-        return defaults.bool(forKey: key)
+    private static func resolveSloHours(defaults: UserDefaults, managed: any ManagedPreferences) -> Double {
+        double(
+            managedKey: ManagedKey.sloWindowHours,
+            defaultsKey: ManagedKey.sloWindowHours,
+            defaults: defaults,
+            managed: managed,
+            fallback: 4.0
+        )
     }
 
-    private static func double(key: String, defaults: UserDefaults, fallback: Double) -> Double {
-        if
-            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Double {
-            return managed
-        }
-        guard defaults.object(forKey: key) != nil else { return fallback }
-        return defaults.double(forKey: key)
+    private static func resolveSloDisplay(defaults: UserDefaults, managed: any ManagedPreferences) -> SLODisplay {
+        SLODisplay(rawValue: string(
+            managedKey: ManagedKey.sloDisplay,
+            defaultsKey: ManagedKey.sloDisplay,
+            defaults: defaults,
+            managed: managed,
+            fallback: SLODisplay.remaining.rawValue
+        )) ?? .remaining
     }
 
-    private static func int(key: String, defaults: UserDefaults, fallback: Int) -> Int {
-        if
-            CFPreferencesAppValueIsForced(key as CFString, managedDomain),
-            let managed = CFPreferencesCopyAppValue(key as CFString, managedDomain) as? Int {
-            return managed
+    private static func resolveIncomingMode(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> IncomingReviewMode {
+        IncomingReviewMode(rawValue: string(
+            managedKey: ManagedKey.incomingMode,
+            defaultsKey: ManagedKey.incomingMode,
+            defaults: defaults,
+            managed: managed,
+            fallback: IncomingReviewMode.explicit.rawValue
+        )) ?? .explicit
+    }
+
+    private static func resolveUnresolvedMode(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> UnresolvedThreadMode {
+        UnresolvedThreadMode(rawValue: string(
+            managedKey: ManagedKey.unresolvedThreadMode,
+            defaultsKey: ManagedKey.unresolvedThreadMode,
+            defaults: defaults,
+            managed: managed,
+            fallback: UnresolvedThreadMode.allOpen.rawValue
+        )) ?? .allOpen
+    }
+
+    private static func resolveBadgeMode(defaults: UserDefaults, managed: any ManagedPreferences) -> BadgeMode {
+        BadgeMode(rawValue: string(
+            managedKey: ManagedKey.badgeMode,
+            defaultsKey: ManagedKey.badgeMode,
+            defaults: defaults,
+            managed: managed,
+            fallback: BadgeMode.attentionNeeded.rawValue
+        )) ?? .attentionNeeded
+    }
+
+    // MARK: - MDM → UserDefaults → default priority (via injected seam)
+
+    private static func string(
+        managedKey: String,
+        defaultsKey: String,
+        defaults: UserDefaults,
+        managed: any ManagedPreferences,
+        fallback: String
+    ) -> String {
+        if managed.isForced(managedKey), let v = managed.value(managedKey) as? String {
+            return v
         }
-        guard defaults.object(forKey: key) != nil else { return fallback }
-        return defaults.integer(forKey: key)
+        return defaults.string(forKey: defaultsKey) ?? fallback
+    }
+
+    private static func bool(
+        managedKey: String,
+        defaultsKey: String,
+        defaults: UserDefaults,
+        managed: any ManagedPreferences,
+        fallback: Bool
+    ) -> Bool {
+        if managed.isForced(managedKey), let v = managed.value(managedKey) as? Bool {
+            return v
+        }
+        guard defaults.object(forKey: defaultsKey) != nil else { return fallback }
+        return defaults.bool(forKey: defaultsKey)
+    }
+
+    private static func double(
+        managedKey: String,
+        defaultsKey: String,
+        defaults: UserDefaults,
+        managed: any ManagedPreferences,
+        fallback: Double
+    ) -> Double {
+        if managed.isForced(managedKey) {
+            // Accept both Double and Int from managed profiles
+            if let v = managed.value(managedKey) as? Double { return v }
+            if let v = managed.value(managedKey) as? Int { return Double(v) }
+        }
+        guard defaults.object(forKey: defaultsKey) != nil else { return fallback }
+        return defaults.double(forKey: defaultsKey)
+    }
+
+    /// Resolves `rowDensity` from the managed seam (accepts Int rawValue or a String label)
+    /// before falling back to UserDefaults and the hardcoded default.
+    ///
+    /// IT can write either `rowDensity = 1` (Int rawValue) or `rowDensity = "compact"` (String)
+    /// in a configuration profile; both are accepted so the profile is human-readable.
+    private static func resolveRowDensity(defaults: UserDefaults, managed: any ManagedPreferences) -> RowDensity {
+        if managed.isForced(ManagedKey.rowDensity) {
+            // Int rawValue path
+            if let intVal = managed.value(ManagedKey.rowDensity) as? Int,
+               let density = RowDensity(rawValue: intVal) {
+                return density
+            }
+            // String label path: "compact" | "normal" | "spacious"
+            if let strVal = managed.value(ManagedKey.rowDensity) as? String {
+                switch strVal.lowercased() {
+                case "compact": return .compact
+                case "normal": return .normal
+                case "spacious": return .spacious
+                default: break
+                }
+            }
+        }
+        let raw = defaults.object(forKey: ManagedKey.rowDensity) != nil
+            ? defaults.integer(forKey: ManagedKey.rowDensity)
+            : RowDensity.normal.rawValue
+        return RowDensity(rawValue: raw) ?? .normal
+    }
+
+    /// Resolves per-type notification flags.
+    /// The MDM composite key `defaultNotificationEvents` (array of rawValues or csv string) takes
+    /// priority when forced; otherwise per-type UserDefaults keys are used.
+    private static func resolvePerTypeFlags(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> Set<NotificationEventType> {
+        if managed.isForced(ManagedKey.defaultNotificationEvents) {
+            // Array form (preferred in profiles)
+            if let arr = managed.value(ManagedKey.defaultNotificationEvents) as? [String] {
+                return Set(arr.compactMap { NotificationEventType(rawValue: $0) })
+            }
+            // Legacy csv String form
+            if let raw = managed.value(ManagedKey.defaultNotificationEvents) as? String {
+                return Set(
+                    raw.split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .compactMap { NotificationEventType(rawValue: String($0)) }
+                )
+            }
+        }
+        // Per-type UserDefaults fallback
+        var types = Set<NotificationEventType>()
+        let resolveFlag = { (key: String, fallback: Bool) -> Bool in
+            bool(managedKey: key, defaultsKey: key, defaults: defaults, managed: managed, fallback: fallback)
+        }
+        if resolveFlag("notifyNewReview", true) { types.insert(.newReview) }
+        if resolveFlag("notifyReviewApproved", false) { types.insert(.reviewApproved) }
+        if resolveFlag("notifyChangesRequested", false) { types.insert(.changesRequested) }
+        if resolveFlag("notifyCIFailed", false) { types.insert(.ciFailed) }
+        if resolveFlag("notifyPRMerged", false) { types.insert(.prMerged) }
+        return types
     }
 }
