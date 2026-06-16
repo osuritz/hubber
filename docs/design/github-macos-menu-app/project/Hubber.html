@@ -73,14 +73,40 @@ function App() {
         </DCArtboard>
       </DCSection>
 
-      {/* ── STATES ───────────────────────────────────────── */}
-      <DCSection id="states" title="Reviews — list states"
-        subtitle="Empty, error, and loading states for the Reviews tab, plus the re-auth prompt in Settings.">
-        <DCArtboard id="s-empty" label="All clear (empty)" width={MOCK_W} height={MOCK_H}>
+      {/* ── SIGN-IN + EMPTY STATES ───────────────────────── */}
+      <DCSection id="onboarding" title="Sign-in & empty states"
+        subtitle="The first-run sign-in (one-off, replaces the whole popover) and the per-tab empty states — each panel has its own copy and icon.">
+        <DCArtboard id="o-signin-l" label="Sign in · Light" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={false} wallpaper="dawn" badgeState="normal" init={{ signedOut: true }}/>
+        </DCArtboard>
+        <DCArtboard id="o-signin-d" label="Sign in · Dark" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={true} wallpaper="night" badgeState="normal" init={{ signedOut: true }}/>
+        </DCArtboard>
+        <DCArtboard id="o-empty-rev" label="Reviews · All clear" width={MOCK_W} height={MOCK_H}>
           <window.DesktopMock dark={false} wallpaper="dawn" badgeState="normal" init={{ tab: "reviews", listState: "empty" }}/>
         </DCArtboard>
-        <DCArtboard id="s-error" label="Load error · Retry" width={MOCK_W} height={MOCK_H}>
-          <window.DesktopMock dark={false} wallpaper="dawn" badgeState="attention" init={{ tab: "reviews", listState: "error" }}/>
+        <DCArtboard id="o-empty-out" label="Outgoing · Empty" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={true} wallpaper="night" badgeState="normal" init={{ tab: "outgoing", listState: "empty" }}/>
+        </DCArtboard>
+        <DCArtboard id="o-empty-draft" label="Drafts · Empty" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={false} wallpaper="dawn" badgeState="normal" init={{ tab: "drafts", listState: "empty" }}/>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ── ERROR + CONNECTIVITY STATES ──────────────────── */}
+      <DCSection id="states" title="Error & connectivity states"
+        subtitle="Offline and failure handling: a full panel when there's no cached data to show, and a slim banner above stale rows when there is. Plus the loading skeleton and the re-auth prompt.">
+        <DCArtboard id="s-offline" label="Offline · No cache" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={false} wallpaper="dawn" badgeState="normal" init={{ tab: "reviews", listState: "offline" }}/>
+        </DCArtboard>
+        <DCArtboard id="s-offline-cached" label="Offline · Stale cache (banner)" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={true} wallpaper="night" badgeState="attention" init={{ tab: "reviews", listState: "offlineCached" }}/>
+        </DCArtboard>
+        <DCArtboard id="s-error" label="Load error · No cache" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={false} wallpaper="dawn" badgeState="normal" init={{ tab: "reviews", listState: "error" }}/>
+        </DCArtboard>
+        <DCArtboard id="s-error-cached" label="Load error · Stale cache (banner)" width={MOCK_W} height={MOCK_H}>
+          <window.DesktopMock dark={false} wallpaper="dawn" badgeState="attention" init={{ tab: "outgoing", listState: "errorCached" }}/>
         </DCArtboard>
         <DCArtboard id="s-loading" label="Loading (skeleton)" width={MOCK_W} height={MOCK_H}>
           <window.DesktopMock dark={true} wallpaper="night" badgeState="normal" init={{ tab: "reviews", listState: "loading" }}/>

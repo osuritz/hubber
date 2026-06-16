@@ -17,6 +17,10 @@ function SFIcon({ name, size = 14, color = "currentColor", weight = 1.6 }) {
     trash: <g fill="none" stroke={color} strokeWidth={weight} strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 4h11"/><path d="M5.5 4V2.8c0-.5.4-.8.8-.8h3.4c.4 0 .8.3.8.8V4"/><path d="M3.7 4l.6 9c0 .6.5 1 1 1h5.4c.5 0 1-.4 1-1l.6-9"/></g>,
     lock: <g fill="none" stroke={color} strokeWidth={weight} strokeLinejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.6"/><path d="M5 7V5a3 3 0 016 0v2"/></g>,
     info: <g fill="none" stroke={color} strokeWidth={weight} strokeLinecap="round"><circle cx="8" cy="8" r="6.3"/><path d="M8 7.2v3.6"/><circle cx="8" cy="5.1" r="0.2" fill={color}/></g>,
+    wifiSlash: <g fill="none" stroke={color} strokeWidth={weight} strokeLinecap="round" strokeLinejoin="round"><path d="M3.3 6.1A7.2 7.2 0 0 1 9.4 4.6"/><path d="M5.3 8.5A4.3 4.3 0 0 1 8.2 7.6"/><circle cx="8" cy="11" r="0.95" fill={color} stroke="none"/><path d="M11.4 7.1c.5.3.9.6 1.3 1"/><path d="M2.1 2.1 13.9 13.9"/></g>,
+    warning: <g fill="none" stroke={color} strokeWidth={weight} strokeLinecap="round" strokeLinejoin="round"><path d="M8 2.4 14.5 13.5H1.5z"/><path d="M8 6.5v3.3"/><circle cx="8" cy="11.7" r="0.3" fill={color} stroke="none"/></g>,
+    paperplane: <g fill="none" stroke={color} strokeWidth={weight} strokeLinecap="round" strokeLinejoin="round"><path d="M14.4 2.3 1.9 7.2l4.4 1.7 1.7 4.4z"/><path d="M14.4 2.3 6.3 8.9"/></g>,
+    githubMark: <path d="M8 .4A7.6 7.6 0 0 0 5.6 15.2c.38.07.52-.16.52-.36v-1.27c-2.12.46-2.57-1.02-2.57-1.02-.35-.88-.85-1.12-.85-1.12-.7-.47.05-.46.05-.46.77.05 1.17.79 1.17.79.68 1.17 1.79.83 2.23.64.07-.5.27-.83.48-1.02-1.68-.2-3.45-.84-3.45-3.74 0-.83.3-1.5.78-2.03-.08-.2-.34-.98.07-2.03 0 0 .64-.2 2.08.78a7.2 7.2 0 0 1 3.8 0c1.44-.98 2.07-.78 2.07-.78.42 1.05.16 1.83.08 2.03.49.53.78 1.2.78 2.03 0 2.9-1.77 3.54-3.46 3.73.28.24.52.7.52 1.42v2.1c0 .2.14.44.53.36A7.6 7.6 0 0 0 8 .4z" fill={color} stroke="none"/>,
   };
   return <svg width={size} height={size} viewBox="0 0 16 16" style={{ display: "block", flexShrink: 0 }}>{p[name]}</svg>;
 }

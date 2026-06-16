@@ -57,12 +57,13 @@ struct SettingsView: View {
                         Text("Show SLO as")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(settings.sloEnabled ? HubberDesign.text : HubberDesign.text3)
-                        Picker("", selection: $settings.sloDisplay) {
-                            ForEach(SLODisplay.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .disabled(!settings.sloEnabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            SLODisplay.self,
+                            selection: $settings.sloDisplay,
+                            isEnabled: settings.sloEnabled && !settings.isLocked("sloDisplay"),
+                            title: \.title
+                        )
                         .opacity(settings.sloEnabled ? 1 : 0.45)
                     }
 
@@ -71,12 +72,13 @@ struct SettingsView: View {
                         Text("Incoming requests")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
-                        Picker("", selection: $settings.incomingMode) {
-                            ForEach(IncomingReviewMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .disabled(settings.isLocked("incomingMode"))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            IncomingReviewMode.self,
+                            selection: $settings.incomingMode,
+                            isEnabled: !settings.isLocked("incomingMode"),
+                            title: \.title
+                        )
                     }
                 }
             }
@@ -93,12 +95,13 @@ struct SettingsView: View {
                                 .font(HubberType.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                         }
-                        Picker("", selection: $settings.unresolvedMode) {
-                            ForEach(UnresolvedThreadMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .disabled(settings.isLocked("unresolvedThreadMode"))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            UnresolvedThreadMode.self,
+                            selection: $settings.unresolvedMode,
+                            isEnabled: !settings.isLocked("unresolvedThreadMode"),
+                            title: \.title
+                        )
                     }
                 }
             }
@@ -110,12 +113,13 @@ struct SettingsView: View {
                         Text("Row density")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
-                        Picker("", selection: $settings.rowDensity) {
-                            ForEach(RowDensity.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .disabled(settings.isLocked("rowDensity"))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            RowDensity.self,
+                            selection: $settings.rowDensity,
+                            isEnabled: !settings.isLocked("rowDensity"),
+                            title: \.title
+                        )
                     }
                 }
             }
@@ -127,12 +131,13 @@ struct SettingsView: View {
                         Text("Badge shows")
                             .font(HubberType.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
-                        Picker("", selection: $settings.badgeMode) {
-                            ForEach(BadgeMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .disabled(settings.isLocked("badgeMode"))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            BadgeMode.self,
+                            selection: $settings.badgeMode,
+                            isEnabled: !settings.isLocked("badgeMode"),
+                            title: \.title
+                        )
                     }
                 }
             }
@@ -155,12 +160,13 @@ struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Section header: 11 / Semibold · UPPERCASE · +0.4 tracking
+            // Section header: Title Case · 13 / Regular · secondaryLabelColor (native macOS style)
             HStack(spacing: 7) {
-                Text(title.uppercased())
-                    .font(HubberType.section)
-                    .tracking(0.4)
-                    .foregroundStyle(HubberDesign.text2)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    // No native token sits between secondaryLabelColor and labelColor;
+                    // secondary reads too light for a section header, so use primary at 70%.
+                    .foregroundStyle(Color.primary.opacity(0.7))
 
                 if isDebug {
                     Text("DEBUG")
@@ -179,12 +185,15 @@ struct SettingsSection<Content: View>: View {
             content()
         }
         .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, isLast ? 18 : 2)
+        .padding(.top, 12)
+        // Real gap below the card so the separator sits in the gutter between
+        // sections (12pt below this card, 12pt above the next header) rather than
+        // being pulled up into the card by overlay padding.
+        .padding(.bottom, isLast ? 18 : 12)
         .overlay(alignment: .bottom) {
             if !isLast {
-                HubberDesign.sep.frame(height: 0.5)
-                    .padding(.top, 12)
+                Color(nsColor: .separatorColor)
+                    .frame(height: 0.5)
             }
         }
     }
@@ -239,7 +248,8 @@ struct SettingsRow<Content: View>: View {
         .frame(minHeight: 22)
         .overlay(alignment: .bottom) {
             if !isLast {
-                HubberDesign.sep.frame(height: 0.5)
+                Color(nsColor: .separatorColor)
+                    .frame(height: 0.5)
                     .padding(.leading, 12)
             }
         }
