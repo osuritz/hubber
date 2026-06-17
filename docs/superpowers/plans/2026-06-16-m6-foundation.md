@@ -19,9 +19,9 @@
 3. **One shared `SettingsStore`** across all connections (per-connection settings is a later refinement). `Connection` reads the injected shared `settings`.
 4. **`CodeHostAuthServicing` is introduced now as the connection-facing auth seam** holding the *generic* surface (`refresh`, `fetchAuthenticatedUser`), which `GitHubAuthService` conforms to. GitHub **device-flow** methods (`startDeviceFlow`, `pollForToken`) stay on the GitHub-specific `GitHubDeviceFlowServicing: CodeHostAuthServicing`. The GitLab **PAT** credential path is added to this same seam in #60 — **do not** build it here.
 5. **GHES base-URL parameterization is #82, not here.** This plan stays on `github.com`. Do not touch the hardcoded hosts in `GitHubProvider`/`GitHubAuthService` except where the `Connection` passes them through unchanged.
-6. **Single-connection UI is preserved.** The coordinator exposes a `primaryConnection` whose `authState` drives the existing header/sign-in chrome; aggregated `data` (1..N connections) drives the lists. The real account/provider switcher that surfaces >1 connection is **#61** — out of scope here.
-7. **Notification model = per-connection snapshot files + a coordinator diff over aggregated data.** Each `Connection` persists its **own** snapshot file (isolation, sign-out cleanup). The notification *diff* runs once over **aggregated current data** vs the **union of all connections' baselines** (dedup by id), so the same PR under two accounts fires exactly one notification and a 2nd connection never false-fires a PR the 1st already knew. After dispatch, each connection advances **its own** baseline file (preserving the existing succeeded-tabs-only partial-failure logic in `HubberStoreNotifications.swift`).
-8. **Migration is mandatory.** Existing users have one token at the legacy Keychain `account = "github-app-user-token"` and one snapshot at `notification-snapshot.json`. On first launch with no connection registry, migrate the legacy token (its cached `login` yields the `ConnectionID`) and rename the legacy snapshot to the derived path. Never silently drop a user's session or re-baseline (which would notification-storm).
+6. **Single-connection UI is preserved.** The coordinator exposes a `primaryConnection` (`connections.first`) whose `authState` drives the existing header/sign-in chrome; aggregated `data` (1..N connections) drives the lists. `connections` is **insertion-ordered and never reordered on refresh** (so "primary" is stable); removing the primary promotes the new first (or `.signedOut` when empty). Known transitional gap (acceptable for #81, document in the PR): with 2 connections where A is `.signedIn` and B is `.sessionExpired`, the header shows only A and B's re-auth prompt is unreachable until #61's switcher. The real account/provider switcher that surfaces >1 connection is **#61** — out of scope here.
+7. **Notification model = per-connection snapshot files + a single COORDINATOR-owned union diff** *(hardened per Opus design review R3/R4)*. Each `Connection` persists its **own** snapshot file (isolation, sign-out cleanup) — but the notification **diff is a coordinator concern, NOT a `Connection` method**. After any connection refreshes, the coordinator runs ONE `NotificationDiffer.events(previous: mergedBaseline(connections.baselines), current: aggregate(connections.data), …)`. Then **only the connection that just refreshed advances its own baseline slice** (preserving the succeeded-tabs-only logic from `HubberStoreNotifications.swift:43-55`); stale connections are untouched, so their unchanged data produces zero spurious events. `mergedBaseline` must merge **overlapping outgoing ids by OR-ing `mergeable`/`approved` and unioning `reviewerStates`** — NOT keep-first (keep-first arbitrarily picks one connection's stale state → `prMerged`/`reviewApproved` double-fire or miss under staggered schedulers). This yields exactly-once across accounts (MC-NOTIF-04) while preserving isolation (MC-NOTIF-02/03/05).
+8. **Migration is mandatory.** Existing users have one token at the legacy Keychain `account = "github-app-user-token"` and one snapshot at `notification-snapshot.json`. On first launch with no connection registry, migrate the legacy token and rename the legacy snapshot to the derived path. Migration **keys off the token's CACHED `login` only — never a network call** (`fetchAuthenticatedUser` may be offline at first launch). *(RC2)* If the cached login is `nil` (very old tokens), do NOT drop the session: fall back to a single legacy-keyed connection and migrate later. Never silently drop a user's session or re-baseline (which would notification-storm).
 9. **Partial failure = last-good data + per-connection error.** A failed connection keeps its previous `data` and sets its own `incomingError`/etc.; it is never replaced with empty data, and its baseline is never dropped. Aggregation simply unions whatever each connection currently holds.
 
 ---
@@ -91,29 +91,41 @@ final class Connection: ObservableObject, Identifiable {
     @Published var rateLimitedUntil: Date?
     var notificationBaseline: ReviewSnapshot?
 
+    // PER-CONNECTION injected dependencies (test seam, Opus risk #6): each Connection gets its
+    // OWN provider/authService/tokenStore/snapshotStore/scheduler so a test can make A throw 429/401
+    // while B is healthy (MC-SCHED-02, MC-ERR-01/02/03). The coordinator (or a test factory) builds
+    // these; they are NOT shared across connections.
     let provider: any CodeHostProvider
     let authService: any GitHubDeviceFlowServicing
     let tokenStore: any GitHubTokenStoring
     let snapshotStore: SnapshotStore
     let scheduler: RefreshScheduler
+    let settings: SettingsStore                  // SHARED (decision #3), injected
     // moved from HubberStore, scoped to this connection:
     func restoreSession(); func startSignIn(policy: ProviderAccessPolicy)
     func signOut() async; func refreshNow()
-    func refreshPullRequestsFromGitHub() async -> TabSuccesses?   // nil if it bailed
+    func refreshPullRequestsFromGitHub() async -> TabSuccesses?   // nil if it bailed; commits self.data first
     var signedInLogin: String? { ... }
+    // NOTE: dispatchNotifications does NOT live here — it is a coordinator concern (decision #7 / R3).
 }
 ```
+> **Coordinator test seam (Opus risk #6):** add `HubberStore.addConnection(id:provider:authService:tokenStore:)` (or let a test build a `Connection` directly and hand it to the coordinator). Without per-connection injectable deps, MC-SCHED-02 and the whole Area-I error matrix are NOT automatable. `RefreshScheduler(sleep:)` + `ControlledSleeper` and the spy `CodeHostCacheInvalidating` wrapper (for MC-SIGNOUT-02) already exist.
 
 ```swift
 // Sources/Hubber/Core/ConnectionAggregator.swift
 enum ConnectionAggregator {
     /// Union across connections; dedup incoming by id keeping earliest sloClockStart,
-    /// outgoing/drafts by id keeping first. Deterministic sort.
+    /// outgoing/drafts by id keeping first. Deterministic sort. (DONE in Task 5.)
     static func aggregate(_ datas: [HubberData]) -> HubberData
-    /// Union of baselines for the single cross-connection notification diff (dedup by id).
+    /// Union of baselines for the single cross-connection notification diff.
+    /// R4 (Task 8 refinement): for an OUTGOING id present in >1 baseline, do NOT keep-first the
+    /// whole OutgoingSnapshot — OR the `mergeable`/`approved` booleans and UNION the `reviewerStates`
+    /// (a reviewer that advanced past `pending` in any connection wins), so prMerged/reviewApproved
+    /// fire exactly once. Keep-first metadata (repo/number/title/url) is fine.
     static func mergedBaseline(_ baselines: [ReviewSnapshot]) -> ReviewSnapshot
 }
 ```
+> The Task-5 `mergedBaseline` (keep-first) is correct for the disjoint case (a PR has one author, so outgoing rarely overlaps). **Task 8 refines it** to the state-union semantics above and adds an overlapping-outgoing `ConnectionAggregatorTests` case (the Task-5 tests cover only incoming dedup).
 
 ```swift
 // Sources/Hubber/GitHubAuth.swift — HubberStore becomes the coordinator
@@ -122,15 +134,31 @@ enum ConnectionAggregator {
     var primaryConnection: Connection? { connections.first }
     // forwarded single-connection surface the existing views already use:
     var authState: HubberAuthState { primaryConnection?.authState ?? .signedOut }
-    var data: HubberData { ConnectionAggregator.aggregate(connections.map(\.data)) }
-    // errors/refresh-state forward from primaryConnection; settings/telemetry stay shared.
-    func addConnection(_ id: ConnectionID)        // builds keyed stores + scheduler
+    @Published private(set) var data = HubberData(incoming: [], outgoing: [], drafts: [])  // R1: STORED, recomputed in a sink
+    @Published private(set) var isRefreshingPullRequests = false                            // forwarded from primaryConnection; keep a real publisher
+    // errors/refresh-state forward from primaryConnection; settings/telemetry/notificationCoordinator stay shared.
+    // NOTE (R3): the notification diff lives HERE (coordinator), not on Connection — see decision #7.
+    func addConnection(_ id: ConnectionID)        // builds keyed stores + scheduler; re-binds aggregate
     func removeConnection(_ id: ConnectionID) async
     func restoreAllConnections()                  // from registry (+ legacy migration)
 }
 ```
 
-> **`@Published var data` removal:** today views read `store.data` (a stored `@Published`). Replace with a computed aggregate plus an explicit `objectWillChange.send()` (or a small `@Published private(set) var aggregatedData` recomputed whenever any connection publishes). Use a Combine merge of the connections' `objectWillChange` → recompute. Keep the public name `data` so views don't change.
+> **`data` is a STORED `@Published`, recomputed in a sink — NOT a computed getter** *(Opus review R1/R2)*. A computed `data` would break `main.swift:117/119` (which use `store.$data` / `store.$isRefreshingPullRequests` projected publishers) and `NotificationWiringTests.swift:121/156` (which assign `store.data =`). Also, a child's `objectWillChange` fires *before* its `@Published` value commits, so a getter read from that sink sees stale data. Use:
+> ```swift
+> @Published private(set) var data = HubberData(incoming: [], outgoing: [], drafts: [])
+> private var connectionCancellables = Set<AnyCancellable>()
+> private func rebindConnections() {                  // R2: call on EVERY $connections change
+>     connectionCancellables.removeAll()              // drop old subs (no leak / no firing for removed)
+>     Publishers.MergeMany(connections.map(\.objectWillChange))
+>         .receive(on: RunLoop.main)                   // run AFTER the child commits its value
+>         .sink { [weak self] in self?.recomputeAggregate() }
+>         .store(in: &connectionCancellables)
+>     recomputeAggregate()
+> }
+> private func recomputeAggregate() { data = ConnectionAggregator.aggregate(connections.map(\.data)) }
+> ```
+> Subscribe `$connections` → `rebindConnections()` so add/remove/migration re-binds. Connections hold **no** back-reference to the store; every sink is `[weak self]`.
 
 ---
 
@@ -144,7 +172,7 @@ enum ConnectionAggregator {
 | Create | `Sources/Hubber/Core/ConnectionRegistry.swift` | Persist/list `[ConnectionID]` in UserDefaults; legacy migration |
 | Modify | `Sources/Hubber/GitHubAuth.swift` | Keyed `GitHubKeychainTokenStore(account:)`; `CodeHostAuthServicing`/`GitHubDeviceFlowServicing`; `HubberStore` → coordinator over `[Connection]` |
 | Modify | `Sources/Hubber/GitHub/HubberStoreTabs.swift` | Move per-tab fetch onto `Connection` (operates on its own `data`/errors) |
-| Modify | `Sources/Hubber/GitHub/HubberStoreNotifications.swift` | Coordinator diff over aggregated data vs merged baseline; per-connection baseline write-back |
+| Modify | `Sources/Hubber/GitHub/HubberStoreNotifications.swift` | Coordinator (HubberStore) runs ONE diff over aggregated data vs union baseline; ONLY the refreshed connection advances its own baseline (R3) |
 | Modify | `Sources/Hubber/Notifications/SnapshotStore.swift` | `init(connectionID:)` + `delete()` + `legacySnapshotURL` |
 | Modify | `Sources/Hubber/HubberPopoverView.swift` | Bind to forwarded surface only where stored→computed changes force it (no UX change) |
 | Modify | `Sources/Hubber/main.swift` | Build coordinator; `restoreAllConnections()` at launch |
@@ -155,6 +183,8 @@ enum ConnectionAggregator {
 | Create | `Tests/HubberTests/MultiConnectionNotificationTests.swift` | MC-NOTIF-01/02/03/04 |
 | Modify | `Tests/HubberTests/SnapshotStoreTests.swift` | per-connection path uniqueness (MC-NOTIF-01) + migration |
 | Modify | `Tests/HubberTests/HubberStoreRestoreSessionTests.swift` | `SpyTokenStore` keyed; single-connection restore still green |
+| Modify | `Tests/HubberTests/NotificationWiringTests.swift` | **(R1)** `store.data =` / `store.notificationBaseline =` / `store.dispatchNotifications(...)` migrate to a `Connection` + a coordinator cross-connection test |
+| Modify | `Sources/Hubber/Core/ConnectionAggregator.swift` | **(R4)** Task 8 refines `mergedBaseline` to state-union merge for overlapping outgoing ids |
 
 ---
 
@@ -175,23 +205,25 @@ Introduce `CodeHostAuthServicing` (generic) + `GitHubDeviceFlowServicing` (adds 
 ### Task 5 — Pure `ConnectionAggregator` (TDD) 
 Implement `aggregate` (union; dedup incoming by id keeping earliest `sloClockStart`; outgoing/drafts by id keeping first; deterministic sort: incoming by `sloClockStart` asc, outgoing by `updatedAgoHours` asc, drafts by `updatedAt` desc) and `mergedBaseline` (union of `incomingIDs`; merge `outgoing` dicts, keep first per id). **Tests (`ConnectionAggregatorTests`):** MC-AGG-01 (union count 5), MC-AGG-02 (dup id once, earliest SLO kept), MC-AGG-03 (outgoing sort), MC-AGG-04 (drafts dedup), MC-AGG-05 (one connection's items survive when the other contributes none), MC-BADGE-01..04 (attention count / isAllGreen over aggregated data). Commit: `feat(m6): ConnectionAggregator union+dedup+mergedBaseline (#81)`.
 
-### Task 6 — Extract `Connection` (TDD) — landmine #3 (core refactor)
-Create `Connection`. Move from `HubberStore` into it, scoped to one account: `restoreSession`, `startSignIn(policy:)`, `cancelSignIn`, `signOut`, the per-tab fetch (`HubberStoreTabs.swift` methods rebased onto `self.data`/`self.{incoming,outgoing,drafts}Error`), `refreshPullRequestsFromGitHub`, `handleRefreshError`, `freshStoredToken`, its own `RefreshScheduler` and `authTask`. Each `Connection` takes the **shared** `settings`/`telemetry` and a **per-connection** `tokenStore`/`snapshotStore`/`provider`. **Tests (`MultiConnectionStoreTests`):** MC-AUTH-02 (second account reaches `.signedIn` without disturbing the first), MC-AUTH-04 (both restore; one expired → `.sessionExpired`, other `.signedIn`), MC-SCHED-02 (rate-limit on A via `ControlledSleeper`/spy does not change B's cadence), MC-ERR-02 (`rateLimitedUntil` set on A only), MC-MDM-01 (`startSignIn` under `allowPersonalGitHub=false` never calls `startDeviceFlow`). Commit: `feat(m6): extract per-connection Connection (token/scheduler/authTask isolation) (#81)`.
+> **Commit order for the single PR (Opus sequencing).** 6–9 are interdependent (the coordinator can't compile without `Connection`; views can't bind without the coordinator) → ONE PR, but commit in an order that keeps `swift build` green at each step and lands the **riskiest** change (Task 8 notification model) **last and isolated**: (6) extract `Connection` while `HubberStore` still wraps a **single** `Connection` and forwards everything → tree green, all single-connection tests pass unchanged; (7) generalize to `[Connection]` + registry; (8) swap the notification diff to the union model; (9) wire views/main. **Do not split into multiple PRs** — the interim "N connections but old per-connection notification diff" state is exactly the R3 double-fire bug; merging it to main would ship a known defect.
 
-### Task 7 — `HubberStore` coordinator + registry + sign-out isolation (TDD) 
-Reshape `HubberStore` to hold `@Published private(set) var connections: [Connection]` and the shared `settings`/`telemetry`/`notificationCoordinator`. Forward the single-connection surface (`authState`, errors, `usernameDisplay`, `canRefreshPullRequests`, `isAuthenticating`) from `primaryConnection`; expose `data` as the recomputed `ConnectionAggregator.aggregate(...)` (Combine-merge connections' `objectWillChange` → republish). Add `ConnectionRegistry` (UserDefaults `hubber.connections` = encoded `[ConnectionID]`), `addConnection`/`removeConnection`, and `restoreAllConnections()` (registry → connections, running the Task-2/3 migrations when the registry is empty). `signOut()` and `removeConnection` touch only the target connection (its `tokenStore.delete()`, `snapshotStore.delete()`, `provider` `invalidateAll()`, `scheduler.stop()`). **Tests (`MultiConnectionStoreTests`):** MC-SIGNOUT-02 (`invalidateAll` only on A's provider — assert via a spy `CodeHostCacheInvalidating` wrapper), MC-SIGNOUT-03 (only A's scheduler stops; B keeps ticking via `ControlledSleeper`), and that single-connection `restoreAllConnections()` matches today's `restoreSession` behavior (extend `HubberStoreRestoreSessionTests`). Commit: `feat(m6): HubberStore coordinator over [Connection] + registry + sign-out isolation (#81)`.
+### Task 6 — Extract `Connection`, HubberStore still single-connection (TDD) — landmine #3 (core refactor)
+Create `Connection`. Move from `HubberStore` into it, scoped to one account: `restoreSession`, `startSignIn(policy:)`, `cancelSignIn`, `signOut`, the per-tab fetch (`HubberStoreTabs.swift` rebased onto `self.data`/`self.{incoming,outgoing,drafts}Error`), `refreshPullRequestsFromGitHub`, `handleRefreshError`, `freshStoredToken`, its own `RefreshScheduler` and `authTask`. `nonisolated static authState(afterRefreshError:)` is pure → moves to `Connection` (or stays a shared static). **`dispatchNotifications` does NOT move to `Connection` — it stays on `HubberStore` (coordinator), see Task 8.** Each `Connection` takes the **shared** `settings`/`telemetry` and **per-connection** injected `tokenStore`/`snapshotStore`/`provider`/`authService`. **Keep this commit green by having `HubberStore` wrap exactly ONE `Connection` and forward its surface** (no `[Connection]` yet) — the existing UI and `PerTabRefreshTests`/`HubberStoreProviderPolicyTests`/`HubberStoreRestoreSessionTests` must pass unchanged (preserve `startSignIn()` no-arg/default-policy and `refreshPullRequests()` routing to the single connection). **Tests (`MultiConnectionStoreTests`, constructing `Connection`s directly):** MC-AUTH-02 (second `Connection` reaches `.signedIn` without disturbing the first), MC-SCHED-02 (rate-limit on A via per-connection `ControlledSleeper`/spy `authService` does not change B's cadence), MC-ERR-02 (`rateLimitedUntil` set on A only), MC-MDM-01 (`startSignIn` under `allowPersonalGitHub=false` never calls `startDeviceFlow`). Commit: `feat(m6): extract per-connection Connection; HubberStore forwards a single Connection (#81)`.
 
-### Task 8 — Cross-connection notification diff (TDD) 
-Rework `HubberStoreNotifications.swift`: after any connection's refresh completes, build the diff input as `ConnectionAggregator.aggregate(connections.map(\.data))` vs `ConnectionAggregator.mergedBaseline(connections.compactMap(\.notificationBaseline))`, run a **single** `notificationCoordinator.processRefresh(...)`, then have **each** connection advance and persist its own baseline file (reusing the existing succeeded-tabs-only logic). **Tests (`MultiConnectionNotificationTests`):** MC-NOTIF-02 (new `pr-A1` on A fires once; unchanged `pr-B1` on B silent), MC-NOTIF-03 (both baselines match current → relaunch fires nothing), MC-NOTIF-04 (same PR approved under both accounts → exactly one `reviewApproved`), and the MC-AGG-02 regression (duplicate incoming id never double-fires `newReview`). Commit: `feat(m6): cross-connection notification diff over aggregated data + merged baseline (#81)`.
+### Task 7 — `HubberStore` coordinator over `[Connection]` + registry + sign-out isolation (TDD) 
+Generalize `HubberStore` to hold `@Published private(set) var connections: [Connection]` (insertion-ordered, never reordered) + shared `settings`/`telemetry`/`notificationCoordinator`. Forward the single-connection surface from `primaryConnection`. Implement the **stored `@Published var data` + `rebindConnections()` sink subscribed to `$connections`** exactly as in the contract callout (R1/R2). Add `ConnectionRegistry` (UserDefaults `hubber.connections` = encoded `[ConnectionID]`); `addConnection`/`removeConnection(_:) async`; `restoreAllConnections()` (registry → connections; runs Task-2/3 migrations **only when the registry is empty**, migration keying off the token's cached `login`, no network — RC2; nil cached login → single legacy-keyed connection, never dropped). A connection that restores to `.signedOut` with no token is **pruned from the registry** (RC3, no ghost entries). `signOut()`/`removeConnection` touch only the target (`tokenStore.delete()`, `snapshotStore.delete()` (MC-NOTIF-05), `provider.invalidateAll()`, `scheduler.stop()`) **and then re-aggregate** so the badge drops that account immediately (RC1). Pick ONE async convention for `signOut`/`removeConnection` and make the menubar selector in `main.swift` match. **Tests (`MultiConnectionStoreTests`):** MC-AUTH-04 (both restore; one expired → `.sessionExpired`, other `.signedIn`), MC-SIGNOUT-02 (`invalidateAll` only on A's provider — spy `CodeHostCacheInvalidating` wrapper), MC-SIGNOUT-03 (only A's scheduler stops; B keeps ticking), MC-SIGNOUT-04 (sign out all → empty aggregate, no schedulers), add-second-account keeps the aggregate live (R2 re-bind), and single-connection `restoreAllConnections()` matches today's `restoreSession` (extend `HubberStoreRestoreSessionTests`). Commit: `feat(m6): HubberStore coordinator over [Connection] + registry + sign-out isolation (#81)`.
+
+### Task 8 — Coordinator-owned cross-connection notification diff (TDD) — **riskiest; land last & isolated** 
+Move the notification diff onto the **coordinator**. After any connection's refresh completes (the connection has already committed `self.data`), run ONE diff: `previous = ConnectionAggregator.mergedBaseline(connections.compactMap(\.notificationBaseline))`, `current = ConnectionAggregator.aggregate(connections.map(\.data))`, then a single `notificationCoordinator.processRefresh(...)`. **Only the connection that just refreshed advances and persists ITS OWN baseline slice** (reuse the succeeded-tabs-only logic from `HubberStoreNotifications.swift:43-55`); stale connections are untouched. **Refine `mergedBaseline` (R4):** for an outgoing id in >1 baseline, OR the `mergeable`/`approved` booleans and UNION `reviewerStates` (any connection past `pending` wins) — keep-first is wrong and causes `prMerged`/`reviewApproved` double-fire/miss under staggered schedulers. Migrate `NotificationWiringTests` (the `store.data =` / `store.notificationBaseline =` / `store.dispatchNotifications(...)` calls) onto a `Connection` + a coordinator-level cross-connection test. **Tests:** `ConnectionAggregatorTests` overlapping-outgoing `mergedBaseline` case (R4); `MultiConnectionNotificationTests` — MC-NOTIF-02 (new `pr-A1` on A fires once; unchanged `pr-B1` on B silent), MC-NOTIF-03 (baselines match current → relaunch fires nothing), MC-NOTIF-04 (same PR approved under both → exactly one `reviewApproved`), MC-NOTIF-05 (sign-out A deletes A's snapshot only), MC-AGG-02 regression (dup incoming id never double-fires `newReview`), and a **staggered-refresh** test (A refreshes, then B; B's unchanged data fires nothing). Commit: `feat(m6): coordinator-owned union notification diff; per-connection baseline write-back (#81)`.
 
 ### Task 9 — View/main wiring + green sweep (no UX change) 
-Update `HubberPopoverView.swift`/`main.swift` only as needed for the stored→computed `data` change and `restoreAllConnections()`. Run the full suite + lint + format; fix any single-connection regressions. **Verify:** `swift build` clean, `swift test` all green, `make lint` 0, `make format` idempotent; launch the app once signed into one account → identical behavior to pre-refactor. Commit: `feat(m6): wire coordinator into views + launch; green sweep (#81)`.
+Rebuild `main.swift`'s store subscription: it currently does `store.$data.map {…}` / `store.$isRefreshingPullRequests.map {…}` (`main.swift:117/119`) — these stay valid because `data`/`isRefreshingPullRequests` remain **stored `@Published`** (R1). Update `HubberPopoverView.swift` only where forwarding requires it (no UX change). Run the full suite + lint + format; fix any single-connection regressions. **Verify:** `swift build` clean, `swift test` all green (incl. the migrated `NotificationWiringTests`), `make lint` 0, `make format` idempotent; launch the app signed into one account → identical behavior to pre-refactor. Commit: `feat(m6): wire coordinator into views + launch; green sweep (#81)`.
 
 ---
 
 ## Acceptance (whole PR — Phase-1 gate, `docs/qa/2026-06-16-multi-connection-test-plan.md`)
 - `swift build` clean; `swift test` all pass (existing + new); `make lint` 0; `make format` idempotent.
-- These Phase-1 stories are covered by passing tests: **MC-TOKEN-01/02/03/04, MC-AUTH-02/04, MC-NOTIF-01/02/03(+04), MC-SIGNOUT-02/03, MC-SCHED-02, MC-AGG-02/05, MC-ERR-02, MC-MDM-01.** (Token-03/04 refresh-scoping ride Task 6.)
+- These Phase-1 stories are covered by passing tests: **MC-TOKEN-01/02/03/04, MC-AUTH-02/04, MC-NOTIF-01/02/03/04/05, MC-SIGNOUT-02/03/04, MC-SCHED-02, MC-AGG-02/05, MC-ERR-02, MC-MDM-01** + a staggered-refresh no-spurious-fire test. (Token-03/04 refresh-scoping ride Task 6.) MC-GL-01/02/03 are GitLab (#60), tracked under epic #80 — not this PR.
 - Single-connection behavior is byte-for-byte unchanged in the UI; legacy token + snapshot migrate with no notification storm and no lost session.
 - Open PR → main with `Closes #81` and `Refs #80`; **watch CI green on `macos-26` before squash-merge.**
 
