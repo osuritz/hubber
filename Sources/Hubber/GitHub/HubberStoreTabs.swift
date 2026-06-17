@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Per-tab independent refresh helpers
 
 @MainActor
-extension HubberStore {
+extension Connection {
     /// Fans out three concurrent tab fetches; commits successful data before any global error handling.
     /// Returns `(didStop, tabSuccesses)` where `tabSuccesses` indicates which tabs fetched successfully
     /// (used by the notification pipeline to avoid false "merged" events on partial failures).
@@ -32,7 +32,7 @@ extension HubberStore {
             incoming: incomingResult.failureError == nil,
             outgoing: outgoingResult.failureError == nil
         )
-        data = HubberData(incoming: newIncoming, outgoing: newOutgoing, drafts: newDrafts)
+        replaceData(HubberData(incoming: newIncoming, outgoing: newOutgoing, drafts: newDrafts))
         if let globalError = incomingGlobal ?? outgoingGlobal ?? draftsGlobal {
             await handleRefreshError(globalError, settingGlobalError: false)
             return (true, tabSuccesses)
@@ -103,32 +103,4 @@ extension HubberStore {
         }
     }
 
-    /// Handles rate-limit and credential errors; returns `true` for global errors.
-    @discardableResult
-    func handleRefreshError(_ error: Error, settingGlobalError: Bool = true) async -> Bool {
-        if case let GitHubAuthError.rateLimited(retryAfter) = error {
-            let delay = retryAfter ?? (15 * 60)
-            rateLimitedUntil = Date().addingTimeInterval(delay)
-            let minutes = Int((delay / 60).rounded(.up))
-            appendDeveloperLog("GitHub rate limited, backing off for \(minutes)m")
-            return true
-        }
-        guard let newState = Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) else {
-            if settingGlobalError {
-                pullRequestRefreshError = error.localizedDescription
-                appendDeveloperLog("Refresh failed: \(error.localizedDescription)")
-            }
-            return false
-        }
-        authState = newState
-        if case .sessionExpired = newState {
-            appendDeveloperLog("Refresh failed: session expired, showing re-auth prompt")
-            stopPullRequestRefreshLoop()
-        } else if case .signedOut = newState {
-            try? await deleteStoredToken()
-            appendDeveloperLog("Refresh failed: invalid credentials")
-            stopPullRequestRefreshLoop()
-        }
-        return true
-    }
 }

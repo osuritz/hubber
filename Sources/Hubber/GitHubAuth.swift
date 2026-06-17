@@ -292,21 +292,60 @@ final class GitHubAuthService: GitHubAuthServicing, Sendable {
 
 @MainActor
 final class HubberStore: ObservableObject {
-    @Published var authState: HubberAuthState = .restoring
-    @Published private(set) var viewerName: String?
-    @Published private(set) var viewerAvatarURL: URL?
     @Published var data = HubberData.sample
     @Published private(set) var isRefreshingPullRequests = false
-    @Published private(set) var lastPullRequestRefresh: Date?
-    @Published var pullRequestRefreshError: String?
-    /// Per-tab fetch errors. Nil when the last fetch for that tab succeeded.
-    @Published var incomingError: String?
-    @Published var outgoingError: String?
-    @Published var draftsError: String?
-    @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published private(set) var isPopoverOpen = false
     /// True when the user has denied notification authorization.
     @Published var notificationsDenied = false
+
+    var authState: HubberAuthState {
+        get { connection.authState }
+        set {
+            connection.authState = newValue
+            syncPublishedFromConnection()
+        }
+    }
+
+    var viewerName: String? {
+        connection.viewerName
+    }
+
+    var viewerAvatarURL: URL? {
+        connection.viewerAvatarURL
+    }
+
+    var lastPullRequestRefresh: Date? {
+        connection.lastPullRequestRefresh
+    }
+
+    var developerLog: [DeveloperLogEntry] {
+        connection.developerLog
+    }
+
+    var pullRequestRefreshError: String? {
+        get { connection.pullRequestRefreshError }
+        set { connection.pullRequestRefreshError = newValue }
+    }
+
+    var incomingError: String? {
+        get { connection.incomingError }
+        set { connection.incomingError = newValue }
+    }
+
+    var outgoingError: String? {
+        get { connection.outgoingError }
+        set { connection.outgoingError = newValue }
+    }
+
+    var draftsError: String? {
+        get { connection.draftsError }
+        set { connection.draftsError = newValue }
+    }
+
+    var rateLimitedUntil: Date? {
+        get { connection.rateLimitedUntil }
+        set { connection.rateLimitedUntil = newValue }
+    }
 
     var rateLimitMessage: String? {
         guard let until = rateLimitedUntil, until > Date() else { return nil }
@@ -315,13 +354,9 @@ final class HubberStore: ObservableObject {
 
     let settings: SettingsStore // exposed so views can bind
     let telemetry: Telemetry // exposed so views can emit events
-
-    private let authService: any GitHubAuthServicing
-    let provider: any CodeHostProvider
-    private let tokenStore: any GitHubTokenStoring
-    private let scheduler: RefreshScheduler
-    private var authTask: Task<Void, Never>?
-    @Published var rateLimitedUntil: Date?
+    var provider: any CodeHostProvider {
+        connection.provider
+    }
 
     // MARK: - Notification pipeline
 
@@ -329,7 +364,9 @@ final class HubberStore: ObservableObject {
     let snapshotStore: SnapshotStore
     /// Persisted baseline; nil on first run (initial load must not fire).
     var notificationBaseline: ReviewSnapshot?
+    private let connection: Connection
     private let dispatcher: any NotificationDispatching
+    private var cancellables = Set<AnyCancellable>()
 
     init(
         authService: any GitHubAuthServicing = GitHubAuthService(),
@@ -341,16 +378,31 @@ final class HubberStore: ObservableObject {
         dispatcher: any NotificationDispatching = UNNotificationDispatcher(),
         snapshotStore: SnapshotStore = SnapshotStore()
     ) {
-        self.authService = authService
-        self.provider = provider
-        self.tokenStore = tokenStore
         self.settings = settings
         self.telemetry = telemetry
         self.snapshotStore = snapshotStore
         self.dispatcher = dispatcher
         notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
-        scheduler = RefreshScheduler(idle: idle)
         notificationBaseline = snapshotStore.load()
+        connection = Connection(
+            id: .gitHubDotCom(login: "legacy"),
+            provider: provider,
+            authService: authService,
+            tokenStore: tokenStore,
+            snapshotStore: snapshotStore,
+            scheduler: RefreshScheduler(idle: idle),
+            settings: settings
+        )
+        connection.notificationBaseline = notificationBaseline
+        connection.onRefreshSucceeded = { [weak self] tabSuccesses in
+            guard let self else { return }
+            syncPublishedFromConnection()
+            await dispatchNotifications(tabSuccesses: tabSuccesses)
+        }
+        connection.onSignedIn = { [weak self] in
+            await self?.requestNotificationAuthorization()
+        }
+        bindConnection()
         restoreSession()
     }
 
@@ -381,199 +433,53 @@ final class HubberStore: ObservableObject {
 
     func setPopoverOpen(_ open: Bool) {
         isPopoverOpen = open
+        connection.isPopoverOpen = open
     }
 
     var usernameDisplay: String {
-        switch authState {
-        case let .signedIn(login):
-            "· @\(login)"
-        case .waitingForUser:
-            "· signing in"
-        case .restoring:
-            "· loading"
-        case .signedOut:
-            "· not signed in"
-        case .sessionExpired:
-            "· session expired"
-        case .error:
-            "· auth error"
-        }
+        connection.usernameDisplay
     }
 
     var canRefreshPullRequests: Bool {
-        if case .signedIn = authState {
-            return true
-        }
-        return false
+        connection.canRefreshPullRequests
     }
 
     /// True while the GitHub device-flow sign-in is awaiting user authorization.
     /// The menu panel stays pinned open in this state so the user can read/copy the
     /// device code and switch to the browser without the panel closing on them.
     var isAuthenticating: Bool {
-        if case .waitingForUser = authState {
-            return true
-        }
-        return false
+        connection.isAuthenticating
     }
 
     func restoreSession() {
-        appendDeveloperLog("Restoring saved GitHub session")
-        appendDeveloperLog("Token storage: \(tokenStoreDescription)")
-        authTask?.cancel()
-        authTask = Task {
-            var cachedLogin: String?
-
-            do {
-                guard var token = try await loadStoredToken() else {
-                    authState = .signedOut
-                    appendDeveloperLog("No saved GitHub token found")
-                    return
-                }
-
-                cachedLogin = token.login
-                if let login = cachedLogin {
-                    useCachedLogin(login)
-                } else {
-                    authState = .restoring
-                }
-
-                if !token.hasFreshAccessToken {
-                    appendDeveloperLog("Refreshing expired GitHub access token")
-                    token = try await authService.refresh(token)
-                }
-
-                let user: GitHubAuthenticatedUser
-                do {
-                    user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
-                } catch GitHubAuthError.badCredentials where token.canRefresh {
-                    token = try await authService.refresh(token)
-                    user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
-                }
-
-                token.login = user.login
-                try await saveStoredToken(token)
-                finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
-            } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
-                await handleRestoreCredentialError(cachedLogin: cachedLogin)
-            } catch {
-                handleRestoreGenericError(error, cachedLogin: cachedLogin)
-            }
-        }
-    }
-
-    private func handleRestoreCredentialError(cachedLogin: String?) async {
-        if let cachedLogin {
-            authState = .sessionExpired(login: cachedLogin)
-            appendDeveloperLog("Saved GitHub credentials were rejected, showing re-auth prompt")
-        } else {
-            try? await deleteStoredToken()
-            authState = .signedOut
-            appendDeveloperLog("Saved GitHub credentials were rejected")
-        }
-        stopPullRequestRefreshLoop()
-    }
-
-    private func handleRestoreGenericError(_ error: Error, cachedLogin: String?) {
-        if let cachedLogin {
-            useCachedLogin(cachedLogin)
-            appendDeveloperLog(
-                "Session restore failed, keeping cached login @\(cachedLogin): \(error.localizedDescription)"
-            )
-            startPullRequestRefreshLoop()
-        } else {
-            authState = .error(error.localizedDescription)
-            appendDeveloperLog("Session restore failed: \(error.localizedDescription)")
-            stopPullRequestRefreshLoop()
-        }
+        connection.restoreSession()
     }
 
     func startSignIn() {
-        // Defense in depth (#54): refuse before starting the device flow when the provider
-        // policy blocks github.com. The UI also disables the button, but enforcing here
-        // prevents any code path from bypassing the restriction.
-        let policy = settings.providerAccessPolicy
-        guard policy.canConnectGitHubDotCom else {
-            let reason = policy.blockedReason ?? "Sign-in is restricted by your organization."
-            appendDeveloperLog("Sign-in blocked by policy: \(reason)")
-            authTask?.cancel()
-            authTask = nil // prevent session-restore from overwriting error
-            authState = .error(reason)
-            return
-        }
+        startSignIn(policy: settings.providerAccessPolicy)
+    }
 
-        appendDeveloperLog("Starting GitHub device sign-in")
-        authTask?.cancel()
-        authTask = Task {
-            do {
-                authState = .restoring
-                let deviceAuthorization = try await authService.startDeviceFlow()
-                authState = .waitingForUser(deviceAuthorization)
-                appendDeveloperLog("Waiting for GitHub device authorization")
-
-                var token = try await authService.pollForToken(deviceAuthorization: deviceAuthorization)
-                let user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
-                token.login = user.login
-                try await saveStoredToken(token)
-                finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
-            } catch is CancellationError {
-                authState = .signedOut
-                appendDeveloperLog("GitHub sign-in cancelled")
-                stopPullRequestRefreshLoop()
-            } catch {
-                authState = .error(error.localizedDescription)
-                appendDeveloperLog("GitHub sign-in failed: \(error.localizedDescription)")
-                stopPullRequestRefreshLoop()
-            }
-        }
+    func startSignIn(policy: ProviderAccessPolicy) {
+        connection.startSignIn(policy: policy)
     }
 
     func cancelSignIn() {
-        authTask?.cancel()
-        authTask = nil
-        authState = .signedOut
-        appendDeveloperLog("GitHub sign-in cancelled")
-        stopPullRequestRefreshLoop()
+        connection.cancelSignIn()
     }
 
     func signOut() {
-        appendDeveloperLog("Signing out")
-        authTask?.cancel()
-        stopPullRequestRefreshLoop()
-        authTask = Task {
-            do {
-                if let invalidating = provider as? CodeHostCacheInvalidating {
-                    await invalidating.invalidateAll()
-                }
-                try await deleteStoredToken()
-                authState = .signedOut
-                viewerName = nil
-                viewerAvatarURL = nil
-                data = HubberData.sample
-                lastPullRequestRefresh = nil
-                pullRequestRefreshError = nil
-                setTabError(nil, for: .incoming)
-                setTabError(nil, for: .outgoing)
-                setTabError(nil, for: .drafts)
-                appendDeveloperLog("Signed out and cleared saved GitHub token")
-            } catch {
-                authState = .error(error.localizedDescription)
-                appendDeveloperLog("Sign out failed: \(error.localizedDescription)")
-            }
+        Task {
+            await connection.signOut()
+            syncPublishedFromConnection()
         }
     }
 
     func openDeviceVerificationPage() {
-        if case let .waitingForUser(authorization) = authState {
-            NSWorkspace.shared.open(authorization.verificationURI)
-        }
+        connection.openDeviceVerificationPage()
     }
 
     func copyDeviceCode() {
-        if case let .waitingForUser(authorization) = authState {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(authorization.userCode, forType: .string)
-        }
+        connection.copyDeviceCode()
     }
 
     func refreshPullRequests() {
@@ -584,114 +490,20 @@ final class HubberStore: ObservableObject {
 
         appendDeveloperLog("Manual pull request refresh requested")
         telemetry.manualRefresh()
-        scheduler.reset()
+        connection.refreshNow()
     }
 
     func clearDeveloperLog() {
-        developerLog.removeAll()
+        connection.clearDeveloperLog()
     }
 
     func copyDeveloperLog() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(developerLogText, forType: .string)
-    }
-
-    private func startPullRequestRefreshLoop() {
-        scheduler.start(
-            context: { [weak self] in
-                guard let self else { return RefreshContext() }
-                let isRateLimited = rateLimitedUntil.map { $0 > Date() } ?? false
-                return RefreshContext(
-                    isRateLimited: isRateLimited,
-                    hasUrgentSLO: AttentionState.hasUrgentSLO(data: data, settings: settings),
-                    isPopoverOpen: isPopoverOpen,
-                    isAllGreen: AttentionState.isAllGreen(data: data)
-                )
-            },
-            refresh: { [weak self] in
-                await self?.refreshPullRequestsFromGitHub()
-            }
-        )
-    }
-
-    private func useCachedLogin(_ login: String) {
-        authState = .signedIn(login: login)
-        appendDeveloperLog("Using cached GitHub login @\(login)")
-    }
-
-    private func finishSignedInSession(login: String, name: String? = nil, avatarUrl: String? = nil) {
-        authState = .signedIn(login: login)
-        viewerName = name
-        viewerAvatarURL = avatarUrl.flatMap { URL(string: $0) }
-        appendDeveloperLog("Signed in as @\(login)")
-        startPullRequestRefreshLoop()
-        // Ask for notification permission at login (idempotent — prompts only the first time)
-        // rather than lazily at the first diff event, so the ask happens at a predictable moment.
-        Task { await requestNotificationAuthorization() }
-    }
-
-    func stopPullRequestRefreshLoop() {
-        scheduler.stop()
-        isRefreshingPullRequests = false
-    }
-
-    private func refreshPullRequestsFromGitHub() async {
-        guard canRefreshPullRequests, !isRefreshingPullRequests else { return }
-        guard rateLimitedUntil.map({ $0 > Date() }) != true else {
-            let until = rateLimitedUntil.map { Self.developerLogFormatter.string(from: $0) } ?? "unknown"
-            appendDeveloperLog("Skipped refresh: rate-limited until \(until)")
-            return
-        }
-        guard let login = signedInLogin else {
-            appendDeveloperLog("Skipped refresh: no signed-in login")
-            return
-        }
-
-        isRefreshingPullRequests = true
-        defer { isRefreshingPullRequests = false }
-
-        // Obtain a fresh token — a token error is a global (credential) failure.
-        let token: GitHubStoredToken
-        do {
-            token = try await freshStoredToken()
-        } catch is CancellationError {
-            appendDeveloperLog("Pull request refresh cancelled")
-            return
-        } catch {
-            await handleRefreshError(error)
-            return
-        }
-
-        appendDeveloperLog("Refreshing all tabs for @\(login)")
-        let (didStop, tabSuccesses) = await fetchAllTabsIndependently(token: token, login: login)
-        if !didStop {
-            lastPullRequestRefresh = Date()
-            pullRequestRefreshError = nil
-            rateLimitedUntil = nil
-            let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
-            appendDeveloperLog("Fetched \(counts)")
-            await dispatchNotifications(tabSuccesses: tabSuccesses)
-        }
-    }
-
-    private func freshStoredToken() async throws -> GitHubStoredToken {
-        guard var token = try await loadStoredToken() else {
-            throw GitHubAuthError.badCredentials
-        }
-
-        if !token.hasFreshAccessToken {
-            token = try await authService.refresh(token)
-            try await saveStoredToken(token)
-        }
-
-        return token
+        NSPasteboard.general.setString(connection.developerLogText, forType: .string)
     }
 
     var signedInLogin: String? {
-        if case let .signedIn(login) = authState {
-            return login
-        }
-        return nil
+        connection.signedInLogin
     }
 
     /// Maps a refresh error to the resulting `HubberAuthState` (or `nil` to leave state unchanged).
@@ -699,67 +511,30 @@ final class HubberStore: ObservableObject {
         afterRefreshError error: Error,
         signedInLogin login: String?
     ) -> HubberAuthState? {
-        switch error {
-        case GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken:
-            if let login {
-                .sessionExpired(login: login)
-            } else {
-                .signedOut
-            }
-        case is CancellationError:
-            nil
-        default:
-            nil
-        }
-    }
-
-    private var developerLogText: String {
-        developerLog
-            .map { entry in
-                "[\(Self.developerLogFormatter.string(from: entry.timestamp))] \(entry.message)"
-            }
-            .joined(separator: "\n")
+        Connection.authState(afterRefreshError: error, signedInLogin: login)
     }
 
     func appendDeveloperLog(_ message: String) {
-        developerLog.insert(DeveloperLogEntry(timestamp: Date(), message: message), at: 0)
-        if developerLog.count > 80 {
-            developerLog.removeLast(developerLog.count - 80)
+        connection.appendDeveloperLog(message)
+    }
+
+    private func bindConnection() {
+        connection.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.syncPublishedFromConnection(sendObjectWillChange: true)
+                }
+            }
+            .store(in: &cancellables)
+        syncPublishedFromConnection()
+    }
+
+    private func syncPublishedFromConnection(sendObjectWillChange: Bool = false) {
+        if sendObjectWillChange {
+            objectWillChange.send()
         }
-    }
-
-    private static let developerLogFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
-
-    private var tokenStoreDescription: String {
-        #if DEBUG
-            return "development file at \(GitHubDevelopmentFileTokenStore.defaultTokenURL.path)"
-        #else
-            return "Keychain"
-        #endif
-    }
-
-    private func loadStoredToken() async throws -> GitHubStoredToken? {
-        let tokenStore = tokenStore
-        return try await Task.detached(priority: .utility) {
-            try tokenStore.load()
-        }.value
-    }
-
-    private func saveStoredToken(_ token: GitHubStoredToken) async throws {
-        let tokenStore = tokenStore
-        try await Task.detached(priority: .utility) {
-            try tokenStore.save(token)
-        }.value
-    }
-
-    func deleteStoredToken() async throws {
-        let tokenStore = tokenStore
-        try await Task.detached(priority: .utility) {
-            try tokenStore.delete()
-        }.value
+        data = connection.data
+        isRefreshingPullRequests = connection.isRefreshingPullRequests
     }
 }
