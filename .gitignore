@@ -35,6 +35,9 @@ playground.xcworkspace
 dist/
 *.app
 
+# macOS Finder cruft
+.DS_Store
+
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However

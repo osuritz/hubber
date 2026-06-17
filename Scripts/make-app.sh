@@ -74,6 +74,10 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>${VERSION}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>hubber</string>
+    <key>CFBundleIconName</key>
+    <string>hubber</string>
     <key>LSUIElement</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
@@ -86,7 +90,29 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Note: no app icon (.icns) yet — follow-up in M4b.
+# ---------------------------------------------------------------------------
+# 2b. App icon — compile the Icon Composer bundle (assets/hubber.icon) into
+#     Assets.car (Liquid Glass on macOS 26) + hubber.icns (classic fallback).
+#     The matching CFBundleIconFile / CFBundleIconName keys are set in the
+#     Info.plist above. Requires Xcode's actool (full Xcode, not just the CLT).
+# ---------------------------------------------------------------------------
+ICON_SRC="assets/hubber.icon"
+if [[ -d "$ICON_SRC" ]] && xcrun --find actool >/dev/null 2>&1; then
+  echo "==> Compiling app icon from $ICON_SRC"
+  ICON_PARTIAL="$(mktemp -t hubber-icon-partial).plist"
+  xcrun actool \
+    --output-format human-readable-text \
+    --app-icon hubber \
+    --platform macosx \
+    --minimum-deployment-target 14.0 \
+    --target-device mac \
+    --output-partial-info-plist "$ICON_PARTIAL" \
+    --compile "$CONTENTS/Resources" \
+    "$ICON_SRC"
+  rm -f "$ICON_PARTIAL"
+else
+  echo "WARNING: $ICON_SRC missing or actool unavailable — building without an app icon" >&2
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Code signing (no --options runtime; that requires notarization).
