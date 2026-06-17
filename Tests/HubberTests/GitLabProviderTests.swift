@@ -154,11 +154,11 @@ final class GitLabProviderTests: XCTestCase {
 
         XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString, "https://gitlab.com/api/graphql")
         XCTAssertEqual(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization"), "Bearer glpat-author")
-        XCTAssertEqual(reviews.count, 2)
+        XCTAssertEqual(reviews.count, 3)
         XCTAssertNil(reviews.first(where: { $0.id == "gid://gitlab/MergeRequest/903" }))
     }
 
-    func testFetchOutgoingPullRequestsDefaultsMissingApprovalsForFreeTier() async throws {
+    func testFetchOutgoingPullRequestsCountsApprovedByForFreeTier() async throws {
         MockURLProtocol.handler = { request in
             try (Self.response(for: request), Self.authoredMergeRequestsResponse)
         }
@@ -172,7 +172,7 @@ final class GitLabProviderTests: XCTestCase {
 
         let freeTier = try XCTUnwrap(reviews.first(where: { $0.id == "gid://gitlab/MergeRequest/901" }))
         XCTAssertEqual(freeTier.requiredApprovals, 0)
-        XCTAssertEqual(freeTier.approvals, 0)
+        XCTAssertEqual(freeTier.approvals, 2)
     }
 
     func testFetchOutgoingPullRequestsMapsPremiumApprovalsUnresolvedPipelineAndMergeability() async throws {
@@ -199,6 +199,32 @@ final class GitLabProviderTests: XCTestCase {
         XCTAssertEqual(premium.ciDetail, "FAILED")
         XCTAssertTrue(premium.mergeable)
         XCTAssertLessThanOrEqual(premium.updatedAgoHours, 24 * 370)
+    }
+
+    func testFetchOutgoingPullRequestsMapsBareNodeWithDefaults() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.authoredMergeRequestsResponse)
+        }
+        let provider = try GitLabProvider(baseURL: XCTUnwrap(URL(string: "https://gitlab.com")), session: makeSession())
+
+        let reviews = try await provider.fetchOutgoingPullRequests(
+            accessToken: "glpat-author",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        let bare = try XCTUnwrap(reviews.first(where: { $0.id == "gid://gitlab/MergeRequest/905" }))
+        XCTAssertEqual(bare.repo, "namespace/bare-project")
+        XCTAssertEqual(bare.number, 46)
+        XCTAssertEqual(bare.title, "Bare MR")
+        XCTAssertNil(bare.url)
+        XCTAssertEqual(bare.requiredApprovals, 0)
+        XCTAssertEqual(bare.approvals, 0)
+        XCTAssertEqual(bare.unresolved, 0)
+        XCTAssertEqual(bare.ci, .pending)
+        XCTAssertEqual(bare.ciDetail, "no pipeline")
+        XCTAssertFalse(bare.mergeable)
+        XCTAssertTrue(bare.reviewers.isEmpty)
     }
 
     func testFetchOutgoingPullRequestsMapsReviewerStates() async throws {
@@ -288,7 +314,9 @@ final class GitLabProviderTests: XCTestCase {
         else { throw URLError(.badServerResponse) }
         return response
     }
+}
 
+private extension GitLabProviderTests {
     private static let dataResponse = Data("""
     { "data": { "ok": true } }
     """.utf8)
@@ -361,6 +389,12 @@ final class GitLabProviderTests: XCTestCase {
                 "draft": false,
                 "project": { "fullPath": "namespace/free-project" },
                 "commitCount": 1,
+                "approvedBy": {
+                  "nodes": [
+                    { "username": "alice" },
+                    { "username": "bob" }
+                  ]
+                },
                 "resolvableDiscussionsCount": 0,
                 "resolvedDiscussionsCount": 0,
                 "mergeStatusEnum": "CANNOT_BE_MERGED",
@@ -377,7 +411,11 @@ final class GitLabProviderTests: XCTestCase {
                 "project": { "fullPath": "namespace/premium-project" },
                 "commitCount": 3,
                 "approvalsRequired": 2,
-                "approvalsLeft": 1,
+                "approvedBy": {
+                  "nodes": [
+                    { "username": "alice" }
+                  ]
+                },
                 "resolvableDiscussionsCount": 5,
                 "resolvedDiscussionsCount": 2,
                 "mergeStatusEnum": "CAN_BE_MERGED",
@@ -412,7 +450,6 @@ final class GitLabProviderTests: XCTestCase {
                 "project": { "fullPath": "namespace/premium-project" },
                 "commitCount": "6",
                 "approvalsRequired": 1,
-                "approvalsLeft": 1,
                 "resolvableDiscussionsCount": 9,
                 "resolvedDiscussionsCount": 0,
                 "mergeStatusEnum": "CAN_BE_MERGED",
@@ -429,12 +466,18 @@ final class GitLabProviderTests: XCTestCase {
                 "project": { "fullPath": "namespace/free-project" },
                 "commitCount": null,
                 "approvalsRequired": 0,
-                "approvalsLeft": 0,
                 "resolvableDiscussionsCount": 0,
                 "resolvedDiscussionsCount": 0,
                 "mergeStatusEnum": "CANNOT_BE_MERGED",
                 "headPipeline": null,
                 "reviewers": { "nodes": [] }
+              },
+              {
+                "id": "gid://gitlab/MergeRequest/905",
+                "iid": "46",
+                "title": "Bare MR",
+                "project": { "fullPath": "namespace/bare-project" },
+                "draft": false
               }
             ]
           }

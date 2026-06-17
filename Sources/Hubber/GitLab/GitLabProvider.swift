@@ -171,7 +171,7 @@ final class GitLabProvider: CodeHostProvider {
         let updatedAt = (node["updatedAt"] as? String).flatMap(ISO8601DateFormatter().date(from:)) ?? Date()
         let pipelineStatus = (node["headPipeline"] as? [String: Any])?["status"] as? String
         let requiredApprovals = intValue(node["approvalsRequired"]) ?? 0
-        let approvalsLeft = intValue(node["approvalsLeft"]) ?? requiredApprovals
+        let approvals = ((node["approvedBy"] as? [String: Any])?["nodes"] as? [[String: Any]])?.count ?? 0
         let resolvableDiscussions = intValue(node["resolvableDiscussionsCount"]) ?? 0
         let resolvedDiscussions = intValue(node["resolvedDiscussionsCount"]) ?? 0
         let mergeStatus = node["mergeStatusEnum"] as? String
@@ -185,7 +185,7 @@ final class GitLabProvider: CodeHostProvider {
             ci: mapCI(pipelineStatus),
             ciDetail: pipelineStatus ?? "no pipeline",
             unresolved: max(0, resolvableDiscussions - resolvedDiscussions),
-            approvals: max(0, requiredApprovals - approvalsLeft),
+            approvals: approvals,
             requiredApprovals: requiredApprovals,
             reviewers: parseReviewers(node),
             updatedAgoHours: max(0, Date().timeIntervalSince(updatedAt) / 3600),
@@ -288,7 +288,9 @@ final class GitLabProvider: CodeHostProvider {
             project { fullPath }
             commitCount
             approvalsRequired
-            approvalsLeft
+            approvedBy {
+              nodes { username }
+            }
             resolvableDiscussionsCount
             resolvedDiscussionsCount
             mergeStatusEnum
