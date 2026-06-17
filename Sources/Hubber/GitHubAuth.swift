@@ -135,19 +135,25 @@ final class GitHubDevelopmentFileTokenStore: GitHubTokenStoring {
 
 }
 
-// MARK: - GitHubAuthServicing protocol
+// MARK: - Auth service seams
 
 //
-// Extracted from GitHubAuthService to allow injection of test spies. The real implementation
-// is GitHubAuthService; tests use a lightweight spy to verify call counts without hitting the
-// network or requiring a bundle / keychain.
+// Extracted from GitHubAuthService to allow injection of test spies. The real implementation is
+// GitHubAuthService; tests use a lightweight spy to verify call counts without hitting the network
+// or requiring a bundle / keychain.
 
-protocol GitHubAuthServicing: Sendable {
-    func startDeviceFlow() async throws -> GitHubDeviceAuthorization
-    func pollForToken(deviceAuthorization: GitHubDeviceAuthorization) async throws -> GitHubStoredToken
+/// Generic code-host authentication seam. The GitLab PAT credential path will be added here in #60.
+protocol CodeHostAuthServicing: Sendable {
     func refresh(_ token: GitHubStoredToken) async throws -> GitHubStoredToken
     func fetchAuthenticatedUser(accessToken: String) async throws -> GitHubAuthenticatedUser
 }
+
+protocol GitHubDeviceFlowServicing: CodeHostAuthServicing {
+    func startDeviceFlow() async throws -> GitHubDeviceAuthorization
+    func pollForToken(deviceAuthorization: GitHubDeviceAuthorization) async throws -> GitHubStoredToken
+}
+
+typealias GitHubAuthServicing = GitHubDeviceFlowServicing
 
 final class GitHubAuthService: GitHubAuthServicing, Sendable {
     private let clientID: String
