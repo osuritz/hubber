@@ -8,23 +8,6 @@ extension GitHubTokenStore {
             return GitHubKeychainTokenStore(account: connectionID.slug)
         #endif
     }
-
-    static func migrateLegacyToken(
-        from legacy: any GitHubTokenStoring,
-        makeStore: (ConnectionID) -> any GitHubTokenStoring
-    ) throws -> ConnectionID? {
-        guard let token = try legacy.load() else {
-            return nil
-        }
-        guard let login = token.login, !login.isEmpty else {
-            return nil
-        }
-
-        let connectionID = ConnectionID.gitHubDotCom(login: login)
-        try makeStore(connectionID).save(token)
-        try legacy.delete()
-        return connectionID
-    }
 }
 
 extension GitHubDevelopmentFileTokenStore {

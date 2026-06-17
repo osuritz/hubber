@@ -139,63 +139,6 @@ final class SnapshotStoreTests: XCTestCase {
         XCTAssertEqual(storeB.load(), snapshotB)
     }
 
-    // MARK: - Legacy migration
-
-    func testMigrateLegacySnapshotMovesLegacyFileWhenNewSnapshotIsAbsent() throws {
-        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
-        let legacyURL = tempDir.appendingPathComponent("notification-snapshot.json")
-        let newURL = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
-        let legacyStore = SnapshotStore(snapshotURL: legacyURL)
-        let migratedStore = SnapshotStore(snapshotURL: newURL)
-        let snapshot = ReviewSnapshot(
-            incomingIDs: ["pr-1"],
-            outgoing: [
-                "pr-42": OutgoingSnapshot(
-                    reviewerStates: ["alice": "approved"],
-                    ci: "passing",
-                    mergeable: true,
-                    approved: true
-                ),
-            ]
-        )
-        try legacyStore.save(snapshot)
-
-        SnapshotStore.migrateLegacySnapshot(to: connectionID, legacyURL: legacyURL, newURL: newURL)
-
-        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
-        XCTAssertEqual(migratedStore.load(), snapshot)
-    }
-
-    func testMigrateLegacySnapshotDoesNotOverwriteExistingConnectionSnapshot() throws {
-        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
-        let legacyURL = tempDir.appendingPathComponent("notification-snapshot.json")
-        let newURL = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
-        let legacyStore = SnapshotStore(snapshotURL: legacyURL)
-        let newStore = SnapshotStore(snapshotURL: newURL)
-        let legacySnapshot = ReviewSnapshot(incomingIDs: ["legacy-pr"], outgoing: [:])
-        let existingSnapshot = ReviewSnapshot(incomingIDs: ["existing-pr"], outgoing: [:])
-        try legacyStore.save(legacySnapshot)
-        try newStore.save(existingSnapshot)
-
-        SnapshotStore.migrateLegacySnapshot(to: connectionID, legacyURL: legacyURL, newURL: newURL)
-
-        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))
-        XCTAssertEqual(legacyStore.load(), legacySnapshot)
-        XCTAssertEqual(newStore.load(), existingSnapshot)
-    }
-
-    func testMigrateLegacySnapshotNoOpsWhenLegacySnapshotIsAbsent() {
-        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
-        let legacyURL = tempDir.appendingPathComponent("notification-snapshot.json")
-        let newURL = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
-
-        SnapshotStore.migrateLegacySnapshot(to: connectionID, legacyURL: legacyURL, newURL: newURL)
-
-        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: newURL.path))
-    }
-
     // MARK: - Helpers
 
     private func makeIncomingFixture(id: String) -> IncomingReview {

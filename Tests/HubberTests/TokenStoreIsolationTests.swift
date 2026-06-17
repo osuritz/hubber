@@ -89,47 +89,6 @@ final class TokenStoreIsolationTests: XCTestCase {
         XCTAssertEqual(stores.store(for: personal.slug).deleteCallCount, 1)
         XCTAssertEqual(stores.store(for: work.slug).deleteCallCount, 0)
     }
-
-    func testMigratingLegacyTokenWritesConnectionStoreDeletesLegacyAndReturnsConnectionID() throws {
-        let legacy = IsolationSpyTokenStore(identity: "legacy", token: makeToken(login: "personal"))
-        let stores = SpyTokenStores()
-
-        let migratedID = try GitHubTokenStore.migrateLegacyToken(from: legacy) { connectionID in
-            stores.store(for: connectionID.slug)
-        }
-
-        let expectedID = ConnectionID.gitHubDotCom(login: "personal")
-        XCTAssertEqual(migratedID, expectedID)
-        XCTAssertEqual(legacy.deleteCallCount, 1)
-        XCTAssertEqual(stores.store(for: expectedID.slug).saveCallCount, 1)
-        XCTAssertEqual(stores.store(for: expectedID.slug).savedTokens, [makeToken(login: "personal")])
-    }
-
-    func testMigratingMissingLegacyTokenReturnsNilAndWritesNothing() throws {
-        let legacy = IsolationSpyTokenStore(identity: "legacy", token: nil)
-        let stores = SpyTokenStores()
-
-        let migratedID = try GitHubTokenStore.migrateLegacyToken(from: legacy) { connectionID in
-            stores.store(for: connectionID.slug)
-        }
-
-        XCTAssertNil(migratedID)
-        XCTAssertEqual(legacy.deleteCallCount, 0)
-        XCTAssertTrue(stores.allStores.isEmpty)
-    }
-
-    func testMigratingLegacyTokenWithoutLoginReturnsNilAndDoesNotDelete() throws {
-        let legacy = IsolationSpyTokenStore(identity: "legacy", token: makeToken(login: nil))
-        let stores = SpyTokenStores()
-
-        let migratedID = try GitHubTokenStore.migrateLegacyToken(from: legacy) { connectionID in
-            stores.store(for: connectionID.slug)
-        }
-
-        XCTAssertNil(migratedID)
-        XCTAssertEqual(legacy.deleteCallCount, 0)
-        XCTAssertTrue(stores.allStores.isEmpty)
-    }
 }
 
 private final class SpyTokenStores: @unchecked Sendable {
