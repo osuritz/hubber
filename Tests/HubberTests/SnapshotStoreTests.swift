@@ -79,6 +79,66 @@ final class SnapshotStoreTests: XCTestCase {
         XCTAssertTrue(events.isEmpty, "Relaunch with identical data must produce no events")
     }
 
+    // MARK: - Per-connection paths
+
+    func testConnectionSnapshotURLsAreDistinctAndDoNotUseLegacyPath() {
+        let connectionA = ConnectionID.gitHubDotCom(login: "alice")
+        let connectionB = ConnectionID.gitHubDotCom(login: "bob")
+
+        let urlA = SnapshotStore.snapshotURL(for: connectionA)
+        let urlB = SnapshotStore.snapshotURL(for: connectionB)
+
+        XCTAssertNotEqual(urlA, urlB)
+        XCTAssertNotEqual(urlA, SnapshotStore.legacySnapshotURL)
+        XCTAssertNotEqual(urlB, SnapshotStore.legacySnapshotURL)
+        XCTAssertEqual(urlA.lastPathComponent, "notification-snapshot-github_github.com_alice.json")
+        XCTAssertEqual(urlB.lastPathComponent, "notification-snapshot-github_github.com_bob.json")
+    }
+
+    func testSnapshotURLForConnectionUsesInjectedBaseDirectory() {
+        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
+
+        let url = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
+
+        XCTAssertEqual(
+            url,
+            tempDir.appendingPathComponent("notification-snapshot-github_github.com_alice.json")
+        )
+    }
+
+    // MARK: - Per-connection isolation
+
+    func testWritingOneConnectionSnapshotDoesNotAlterAnotherConnectionSnapshot() throws {
+        let urlA = tempDir.appendingPathComponent("notification-snapshot-a.json")
+        let urlB = tempDir.appendingPathComponent("notification-snapshot-b.json")
+        let storeA = SnapshotStore(snapshotURL: urlA)
+        let storeB = SnapshotStore(snapshotURL: urlB)
+        let snapshotA = ReviewSnapshot(incomingIDs: ["pr-a"], outgoing: [:])
+        let snapshotB = ReviewSnapshot(incomingIDs: ["pr-b"], outgoing: [:])
+        try storeB.save(snapshotB)
+
+        try storeA.save(snapshotA)
+
+        XCTAssertEqual(storeA.load(), snapshotA)
+        XCTAssertEqual(storeB.load(), snapshotB)
+    }
+
+    func testDeleteRemovesOnlyThisStoreSnapshot() throws {
+        let urlA = tempDir.appendingPathComponent("notification-snapshot-a.json")
+        let urlB = tempDir.appendingPathComponent("notification-snapshot-b.json")
+        let storeA = SnapshotStore(snapshotURL: urlA)
+        let storeB = SnapshotStore(snapshotURL: urlB)
+        let snapshotA = ReviewSnapshot(incomingIDs: ["pr-a"], outgoing: [:])
+        let snapshotB = ReviewSnapshot(incomingIDs: ["pr-b"], outgoing: [:])
+        try storeA.save(snapshotA)
+        try storeB.save(snapshotB)
+
+        storeA.delete()
+
+        XCTAssertNil(storeA.load())
+        XCTAssertEqual(storeB.load(), snapshotB)
+    }
+
     // MARK: - Helpers
 
     private func makeIncomingFixture(id: String) -> IncomingReview {

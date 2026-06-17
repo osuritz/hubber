@@ -11,6 +11,10 @@ final class SnapshotStore: Sendable {
         self.snapshotURL = snapshotURL
     }
 
+    convenience init(connectionID: ConnectionID) {
+        self.init(snapshotURL: Self.snapshotURL(for: connectionID))
+    }
+
     /// Loads the persisted snapshot, or returns `nil` if none exists yet.
     func load() -> ReviewSnapshot? {
         guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return nil }
@@ -30,9 +34,33 @@ final class SnapshotStore: Sendable {
         try data.write(to: snapshotURL, options: [.atomic])
     }
 
+    /// Removes the persisted snapshot if it exists.
+    func delete() {
+        guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return }
+        try? FileManager.default.removeItem(at: snapshotURL)
+    }
+
     // MARK: - Default path
 
     static var defaultSnapshotURL: URL {
+        legacySnapshotURL
+    }
+
+    static var legacySnapshotURL: URL {
+        hubberApplicationSupportDirectory
+            .appendingPathComponent("notification-snapshot.json")
+    }
+
+    static func snapshotURL(for connectionID: ConnectionID) -> URL {
+        snapshotURL(for: connectionID, in: hubberApplicationSupportDirectory)
+    }
+
+    static func snapshotURL(for connectionID: ConnectionID, in baseDirectory: URL) -> URL {
+        baseDirectory
+            .appendingPathComponent("notification-snapshot-\(connectionID.slug).json")
+    }
+
+    private static var hubberApplicationSupportDirectory: URL {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -42,6 +70,5 @@ final class SnapshotStore: Sendable {
             .appendingPathComponent("Library/Application Support")
         return base
             .appendingPathComponent("Hubber", isDirectory: true)
-            .appendingPathComponent("notification-snapshot.json")
     }
 }
