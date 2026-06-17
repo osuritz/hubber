@@ -93,7 +93,7 @@ final class ConnectionAggregatorTests: XCTestCase {
         XCTAssertFalse(AttentionState.isAllGreen(data: aggregate))
     }
 
-    func testMergedBaselineUnionsIncomingIDsAndKeepsFirstOutgoingValue() {
+    func testMergedBaselineUnionsIncomingIDsAndKeepsFirstOutgoingMetadata() throws {
         let firstOutgoing = snapshot(ci: .passing, title: "First")
         let duplicateOutgoing = snapshot(ci: .failing, title: "Second")
         let first = ReviewSnapshot(
@@ -111,7 +111,9 @@ final class ConnectionAggregatorTests: XCTestCase {
         let merged = ConnectionAggregator.mergedBaseline([first, second])
 
         XCTAssertEqual(merged.incomingIDs, ["pr-a", "pr-b", "pr-shared"])
-        XCTAssertEqual(merged.outgoing["pr-shared-outgoing"], firstOutgoing)
+        let sharedOutgoing = try XCTUnwrap(merged.outgoing["pr-shared-outgoing"])
+        XCTAssertEqual(sharedOutgoing.title, "First")
+        XCTAssertEqual(sharedOutgoing.ci, PullRequestCI.failing.rawValue)
         XCTAssertEqual(merged.outgoing["pr-b-outgoing"]?.title, "B")
     }
 
@@ -157,6 +159,29 @@ final class ConnectionAggregatorTests: XCTestCase {
         XCTAssertEqual(mergedSnap.repo, "acme/web")
         XCTAssertEqual(mergedSnap.number, 7)
         XCTAssertEqual(mergedSnap.title, "My PR")
+    }
+
+    func testMergedBaselineOverlappingOutgoingCIFailingWinsRegardlessOfOrder() throws {
+        let passing = ReviewSnapshot(
+            incomingIDs: [],
+            outgoing: ["pr-7": snapshot(ci: .passing, title: "My PR")]
+        )
+        let failing = ReviewSnapshot(
+            incomingIDs: [],
+            outgoing: ["pr-7": snapshot(ci: .failing, title: "My PR")]
+        )
+
+        let passingThenFailing = ConnectionAggregator.mergedBaseline([passing, failing])
+        let failingThenPassing = ConnectionAggregator.mergedBaseline([failing, passing])
+
+        XCTAssertEqual(
+            try XCTUnwrap(passingThenFailing.outgoing["pr-7"]).ci,
+            PullRequestCI.failing.rawValue
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(failingThenPassing.outgoing["pr-7"]).ci,
+            PullRequestCI.failing.rawValue
+        )
     }
 
     private func data(

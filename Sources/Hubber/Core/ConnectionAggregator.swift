@@ -53,8 +53,8 @@ enum ConnectionAggregator {
     /// - Incoming IDs: plain set union.
     /// - Outgoing snapshots: if the same PR id appears in more than one baseline, OR the
     ///   `mergeable` and `approved` booleans, UNION the `reviewerStates` (a reviewer that has
-    ///   advanced past `pending` in ANY baseline wins over `pending`), and keep-first the static
-    ///   metadata (`repo`/`number`/`title`/`url`/`ci`).
+    ///   advanced past `pending` in ANY baseline wins over `pending`), failing-wins for `ci`,
+    ///   and keep-first the static metadata (`repo`/`number`/`title`/`url`).
     static func mergedBaseline(_ baselines: [ReviewSnapshot]) -> ReviewSnapshot {
         var incomingIDs = Set<String>()
         var outgoing: [String: OutgoingSnapshot] = [:]
@@ -76,7 +76,8 @@ enum ConnectionAggregator {
     // MARK: - Private helpers
 
     /// Merges two `OutgoingSnapshot`s for the same PR id.
-    /// OR the booleans; UNION the reviewerStates (non-pending wins); keep-first static metadata.
+    /// OR the booleans; UNION the reviewerStates (non-pending wins); failing-wins for CI.
+    /// Keep-first for static metadata.
     private static func mergeOutgoingSnapshots(
         _ first: OutgoingSnapshot,
         _ second: OutgoingSnapshot
@@ -95,7 +96,9 @@ enum ConnectionAggregator {
         }
         return OutgoingSnapshot(
             reviewerStates: mergedReviewerStates,
-            ci: first.ci, // keep-first
+            ci: (first.ci == PullRequestCI.failing.rawValue || second.ci == PullRequestCI.failing.rawValue)
+                ? PullRequestCI.failing.rawValue
+                : first.ci,
             mergeable: first.mergeable || second.mergeable,
             approved: first.approved || second.approved,
             repo: first.repo, // keep-first static metadata

@@ -409,4 +409,53 @@ final class MultiConnectionNotificationTests: XCTestCase {
         let extra = countAfterB - countAfterA
         XCTAssertEqual(countAfterB, 1, "B's stale-data refresh must not fire anything; got \(extra) extra")
     }
+
+    // MARK: - Add-account storm regression
+
+    /// A has an established baseline matching its data.
+    /// B is freshly added with nil baseline and pre-existing incoming PRs.
+    /// B's first refresh must treat B's current data as known and fire nothing; after B's baseline
+    /// advances, a later genuinely new incoming PR should fire exactly one notification.
+    func testAddAccountNilBaselineDoesNotFireStormThenNewIncomingFiresOnce() async throws {
+        let spy = MCNSpyDispatcher()
+        let fixture = try makeDualConnectionStore(
+            spy: spy,
+            snapshotURLa: tmpURL("a"),
+            snapshotURLb: tmpURL("b")
+        )
+
+        fixture.connA.notificationBaseline = ReviewSnapshot(incomingIDs: ["pr-A1"], outgoing: [:])
+        fixture.connA.replaceData(HubberData(incoming: [incomingReview(id: "pr-A1")], outgoing: [], drafts: []))
+
+        fixture.connB.notificationBaseline = nil
+        fixture.connB.replaceData(HubberData(
+            incoming: [
+                incomingReview(id: "pr-B1", number: 1),
+                incomingReview(id: "pr-B2", number: 2),
+            ],
+            outgoing: [],
+            drafts: []
+        ))
+
+        await fixture.store.handleRefreshSucceeded(fixture.connB, TabSuccesses(incoming: true, outgoing: true))
+
+        XCTAssertTrue(spy.postedContents.isEmpty, "Freshly added B's pre-existing PRs must not fire notifications")
+
+        fixture.connB.replaceData(HubberData(
+            incoming: [
+                incomingReview(id: "pr-B1", number: 1),
+                incomingReview(id: "pr-B2", number: 2),
+                incomingReview(id: "pr-B3", number: 3),
+            ],
+            outgoing: [],
+            drafts: []
+        ))
+
+        await fixture.store.handleRefreshSucceeded(fixture.connB, TabSuccesses(incoming: true, outgoing: true))
+
+        let newReviews = spy.postedContents.filter { $0.id.hasPrefix("newReview") }
+        XCTAssertEqual(newReviews.count, 1, "Only the genuinely new B PR should fire after baseline advancement")
+        let notifID = try XCTUnwrap(newReviews.first?.id)
+        XCTAssertTrue(notifID.contains("pr-B3"), "Notification ID should reference pr-B3, got \(notifID)")
+    }
 }

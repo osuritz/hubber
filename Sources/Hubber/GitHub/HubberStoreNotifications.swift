@@ -17,6 +17,8 @@ extension HubberStore {
     ///
     /// Called by the per-connection `onRefreshSucceeded` callback, wired in `wireCallbacks(on:)`.
     /// Diffs the UNION of all connection data against the MERGED union of all per-connection baselines,
+    /// using current data as the baseline contribution for newly added connections that have not yet
+    /// established their own notification baseline.
     /// fires ONE batch of notifications, then advances ONLY the refreshed connection's baseline.
     ///
     /// Respects per-tab partial failures: only the tabs that succeeded advance `refreshed`'s baseline,
@@ -24,12 +26,15 @@ extension HubberStore {
     /// "merged" events across refreshes.
     func handleRefreshSucceeded(_ refreshed: Connection?, _ tabSuccesses: TabSuccesses) async {
         let current = ConnectionAggregator.aggregate(connections.map(\.data))
-        let perConnectionBaselines = connections.compactMap(\.notificationBaseline)
-        // Pass nil only if NO connection has a baseline yet (initial-load-no-fire rule).
-        // An empty-but-non-nil baseline means "first refresh is done; any new PR is genuinely new."
-        let previous: ReviewSnapshot? = perConnectionBaselines.isEmpty
+        let baselinesForDiff = connections.map { connection in
+            connection.notificationBaseline ?? NotificationDiffer.snapshot(from: connection.data)
+        }
+        let allBaselinesNil = connections.allSatisfy { $0.notificationBaseline == nil }
+        // Pass nil only if ALL connections have nil baselines (initial-load-no-fire rule).
+        // Nil-baseline connections in a mixed set contribute their current data as already known.
+        let previous: ReviewSnapshot? = allBaselinesNil
             ? nil
-            : ConnectionAggregator.mergedBaseline(perConnectionBaselines)
+            : ConnectionAggregator.mergedBaseline(baselinesForDiff)
 
         await notificationCoordinator.processRefresh(
             data: current,
