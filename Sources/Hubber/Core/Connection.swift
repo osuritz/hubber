@@ -347,9 +347,9 @@ final class Connection: ObservableObject, Identifiable {
 
     private var tokenStoreDescription: String {
         #if DEBUG
-            return "development file at \(GitHubDevelopmentFileTokenStore.defaultTokenURL.path)"
+            return "development file for \(id.slug)"
         #else
-            return "Keychain"
+            return "Keychain account \(id.slug)"
         #endif
     }
 

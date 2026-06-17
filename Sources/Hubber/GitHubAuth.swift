@@ -465,7 +465,7 @@ final class HubberStore: ObservableObject {
     /// Builds a new `Connection` with injected or default dependencies and appends it.
     /// - Parameters:
     ///   - id: The `ConnectionID` that identifies this connection (and keys its stores).
-    ///   - provider: Optional provider override (for tests). Defaults to the store's legacy provider.
+    ///   - provider: Optional provider override (for tests). Defaults to a fresh caching GitHub provider.
     ///   - authService: Optional auth-service override. Defaults to the store's legacy auth service.
     ///   - tokenStore: Optional token-store override. Defaults to a `GitHubTokenStore.makeStore(for:id)`.
     ///   - snapshotStore: Optional snapshot-store override. Defaults to `SnapshotStore(connectionID:id)`.
@@ -479,7 +479,11 @@ final class HubberStore: ObservableObject {
         snapshotStore: SnapshotStore? = nil,
         scheduler: RefreshScheduler? = nil
     ) throws -> Connection {
-        let resolvedProvider = provider ?? legacyProvider
+        if let existing = connections.first(where: { $0.id == id }) {
+            return existing
+        }
+
+        let resolvedProvider = provider ?? CachingCodeHostProvider(wrapping: GitHubProvider())
         let resolvedAuthService = authService ?? legacyAuthService
         let resolvedTokenStore = tokenStore ?? GitHubTokenStore.makeStore(for: id)
         let resolvedSnapshotStore = snapshotStore ?? SnapshotStore(connectionID: id)
@@ -661,7 +665,7 @@ final class HubberStore: ObservableObject {
 
     func setPopoverOpen(_ open: Bool) {
         isPopoverOpen = open
-        primaryConnection?.isPopoverOpen = open
+        connections.forEach { $0.isPopoverOpen = open }
     }
 
     var usernameDisplay: String {

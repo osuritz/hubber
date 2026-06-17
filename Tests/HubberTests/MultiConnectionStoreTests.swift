@@ -230,6 +230,7 @@ private struct MultiConnectionIdleProvider: MachineIdleProviding {
 // MARK: - Tests
 
 @MainActor
+// swiftlint:disable:next type_body_length - growing multi-connection integration-test suite
 final class MultiConnectionStoreTests: XCTestCase {
     func testSecondConnectionSignInDoesNotDisturbFirstConnection() async throws {
         let first = try makeConnection(login: "first")
@@ -357,11 +358,13 @@ final class MultiConnectionStoreTests: XCTestCase {
         let idB = ConnectionID.gitHubDotCom(login: "b")
         try store.addConnection(
             id: idA,
+            provider: MultiConnectionProvider(),
             tokenStore: MutableTokenStore(token: storedToken(login: "a")),
             scheduler: scheduler(sleeper: sleeperA)
         )
         try store.addConnection(
             id: idB,
+            provider: MultiConnectionProvider(),
             tokenStore: MutableTokenStore(token: storedToken(login: "b")),
             scheduler: scheduler(sleeper: sleeperB)
         )
@@ -390,11 +393,13 @@ final class MultiConnectionStoreTests: XCTestCase {
         let store = makeStore(defaults: defaults, restoreOnInit: false)
         try store.addConnection(
             id: .gitHubDotCom(login: "a"),
+            provider: MultiConnectionProvider(),
             tokenStore: MutableTokenStore(token: storedToken(login: "a")),
             scheduler: scheduler(sleeper: sleeperA)
         )
         try store.addConnection(
             id: .gitHubDotCom(login: "b"),
+            provider: MultiConnectionProvider(),
             tokenStore: MutableTokenStore(token: storedToken(login: "b")),
             scheduler: scheduler(sleeper: sleeperB)
         )
@@ -494,6 +499,57 @@ final class MultiConnectionStoreTests: XCTestCase {
             return XCTFail("Expected delete failure to leave connection in error state")
         }
         XCTAssertEqual(message, "Token delete failed")
+    }
+
+    // MARK: - Codex-review hardening (#85): provider isolation, dup-id guard, popover broadcast
+
+    func testAddConnectionWithoutExplicitProviderUsesDistinctProviderPerConnection() throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        let first = try store.addConnection(
+            id: .gitHubDotCom(login: "first"),
+            tokenStore: MutableTokenStore(token: storedToken(login: "first"))
+        )
+        let second = try store.addConnection(
+            id: .gitHubDotCom(login: "second"),
+            tokenStore: MutableTokenStore(token: storedToken(login: "second"))
+        )
+        let firstProvider = try XCTUnwrap(first.provider as? CachingCodeHostProvider)
+        let secondProvider = try XCTUnwrap(second.provider as? CachingCodeHostProvider)
+        XCTAssertNotEqual(
+            ObjectIdentifier(firstProvider),
+            ObjectIdentifier(secondProvider),
+            "Connections without an explicit provider must each get their own provider/cache"
+        )
+    }
+
+    func testAddConnectionWithDuplicateIDReturnsExistingConnectionWithoutAppending() throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        let id = ConnectionID.gitHubDotCom(login: "duplicate")
+        let first = try store.addConnection(
+            id: id,
+            tokenStore: MutableTokenStore(token: storedToken(login: "duplicate"))
+        )
+        let second = try store.addConnection(
+            id: id,
+            tokenStore: MutableTokenStore(token: storedToken(login: "duplicate"))
+        )
+        XCTAssertTrue(first === second)
+        XCTAssertEqual(store.connections.map(\.id), [id])
+    }
+
+    func testSetPopoverOpenBroadcastsToEveryConnection() throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        try store.addConnection(
+            id: .gitHubDotCom(login: "first"),
+            tokenStore: MutableTokenStore(token: storedToken(login: "first"))
+        )
+        try store.addConnection(
+            id: .gitHubDotCom(login: "second"),
+            tokenStore: MutableTokenStore(token: storedToken(login: "second"))
+        )
+        store.setPopoverOpen(true)
+        XCTAssertTrue(store.isPopoverOpen)
+        XCTAssertTrue(store.connections.allSatisfy(\.isPopoverOpen))
     }
 
     private func makeConnection(
