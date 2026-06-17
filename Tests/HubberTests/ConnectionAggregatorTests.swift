@@ -115,6 +115,50 @@ final class ConnectionAggregatorTests: XCTestCase {
         XCTAssertEqual(merged.outgoing["pr-b-outgoing"]?.title, "B")
     }
 
+    // MARK: - mergedBaseline overlapping-outgoing: OR booleans + UNION reviewerStates (R4)
+
+    /// Two baselines with the same outgoing id: one has approved:false/alice:pending,
+    /// the other approved:true/alice:approved → merged has approved==true, alice=="approved".
+    func testMergedBaselineOverlappingOutgoingMergesBoolsAndReviewerStates() throws {
+        let snapA = OutgoingSnapshot(
+            reviewerStates: ["alice": ReviewerState.pending.rawValue],
+            ci: "passing",
+            mergeable: false,
+            approved: false,
+            repo: "acme/web",
+            number: 7,
+            title: "My PR",
+            url: nil
+        )
+        let snapB = OutgoingSnapshot(
+            reviewerStates: ["alice": ReviewerState.approved.rawValue],
+            ci: "failing",
+            mergeable: true,
+            approved: true,
+            repo: "acme/web", // same repo/number/title (static metadata from first)
+            number: 7,
+            title: "My PR",
+            url: nil
+        )
+        let first = ReviewSnapshot(incomingIDs: [], outgoing: ["pr-7": snapA])
+        let second = ReviewSnapshot(incomingIDs: [], outgoing: ["pr-7": snapB])
+
+        let merged = ConnectionAggregator.mergedBaseline([first, second])
+
+        let mergedSnap = try XCTUnwrap(merged.outgoing["pr-7"])
+        XCTAssertTrue(mergedSnap.approved, "approved should be OR'd: false | true = true")
+        XCTAssertTrue(mergedSnap.mergeable, "mergeable should be OR'd: false | true = true")
+        XCTAssertEqual(
+            mergedSnap.reviewerStates["alice"],
+            ReviewerState.approved.rawValue,
+            "alice's state should be 'approved' (wins over 'pending')"
+        )
+        // Static metadata kept from first
+        XCTAssertEqual(mergedSnap.repo, "acme/web")
+        XCTAssertEqual(mergedSnap.number, 7)
+        XCTAssertEqual(mergedSnap.title, "My PR")
+    }
+
     private func data(
         incoming: [IncomingReview] = [],
         outgoing: [OutgoingReview] = [],

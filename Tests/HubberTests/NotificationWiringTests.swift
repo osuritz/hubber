@@ -20,6 +20,111 @@ private final class WiringSpyDispatcher: NotificationDispatching, @unchecked Sen
     }
 }
 
+// MARK: - Test doubles
+
+private final class WiringTokenStore: GitHubTokenStoring, @unchecked Sendable {
+    private var token: GitHubStoredToken?
+    init(_ t: GitHubStoredToken?) {
+        token = t
+    }
+
+    func load() throws -> GitHubStoredToken? {
+        token
+    }
+
+    func save(_ t: GitHubStoredToken) throws {
+        token = t
+    }
+
+    func delete() throws {
+        token = nil
+    }
+}
+
+private actor WiringAuthService: GitHubDeviceFlowServicing {
+    func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
+        throw GitHubAuthError.invalidResponse
+    }
+
+    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
+        throw GitHubAuthError.invalidResponse
+    }
+
+    func refresh(_ t: GitHubStoredToken) async throws -> GitHubStoredToken {
+        t
+    }
+
+    func fetchAuthenticatedUser(accessToken _: String) async throws -> GitHubAuthenticatedUser {
+        GitHubAuthenticatedUser(login: "testuser", name: nil, avatarUrl: nil)
+    }
+}
+
+private actor WiringProvider: CodeHostProvider {
+    func fetchIncomingReviews(
+        accessToken _: String,
+        viewerLogin _: String,
+        mode _: IncomingReviewMode
+    ) async throws -> [IncomingReview] {
+        []
+    }
+
+    func fetchOutgoingPullRequests(
+        accessToken _: String,
+        viewerLogin _: String,
+        unresolvedMode _: UnresolvedThreadMode
+    ) async throws -> [OutgoingReview] {
+        []
+    }
+
+    func fetchDraftPullRequests(
+        accessToken _: String,
+        limit _: Int
+    ) async throws -> [DraftReview] {
+        []
+    }
+}
+
+private struct WiringIdleProvider: MachineIdleProviding { let isIdle = false }
+private struct WiringNullTelemetrySink: TelemetrySink { func send(_: String, _: [String: String]) {} }
+
+private func tmpURL(_ tag: String) -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent("wiring-\(tag)-\(UUID()).json")
+}
+
+private struct WiringFixture {
+    let store: HubberStore
+    let connection: Connection
+}
+
+/// Builds a HubberStore + one Connection wired with the given dispatcher and snapshot store.
+@MainActor
+private func makeSignedInStoreWithConnection(
+    spy: WiringSpyDispatcher,
+    snapshotURL: URL
+) throws -> WiringFixture {
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: "WiringTests-\(UUID())"))
+    let store = HubberStore(
+        authService: WiringAuthService(),
+        provider: WiringProvider(),
+        tokenStore: WiringTokenStore(nil),
+        settings: SettingsStore(defaults: defaults),
+        telemetry: Telemetry(sink: WiringNullTelemetrySink()),
+        dispatcher: spy,
+        snapshotStore: SnapshotStore(snapshotURL: tmpURL("coordinator")),
+        defaults: defaults,
+        restoreOnInit: false
+    )
+    let conn = try store.addConnection(
+        id: .gitHubDotCom(login: "testuser"),
+        provider: WiringProvider(),
+        authService: WiringAuthService(),
+        tokenStore: WiringTokenStore(nil),
+        snapshotStore: SnapshotStore(snapshotURL: snapshotURL)
+    )
+    return WiringFixture(store: store, connection: conn)
+}
+
 // MARK: - Tests
 
 @MainActor
@@ -97,12 +202,15 @@ final class NotificationWiringTests: XCTestCase {
 
     // MARK: - Tab-failure partial-merge safety (E)
 
-    func testOutgoingFetchFailureRetainsOutgoingBaselineAndNoPRMergedEvent() async {
+    /// When the outgoing tab fails, the outgoing portion of the connection's baseline must be
+    /// retained — so the coordinator's next diff does not see "disappeared" PRs and fire prMerged.
+    func testOutgoingFetchFailureRetainsOutgoingBaselineAndNoPRMergedEvent() async throws {
         let spy = WiringSpyDispatcher()
         spy.authorizationGranted = true
 
-        // Create store with spy dispatcher and a pre-existing baseline containing one outgoing PR
-        let store = HubberStore(dispatcher: spy)
+        let fixture = try makeSignedInStoreWithConnection(spy: spy, snapshotURL: tmpURL("failure"))
+
+        // Pre-existing baseline: one outgoing PR
         let existingOutgoingSnap = OutgoingSnapshot(
             reviewerStates: [:],
             ci: "passing",
@@ -113,28 +221,31 @@ final class NotificationWiringTests: XCTestCase {
             title: "My PR",
             url: nil
         )
-        store.notificationBaseline = ReviewSnapshot(
+        fixture.connection.notificationBaseline = ReviewSnapshot(
             incomingIDs: [],
             outgoing: ["pr-42": existingOutgoingSnap]
         )
-        // Current data has no outgoing (simulating: outgoing fetch failed, so store.data.outgoing is empty)
-        store.data = HubberData(incoming: [], outgoing: [], drafts: [])
+        // Current data: no outgoing (simulating that the outgoing fetch failed)
+        fixture.connection.replaceData(HubberData(incoming: [], outgoing: [], drafts: []))
 
         // outgoing: false → fetch failed; baseline outgoing must be preserved → no prMerged
-        await store.dispatchNotifications(tabSuccesses: TabSuccesses(incoming: true, outgoing: false))
+        await fixture.store.handleRefreshSucceeded(
+            fixture.connection,
+            TabSuccesses(incoming: true, outgoing: false)
+        )
 
         let prMergedEvents = spy.postedContents.filter { $0.id.hasPrefix("prMerged") }
         XCTAssertTrue(prMergedEvents.isEmpty, "A failed outgoing fetch must not fire prMerged events")
-        // The stored baseline outgoing must be retained (not overwritten with empty)
+        // The connection's baseline outgoing must be retained (not overwritten with empty)
         XCTAssertFalse(
-            store.notificationBaseline?.outgoing.isEmpty ?? true,
+            fixture.connection.notificationBaseline?.outgoing.isEmpty ?? true,
             "Outgoing baseline must be retained after failed fetch"
         )
     }
 
-    func testOutgoingFetchSuccessUpdatesOutgoingBaseline() async {
+    func testOutgoingFetchSuccessUpdatesOutgoingBaseline() async throws {
         let spy = WiringSpyDispatcher()
-        let store = HubberStore(dispatcher: spy)
+        let fixture = try makeSignedInStoreWithConnection(spy: spy, snapshotURL: tmpURL("success"))
 
         // Start with one outgoing PR in the baseline
         let existingOutgoingSnap = OutgoingSnapshot(
@@ -147,24 +258,27 @@ final class NotificationWiringTests: XCTestCase {
             title: "My PR",
             url: nil
         )
-        store.notificationBaseline = ReviewSnapshot(
+        fixture.connection.notificationBaseline = ReviewSnapshot(
             incomingIDs: [],
             outgoing: ["pr-42": existingOutgoingSnap]
         )
-        // Current data has a different outgoing PR (pr-42 is gone, pr-99 is new)
+        // Current data: pr-42 is gone (merged), pr-99 is new
         let newPR = makeOutgoing(id: "pr-99", repo: "acme/api", number: 99, title: "New thing")
-        store.data = HubberData(incoming: [], outgoing: [newPR], drafts: [])
+        fixture.connection.replaceData(HubberData(incoming: [], outgoing: [newPR], drafts: []))
 
         // outgoing: true → fetch succeeded; baseline outgoing must be updated
-        await store.dispatchNotifications(tabSuccesses: TabSuccesses(incoming: true, outgoing: true))
+        await fixture.store.handleRefreshSucceeded(
+            fixture.connection,
+            TabSuccesses(incoming: true, outgoing: true)
+        )
 
         XCTAssertEqual(
-            store.notificationBaseline?.outgoing["pr-99"]?.repo,
+            fixture.connection.notificationBaseline?.outgoing["pr-99"]?.repo,
             "acme/api",
             "Updated baseline must contain the new outgoing PR"
         )
         XCTAssertNil(
-            store.notificationBaseline?.outgoing["pr-42"],
+            fixture.connection.notificationBaseline?.outgoing["pr-42"],
             "Old PR must be gone after successful outgoing fetch"
         )
     }

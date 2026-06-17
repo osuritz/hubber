@@ -378,9 +378,9 @@ final class HubberStore: ObservableObject {
     // MARK: - Notification pipeline
 
     let notificationCoordinator: NotificationCoordinator
+    /// The legacy connection's snapshot store (also used for `restoreSession` legacy path).
+    /// Baselines are now owned exclusively by each `Connection` (C2: single source of truth).
     let snapshotStore: SnapshotStore
-    /// Persisted baseline; nil on first run (initial load must not fire).
-    var notificationBaseline: ReviewSnapshot?
     private let dispatcher: any NotificationDispatching
     private let registry: ConnectionRegistry
     private var cancellables = Set<AnyCancellable>()
@@ -420,7 +420,6 @@ final class HubberStore: ObservableObject {
         legacyIdle = idle
         self.connectionFactory = connectionFactory
         notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
-        notificationBaseline = snapshotStore.load()
         registry = ConnectionRegistry(defaults: defaults)
 
         if restoreOnInit {
@@ -440,16 +439,16 @@ final class HubberStore: ObservableObject {
             scheduler: RefreshScheduler(idle: legacyIdle),
             settings: settings
         )
-        conn.notificationBaseline = notificationBaseline
+        // Connection.init already seeds notificationBaseline from its snapshotStore.load().
         wireCallbacks(on: conn)
         return conn
     }
 
     private func wireCallbacks(on conn: Connection) {
-        conn.onRefreshSucceeded = { [weak self] tabSuccesses in
+        conn.onRefreshSucceeded = { [weak self, weak conn] tabSuccesses in
             guard let self else { return }
             recomputeAggregate()
-            await dispatchNotifications(tabSuccesses: tabSuccesses)
+            await handleRefreshSucceeded(conn, tabSuccesses)
         }
         conn.onSignedIn = { [weak self] in
             await self?.requestNotificationAuthorization()
