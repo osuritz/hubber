@@ -79,6 +79,123 @@ final class SnapshotStoreTests: XCTestCase {
         XCTAssertTrue(events.isEmpty, "Relaunch with identical data must produce no events")
     }
 
+    // MARK: - Per-connection paths
+
+    func testConnectionSnapshotURLsAreDistinctAndDoNotUseLegacyPath() {
+        let connectionA = ConnectionID.gitHubDotCom(login: "alice")
+        let connectionB = ConnectionID.gitHubDotCom(login: "bob")
+
+        let urlA = SnapshotStore.snapshotURL(for: connectionA)
+        let urlB = SnapshotStore.snapshotURL(for: connectionB)
+
+        XCTAssertNotEqual(urlA, urlB)
+        XCTAssertNotEqual(urlA, SnapshotStore.legacySnapshotURL)
+        XCTAssertNotEqual(urlB, SnapshotStore.legacySnapshotURL)
+        XCTAssertEqual(urlA.lastPathComponent, "notification-snapshot-github_github.com_alice.json")
+        XCTAssertEqual(urlB.lastPathComponent, "notification-snapshot-github_github.com_bob.json")
+    }
+
+    func testSnapshotURLForConnectionUsesInjectedBaseDirectory() {
+        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
+
+        let url = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
+
+        XCTAssertEqual(
+            url,
+            tempDir.appendingPathComponent("notification-snapshot-github_github.com_alice.json")
+        )
+    }
+
+    // MARK: - Per-connection isolation
+
+    func testWritingOneConnectionSnapshotDoesNotAlterAnotherConnectionSnapshot() throws {
+        let urlA = tempDir.appendingPathComponent("notification-snapshot-a.json")
+        let urlB = tempDir.appendingPathComponent("notification-snapshot-b.json")
+        let storeA = SnapshotStore(snapshotURL: urlA)
+        let storeB = SnapshotStore(snapshotURL: urlB)
+        let snapshotA = ReviewSnapshot(incomingIDs: ["pr-a"], outgoing: [:])
+        let snapshotB = ReviewSnapshot(incomingIDs: ["pr-b"], outgoing: [:])
+        try storeB.save(snapshotB)
+
+        try storeA.save(snapshotA)
+
+        XCTAssertEqual(storeA.load(), snapshotA)
+        XCTAssertEqual(storeB.load(), snapshotB)
+    }
+
+    func testDeleteRemovesOnlyThisStoreSnapshot() throws {
+        let urlA = tempDir.appendingPathComponent("notification-snapshot-a.json")
+        let urlB = tempDir.appendingPathComponent("notification-snapshot-b.json")
+        let storeA = SnapshotStore(snapshotURL: urlA)
+        let storeB = SnapshotStore(snapshotURL: urlB)
+        let snapshotA = ReviewSnapshot(incomingIDs: ["pr-a"], outgoing: [:])
+        let snapshotB = ReviewSnapshot(incomingIDs: ["pr-b"], outgoing: [:])
+        try storeA.save(snapshotA)
+        try storeB.save(snapshotB)
+
+        storeA.delete()
+
+        XCTAssertNil(storeA.load())
+        XCTAssertEqual(storeB.load(), snapshotB)
+    }
+
+    // MARK: - Legacy migration
+
+    func testMigrateLegacySnapshotMovesLegacyFileWhenNewSnapshotIsAbsent() throws {
+        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
+        let legacyURL = tempDir.appendingPathComponent("notification-snapshot.json")
+        let newURL = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
+        let legacyStore = SnapshotStore(snapshotURL: legacyURL)
+        let migratedStore = SnapshotStore(snapshotURL: newURL)
+        let snapshot = ReviewSnapshot(
+            incomingIDs: ["pr-1"],
+            outgoing: [
+                "pr-42": OutgoingSnapshot(
+                    reviewerStates: ["alice": "approved"],
+                    ci: "passing",
+                    mergeable: true,
+                    approved: true
+                ),
+            ]
+        )
+        try legacyStore.save(snapshot)
+
+        SnapshotStore.migrateLegacySnapshot(to: connectionID, legacyURL: legacyURL, newURL: newURL)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+        XCTAssertEqual(migratedStore.load(), snapshot)
+    }
+
+    func testMigrateLegacySnapshotDoesNotOverwriteExistingConnectionSnapshot() throws {
+        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
+        let legacyURL = tempDir.appendingPathComponent("notification-snapshot.json")
+        let newURL = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
+        let legacyStore = SnapshotStore(snapshotURL: legacyURL)
+        let newStore = SnapshotStore(snapshotURL: newURL)
+        let legacySnapshot = ReviewSnapshot(incomingIDs: ["legacy-pr"], outgoing: [:])
+        let existingSnapshot = ReviewSnapshot(incomingIDs: ["existing-pr"], outgoing: [:])
+        try legacyStore.save(legacySnapshot)
+        try newStore.save(existingSnapshot)
+
+        SnapshotStore.migrateLegacySnapshot(to: connectionID, legacyURL: legacyURL, newURL: newURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))
+        XCTAssertEqual(legacyStore.load(), legacySnapshot)
+        XCTAssertEqual(newStore.load(), existingSnapshot)
+    }
+
+    func testMigrateLegacySnapshotNoOpsWhenLegacySnapshotIsAbsent() {
+        let connectionID = ConnectionID.gitHubDotCom(login: "alice")
+        let legacyURL = tempDir.appendingPathComponent("notification-snapshot.json")
+        let newURL = SnapshotStore.snapshotURL(for: connectionID, in: tempDir)
+
+        SnapshotStore.migrateLegacySnapshot(to: connectionID, legacyURL: legacyURL, newURL: newURL)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: newURL.path))
+    }
+
     // MARK: - Helpers
 
     private func makeIncomingFixture(id: String) -> IncomingReview {
