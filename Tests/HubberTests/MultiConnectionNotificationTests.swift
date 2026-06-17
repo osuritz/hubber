@@ -20,6 +20,73 @@ private final class MCNSpyDispatcher: NotificationDispatching, @unchecked Sendab
     }
 }
 
+private actor MCNBlockingPostGate {
+    private var postedContents: [NotificationContent] = []
+    private var firstPostStarted = false
+    private var firstPostStartedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var firstPostRelease: CheckedContinuation<Void, Never>?
+
+    func post(_ content: NotificationContent) async {
+        postedContents.append(content)
+        guard !firstPostStarted else { return }
+
+        firstPostStarted = true
+        for waiter in firstPostStartedWaiters {
+            waiter.resume()
+        }
+        firstPostStartedWaiters.removeAll()
+
+        await withCheckedContinuation { continuation in
+            firstPostRelease = continuation
+        }
+    }
+
+    func waitForFirstPostStarted() async {
+        if firstPostStarted { return }
+
+        await withCheckedContinuation { continuation in
+            firstPostStartedWaiters.append(continuation)
+        }
+    }
+
+    func releaseFirstPost() {
+        firstPostRelease?.resume()
+        firstPostRelease = nil
+    }
+
+    func contents() -> [NotificationContent] {
+        postedContents
+    }
+}
+
+private final class MCNBlockingFirstPostDispatcher: NotificationDispatching, @unchecked Sendable {
+    private let gate = MCNBlockingPostGate()
+
+    @MainActor var notificationsDenied: Bool {
+        false
+    }
+
+    func ensureAuthorized() async -> Bool {
+        true
+    }
+
+    func post(_ content: NotificationContent) async {
+        await gate.post(content)
+    }
+
+    func waitForFirstPostStarted() async {
+        await gate.waitForFirstPostStarted()
+    }
+
+    func releaseFirstPost() async {
+        await gate.releaseFirstPost()
+    }
+
+    func postedContents() async -> [NotificationContent] {
+        await gate.contents()
+    }
+}
+
 private final class MCNTokenStore: GitHubTokenStoring, @unchecked Sendable {
     private var token: GitHubStoredToken?
     init(_ t: GitHubStoredToken?) {
@@ -167,7 +234,7 @@ private func outgoingReview(
 private func makeDualConnectionStore(
     loginA: String = "alice",
     loginB: String = "bob",
-    spy: MCNSpyDispatcher,
+    spy: any NotificationDispatching,
     snapshotURLa: URL,
     snapshotURLb: URL
 ) throws -> DualConnectionFixture {
@@ -375,6 +442,45 @@ final class MultiConnectionNotificationTests: XCTestCase {
 
         let newReviews = spy.postedContents.filter { $0.id.hasPrefix("newReview") }
         XCTAssertEqual(newReviews.count, 1, "A shared incoming PR must yield exactly ONE newReview")
+    }
+
+    // MARK: - Concurrent refresh regression
+
+    /// A's first notification post is suspended before A can advance its baseline. B is then launched
+    /// while A is mid-dispatch. The store's notification serial chain makes B wait for A's full pass,
+    /// including baseline advancement, so both refreshes can only produce one deduplicated newReview.
+    func testConcurrentRefreshesSerializeNotificationPassesAndDoNotDoublePostSharedIncoming() async throws {
+        let dispatcher = MCNBlockingFirstPostDispatcher()
+        let fixture = try makeDualConnectionStore(
+            spy: dispatcher,
+            snapshotURLa: tmpURL("a"),
+            snapshotURLb: tmpURL("b")
+        )
+
+        fixture.connA.notificationBaseline = ReviewSnapshot(incomingIDs: [], outgoing: [:])
+        fixture.connA.replaceData(HubberData(incoming: [incomingReview(id: "pr-shared")], outgoing: [], drafts: []))
+
+        fixture.connB.notificationBaseline = ReviewSnapshot(incomingIDs: [], outgoing: [:])
+        fixture.connB.replaceData(HubberData(incoming: [incomingReview(id: "pr-shared")], outgoing: [], drafts: []))
+
+        let refreshA = Task {
+            await fixture.store.handleRefreshSucceeded(fixture.connA, TabSuccesses(incoming: true, outgoing: true))
+        }
+        await dispatcher.waitForFirstPostStarted()
+
+        let refreshB = Task {
+            await fixture.store.handleRefreshSucceeded(fixture.connB, TabSuccesses(incoming: true, outgoing: true))
+        }
+        await Task.yield()
+
+        await dispatcher.releaseFirstPost()
+        await refreshA.value
+        await refreshB.value
+
+        let newReviews = await dispatcher.postedContents().filter { $0.id.hasPrefix("newReview") }
+        XCTAssertEqual(newReviews.count, 1, "Concurrent refreshes must not double-post the shared newReview")
+        let notifID = try XCTUnwrap(newReviews.first?.id)
+        XCTAssertTrue(notifID.contains("pr-shared"), "Notification ID should reference pr-shared, got \(notifID)")
     }
 
     // MARK: - Staggered refresh

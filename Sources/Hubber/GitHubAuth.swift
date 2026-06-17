@@ -378,6 +378,8 @@ final class HubberStore: ObservableObject {
     // MARK: - Notification pipeline
 
     let notificationCoordinator: NotificationCoordinator
+    /// Serializes notification passes across refresh schedulers. Internal for the split notification extension.
+    var notificationTail: Task<Void, Never> = Task {}
     /// The legacy connection's snapshot store (also used for `restoreSession` legacy path).
     /// Baselines are now owned exclusively by each `Connection` (C2: single source of truth).
     let snapshotStore: SnapshotStore

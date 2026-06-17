@@ -25,6 +25,16 @@ extension HubberStore {
     /// so a failed outgoing fetch never permanently drops the outgoing snapshot and never fires false
     /// "merged" events across refreshes.
     func handleRefreshSucceeded(_ refreshed: Connection?, _ tabSuccesses: TabSuccesses) async {
+        let prior = notificationTail
+        let pass = Task { @MainActor in
+            _ = await prior.value
+            await self.performNotificationPass(refreshed, tabSuccesses)
+        }
+        notificationTail = pass
+        await pass.value
+    }
+
+    private func performNotificationPass(_ refreshed: Connection?, _ tabSuccesses: TabSuccesses) async {
         let current = ConnectionAggregator.aggregate(connections.map(\.data))
         let baselinesForDiff = connections.map { connection in
             connection.notificationBaseline ?? NotificationDiffer.snapshot(from: connection.data)
