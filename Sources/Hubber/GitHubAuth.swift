@@ -292,59 +292,76 @@ final class GitHubAuthService: GitHubAuthServicing, Sendable {
 
 @MainActor
 final class HubberStore: ObservableObject {
-    @Published var data = HubberData.sample
+
+    // MARK: - Coordinator: connection list
+
+    /// Insertion-ordered, never reordered. `primaryConnection` is always `connections.first`.
+    @Published private(set) var connections: [Connection] = []
+
+    var primaryConnection: Connection? {
+        connections.first
+    }
+
+    // MARK: - Aggregated published state
+
+    /// Aggregated across all connections. Also directly settable for backward-compat with
+    /// NotificationWiringTests (which sets store.data directly). Recomputed via sink on
+    /// any connection change (Task 7 / R1).
+    @Published var data = HubberData(incoming: [], outgoing: [], drafts: [])
     @Published private(set) var isRefreshingPullRequests = false
     @Published private(set) var isPopoverOpen = false
     /// True when the user has denied notification authorization.
     @Published var notificationsDenied = false
 
+    // MARK: - Single-connection surface forwarded from primaryConnection
+
     var authState: HubberAuthState {
-        get { connection.authState }
+        get { primaryConnection?.authState ?? .signedOut }
         set {
-            connection.authState = newValue
-            syncPublishedFromConnection()
+            primaryConnection?.authState = newValue
+            recomputeAggregate()
         }
     }
 
     var viewerName: String? {
-        connection.viewerName
+        primaryConnection?.viewerName
     }
 
     var viewerAvatarURL: URL? {
-        connection.viewerAvatarURL
+        primaryConnection?.viewerAvatarURL
     }
 
     var lastPullRequestRefresh: Date? {
-        connection.lastPullRequestRefresh
+        primaryConnection?.lastPullRequestRefresh
     }
 
     var developerLog: [DeveloperLogEntry] {
-        connection.developerLog
+        primaryConnection?.developerLog ?? []
     }
 
     var pullRequestRefreshError: String? {
-        get { connection.pullRequestRefreshError }
-        set { connection.pullRequestRefreshError = newValue }
+        get { primaryConnection?.pullRequestRefreshError }
+        set { primaryConnection?.pullRequestRefreshError = newValue }
     }
 
     var incomingError: String? {
-        get { connection.incomingError }
-        set { connection.incomingError = newValue }
+        get { primaryConnection?.incomingError }
+        set { primaryConnection?.incomingError = newValue }
     }
 
     var outgoingError: String? {
-        get { connection.outgoingError }
-        set { connection.outgoingError = newValue }
+        get { primaryConnection?.outgoingError }
+        set { primaryConnection?.outgoingError = newValue }
     }
 
     var draftsError: String? {
-        get { connection.draftsError }
-        set { connection.draftsError = newValue }
+        get { primaryConnection?.draftsError }
+        set { primaryConnection?.draftsError = newValue }
     }
 
     var rateLimitedUntil: Date? {
-        get { connection.rateLimitedUntil }
-        set { connection.rateLimitedUntil = newValue }
+        get { primaryConnection?.rateLimitedUntil }
+        set { primaryConnection?.rateLimitedUntil = newValue }
     }
 
     var rateLimitMessage: String? {
@@ -355,7 +372,7 @@ final class HubberStore: ObservableObject {
     let settings: SettingsStore // exposed so views can bind
     let telemetry: Telemetry // exposed so views can emit events
     var provider: any CodeHostProvider {
-        connection.provider
+        primaryConnection?.provider ?? CachingCodeHostProvider(wrapping: GitHubProvider())
     }
 
     // MARK: - Notification pipeline
@@ -364,9 +381,21 @@ final class HubberStore: ObservableObject {
     let snapshotStore: SnapshotStore
     /// Persisted baseline; nil on first run (initial load must not fire).
     var notificationBaseline: ReviewSnapshot?
-    private let connection: Connection
     private let dispatcher: any NotificationDispatching
+    private let registry: ConnectionRegistry
     private var cancellables = Set<AnyCancellable>()
+    /// Separate bag cleared on every rebind so removed connections are unsubscribed.
+    private var connectionCancellables = Set<AnyCancellable>()
+
+    // Dependencies stored for building legacy connection
+    private let legacyAuthService: any GitHubAuthServicing
+    private let legacyProvider: any CodeHostProvider
+    private let legacyTokenStore: any GitHubTokenStoring
+    private let legacyIdle: any MachineIdleProviding
+    /// Optional factory used by tests to supply pre-built `Connection` objects during
+    /// `restoreAllConnections()`. When `nil`, the store builds connections from injected
+    /// legacy deps (single-connection path).
+    private let connectionFactory: ((ConnectionID) throws -> Connection)?
 
     init(
         authService: any GitHubAuthServicing = GitHubAuthService(),
@@ -376,34 +405,183 @@ final class HubberStore: ObservableObject {
         idle: any MachineIdleProviding = SystemIdleProvider(),
         telemetry: Telemetry = Telemetry(sink: TelemetryDeckSink()),
         dispatcher: any NotificationDispatching = UNNotificationDispatcher(),
-        snapshotStore: SnapshotStore = SnapshotStore()
+        snapshotStore: SnapshotStore = SnapshotStore(),
+        defaults: UserDefaults = .standard,
+        restoreOnInit: Bool = true,
+        connectionFactory: ((ConnectionID) throws -> Connection)? = nil
     ) {
         self.settings = settings
         self.telemetry = telemetry
         self.snapshotStore = snapshotStore
         self.dispatcher = dispatcher
+        legacyAuthService = authService
+        legacyProvider = provider
+        legacyTokenStore = tokenStore
+        legacyIdle = idle
+        self.connectionFactory = connectionFactory
         notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
         notificationBaseline = snapshotStore.load()
-        connection = Connection(
+        registry = ConnectionRegistry(defaults: defaults)
+
+        if restoreOnInit {
+            restoreSession()
+        }
+    }
+
+    // MARK: - Legacy single-connection restore (used by restoreOnInit path)
+
+    private func buildLegacyConnection() -> Connection {
+        let conn = Connection(
             id: .gitHubDotCom(login: "legacy"),
-            provider: provider,
-            authService: authService,
-            tokenStore: tokenStore,
+            provider: legacyProvider,
+            authService: legacyAuthService,
+            tokenStore: legacyTokenStore,
             snapshotStore: snapshotStore,
-            scheduler: RefreshScheduler(idle: idle),
+            scheduler: RefreshScheduler(idle: legacyIdle),
             settings: settings
         )
-        connection.notificationBaseline = notificationBaseline
-        connection.onRefreshSucceeded = { [weak self] tabSuccesses in
+        conn.notificationBaseline = notificationBaseline
+        wireCallbacks(on: conn)
+        return conn
+    }
+
+    private func wireCallbacks(on conn: Connection) {
+        conn.onRefreshSucceeded = { [weak self] tabSuccesses in
             guard let self else { return }
-            syncPublishedFromConnection()
+            recomputeAggregate()
             await dispatchNotifications(tabSuccesses: tabSuccesses)
         }
-        connection.onSignedIn = { [weak self] in
+        conn.onSignedIn = { [weak self] in
             await self?.requestNotificationAuthorization()
         }
-        bindConnection()
-        restoreSession()
+    }
+
+    // MARK: - Coordinator: add / remove / restore
+
+    /// Builds a new `Connection` with injected or default dependencies and appends it.
+    /// - Parameters:
+    ///   - id: The `ConnectionID` that identifies this connection (and keys its stores).
+    ///   - provider: Optional provider override (for tests). Defaults to the store's legacy provider.
+    ///   - authService: Optional auth-service override. Defaults to the store's legacy auth service.
+    ///   - tokenStore: Optional token-store override. Defaults to a `GitHubTokenStore.makeStore(for:id)`.
+    ///   - snapshotStore: Optional snapshot-store override. Defaults to `SnapshotStore(connectionID:id)`.
+    ///   - scheduler: Optional scheduler override. Defaults to a fresh `RefreshScheduler`.
+    @discardableResult
+    func addConnection(
+        id: ConnectionID,
+        provider: (any CodeHostProvider)? = nil,
+        authService: (any GitHubAuthServicing)? = nil,
+        tokenStore: (any GitHubTokenStoring)? = nil,
+        snapshotStore: SnapshotStore? = nil,
+        scheduler: RefreshScheduler? = nil
+    ) throws -> Connection {
+        let resolvedProvider = provider ?? legacyProvider
+        let resolvedAuthService = authService ?? legacyAuthService
+        let resolvedTokenStore = tokenStore ?? GitHubTokenStore.makeStore(for: id)
+        let resolvedSnapshotStore = snapshotStore ?? SnapshotStore(connectionID: id)
+        let resolvedScheduler = scheduler ?? RefreshScheduler(idle: legacyIdle)
+
+        let conn = Connection(
+            id: id,
+            provider: resolvedProvider,
+            authService: resolvedAuthService,
+            tokenStore: resolvedTokenStore,
+            snapshotStore: resolvedSnapshotStore,
+            scheduler: resolvedScheduler,
+            settings: settings
+        )
+        wireCallbacks(on: conn)
+        connections.append(conn)
+        rebindConnections()
+        try registry.append(id)
+        return conn
+    }
+
+    /// Removes a specific connection: signs it out, deletes its snapshot, prunes registry.
+    func removeConnection(_ id: ConnectionID) async {
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        let conn = connections[index]
+        await conn.signOut()
+        conn.snapshotStore.delete()
+        connections.remove(at: index)
+        rebindConnections()
+        try? registry.remove(id)
+    }
+
+    /// Signs out ALL connections and clears the registry.
+    func signOut() async {
+        for conn in connections {
+            await conn.signOut()
+            conn.snapshotStore.delete()
+        }
+        connections.removeAll()
+        rebindConnections()
+        registry.removeAll()
+    }
+
+    /// Restores connections from the registry. If the registry is empty, falls back to
+    /// the legacy single-connection path (including migration from the legacy token/snapshot).
+    func restoreAllConnections() {
+        let ids = registry.load()
+        if ids.isEmpty {
+            // Legacy single-connection path: build and restore one connection
+            let conn = buildLegacyConnection()
+            connections = [conn]
+            rebindConnections()
+            conn.restoreSession()
+        } else {
+            // Multi-connection path: build a Connection per registered id
+            var built: [Connection] = []
+            for id in ids {
+                let conn: Connection
+                if let factory = connectionFactory {
+                    guard let c = try? factory(id) else { continue }
+                    conn = c
+                } else {
+                    conn = Connection(
+                        id: id,
+                        provider: legacyProvider,
+                        authService: legacyAuthService,
+                        tokenStore: GitHubTokenStore.makeStore(for: id),
+                        snapshotStore: SnapshotStore(connectionID: id),
+                        scheduler: RefreshScheduler(idle: legacyIdle),
+                        settings: settings
+                    )
+                }
+                wireCallbacks(on: conn)
+                built.append(conn)
+            }
+            connections = built
+            rebindConnections()
+            for conn in connections {
+                conn.restoreSession()
+            }
+        }
+    }
+
+    // MARK: - Aggregate recomputation (R1/R2)
+
+    private func rebindConnections() {
+        connectionCancellables.removeAll()
+        Publishers.MergeMany(connections.map(\.objectWillChange))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.recomputeAggregate() }
+            .store(in: &connectionCancellables)
+        recomputeAggregate()
+    }
+
+    private func recomputeAggregate() {
+        data = ConnectionAggregator.aggregate(connections.map(\.data))
+        isRefreshingPullRequests = connections.contains { $0.isRefreshingPullRequests }
+    }
+
+    // MARK: - Legacy restoreSession (used by existing tests via restoreOnInit path)
+
+    func restoreSession() {
+        let conn = buildLegacyConnection()
+        connections = [conn]
+        rebindConnections()
+        conn.restoreSession()
     }
 
     /// Sends a test notification through the real dispatcher.
@@ -433,26 +611,22 @@ final class HubberStore: ObservableObject {
 
     func setPopoverOpen(_ open: Bool) {
         isPopoverOpen = open
-        connection.isPopoverOpen = open
+        primaryConnection?.isPopoverOpen = open
     }
 
     var usernameDisplay: String {
-        connection.usernameDisplay
+        primaryConnection?.usernameDisplay ?? "· not signed in"
     }
 
     var canRefreshPullRequests: Bool {
-        connection.canRefreshPullRequests
+        primaryConnection?.canRefreshPullRequests ?? false
     }
 
     /// True while the GitHub device-flow sign-in is awaiting user authorization.
     /// The menu panel stays pinned open in this state so the user can read/copy the
     /// device code and switch to the browser without the panel closing on them.
     var isAuthenticating: Bool {
-        connection.isAuthenticating
-    }
-
-    func restoreSession() {
-        connection.restoreSession()
+        primaryConnection?.isAuthenticating ?? false
     }
 
     func startSignIn() {
@@ -460,26 +634,29 @@ final class HubberStore: ObservableObject {
     }
 
     func startSignIn(policy: ProviderAccessPolicy) {
+        let connection: Connection
+        if let existing = primaryConnection {
+            connection = existing
+        } else {
+            // After signOut() the connection list is empty — rebuild a fresh legacy
+            // connection so the user can sign back in.
+            connection = buildLegacyConnection()
+            connections = [connection]
+            rebindConnections()
+        }
         connection.startSignIn(policy: policy)
     }
 
     func cancelSignIn() {
-        connection.cancelSignIn()
-    }
-
-    func signOut() {
-        Task {
-            await connection.signOut()
-            syncPublishedFromConnection()
-        }
+        primaryConnection?.cancelSignIn()
     }
 
     func openDeviceVerificationPage() {
-        connection.openDeviceVerificationPage()
+        primaryConnection?.openDeviceVerificationPage()
     }
 
     func copyDeviceCode() {
-        connection.copyDeviceCode()
+        primaryConnection?.copyDeviceCode()
     }
 
     func refreshPullRequests() {
@@ -490,20 +667,20 @@ final class HubberStore: ObservableObject {
 
         appendDeveloperLog("Manual pull request refresh requested")
         telemetry.manualRefresh()
-        connection.refreshNow()
+        primaryConnection?.refreshNow()
     }
 
     func clearDeveloperLog() {
-        connection.clearDeveloperLog()
+        primaryConnection?.clearDeveloperLog()
     }
 
     func copyDeveloperLog() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(connection.developerLogText, forType: .string)
+        NSPasteboard.general.setString(primaryConnection?.developerLogText ?? "", forType: .string)
     }
 
     var signedInLogin: String? {
-        connection.signedInLogin
+        primaryConnection?.signedInLogin
     }
 
     /// Maps a refresh error to the resulting `HubberAuthState` (or `nil` to leave state unchanged).
@@ -515,26 +692,6 @@ final class HubberStore: ObservableObject {
     }
 
     func appendDeveloperLog(_ message: String) {
-        connection.appendDeveloperLog(message)
-    }
-
-    private func bindConnection() {
-        connection.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                Task { @MainActor in
-                    self?.syncPublishedFromConnection(sendObjectWillChange: true)
-                }
-            }
-            .store(in: &cancellables)
-        syncPublishedFromConnection()
-    }
-
-    private func syncPublishedFromConnection(sendObjectWillChange: Bool = false) {
-        if sendObjectWillChange {
-            objectWillChange.send()
-        }
-        data = connection.data
-        isRefreshingPullRequests = connection.isRefreshingPullRequests
+        primaryConnection?.appendDeveloperLog(message)
     }
 }

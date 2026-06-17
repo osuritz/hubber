@@ -318,7 +318,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func signOut(_ sender: Any?) {
         closePanel()
-        store.signOut()
+        Task {
+            await store.signOut()
+        }
     }
 
     @objc private func quit(_ sender: Any?) {

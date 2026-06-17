@@ -80,7 +80,7 @@ struct GitHubAuthSettingsView: View {
                 .opacity(isRestricted ? 0.45 : 1)
 
                 Button("Sign out") {
-                    store.signOut()
+                    Task { await store.signOut() }
                 }
             }
             .controlSize(.small)
@@ -170,7 +170,7 @@ struct GitHubAuthSettingsView: View {
             Spacer()
 
             Button("Sign out") {
-                store.signOut()
+                Task { await store.signOut() }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -216,7 +216,7 @@ struct GitHubAuthSettingsView: View {
                 .opacity(isRestricted ? 0.45 : 1)
 
                 Button("Clear") {
-                    store.signOut()
+                    Task { await store.signOut() }
                 }
             }
             .controlSize(.small)
