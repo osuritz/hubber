@@ -11,10 +11,22 @@ final class GitLabProvider: CodeHostProvider {
 
     func fetchIncomingReviews(
         accessToken: String,
-        viewerLogin: String,
-        mode: IncomingReviewMode
+        viewerLogin _: String,
+        mode _: IncomingReviewMode
     ) async throws -> [IncomingReview] {
-        []
+        let payload = try await graphQL(
+            query: Self.incomingMergeRequestsQuery,
+            variables: ["first": 100],
+            accessToken: accessToken
+        )
+
+        guard
+            let currentUser = payload["currentUser"] as? [String: Any],
+            let mergeRequests = currentUser["reviewRequestedMergeRequests"] as? [String: Any],
+            let nodes = mergeRequests["nodes"] as? [[String: Any]]
+        else { throw GitHubAuthError.invalidResponse }
+
+        return nodes.compactMap(Self.parseIncomingReview)
     }
 
     func fetchOutgoingPullRequests(
@@ -59,4 +71,83 @@ final class GitLabProvider: CodeHostProvider {
         }
         throw GitHubAuthError.invalidResponse
     }
+
+    static func mapCI(_ status: String?) -> PullRequestCI {
+        switch status?.uppercased() {
+        case "SUCCESS":
+            .passing
+        case "FAILED":
+            .failing
+        case "RUNNING":
+            .running
+        default:
+            .pending
+        }
+    }
+
+    private static func parseIncomingReview(_ node: [String: Any]) -> IncomingReview? {
+        guard
+            node["draft"] as? Bool == false,
+            let id = node["id"] as? String,
+            let number = intValue(node["iid"]),
+            let title = node["title"] as? String,
+            let repo = (node["project"] as? [String: Any])?["fullPath"] as? String,
+            let authorNode = node["author"] as? [String: Any],
+            let authorLogin = authorNode["username"] as? String
+        else { return nil }
+
+        let url = (node["webUrl"] as? String).flatMap(URL.init(string:))
+        let avatarURL = (authorNode["avatarUrl"] as? String).flatMap(URL.init(string:))
+        let diffStats = node["diffStatsSummary"] as? [String: Any]
+        let createdAt = (node["createdAt"] as? String).flatMap(ISO8601DateFormatter().date(from:)) ?? Date()
+        let author = GitHubUser(
+            login: authorLogin,
+            initials: String(authorLogin.prefix(2)).uppercased(),
+            color: colorForLogin(authorLogin),
+            avatarURL: avatarURL
+        )
+
+        return IncomingReview(
+            id: id,
+            repo: repo,
+            number: number,
+            title: title,
+            url: url,
+            author: author,
+            sloClockStart: createdAt,
+            additions: intValue(diffStats?["additions"]) ?? 0,
+            deletions: intValue(diffStats?["deletions"]) ?? 0,
+            files: intValue(diffStats?["fileCount"]) ?? 0
+        )
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let int = value as? Int {
+            return int
+        }
+        if let string = value as? String {
+            return Int(string)
+        }
+        return nil
+    }
+
+    private static let incomingMergeRequestsQuery = """
+    query IncomingMRs($first: Int!) {
+      currentUser {
+        reviewRequestedMergeRequests(state: opened, first: $first) {
+          nodes {
+            id
+            iid
+            title
+            webUrl
+            createdAt
+            draft
+            project { fullPath }
+            author { username avatarUrl }
+            diffStatsSummary { additions deletions fileCount }
+          }
+        }
+      }
+    }
+    """
 }
