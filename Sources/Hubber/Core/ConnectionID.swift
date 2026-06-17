@@ -19,21 +19,66 @@ struct ConnectionID: Hashable, Codable, CustomStringConvertible, Sendable {
     }
 
     var slug: String {
-        "\(provider)_\(host)_\(login)"
-            .map { character in
-                character.isSlugSafe ? character : "-"
-            }
-            .map(String.init)
-            .joined()
+        [provider, host, login]
+            .map(Self.encodeSlugComponent)
+            .joined(separator: "_")
     }
 
     static func gitHubDotCom(login: String) -> ConnectionID {
         ConnectionID(provider: "github", host: "github.com", login: login)
     }
+
+    private static func encodeSlugComponent(_ component: String) -> String {
+        var encoded = ""
+
+        for byte in component.utf8 {
+            if byte.isSlugComponentSafe {
+                encoded.unicodeScalars.append(Unicode.Scalar(byte))
+            } else {
+                // H1: escape "_" so component delimiters remain unambiguous and slugs stay injective.
+                encoded.append("%")
+                encoded.append(hexDigits[Int(byte >> 4)])
+                encoded.append(hexDigits[Int(byte & 0x0F)])
+            }
+        }
+
+        return encoded
+    }
+
+    private static let hexDigits: [Character] = [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+    ]
 }
 
-private extension Character {
-    var isSlugSafe: Bool {
-        isASCII && (isLetter || isNumber || self == "." || self == "_" || self == "-")
+private extension UInt8 {
+    var isSlugComponentSafe: Bool {
+        (ASCII.lowercaseA...ASCII.lowercaseZ).contains(self)
+            || (ASCII.zero...ASCII.nine).contains(self)
+            || self == ASCII.period
+            || self == ASCII.hyphen
     }
+}
+
+private enum ASCII {
+    static let lowercaseA: UInt8 = 97
+    static let lowercaseZ: UInt8 = 122
+    static let zero: UInt8 = 48
+    static let nine: UInt8 = 57
+    static let period: UInt8 = 46
+    static let hyphen: UInt8 = 45
 }

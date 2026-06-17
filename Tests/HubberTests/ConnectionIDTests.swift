@@ -27,8 +27,19 @@ final class ConnectionIDTests: XCTestCase {
     func testSlugSanitizesUnsafeCharacters() {
         let id = ConnectionID(provider: "GitHub", host: "GitHub.Com", login: "Work User/Prod")
 
-        XCTAssertEqual(id.slug, "github_github.com_work-user-prod")
+        XCTAssertEqual(id.slug, "github_github.com_work%20user%2fprod")
         XCTAssertTrue(id.slug.allSatisfy(isSlugSafe))
+        XCTAssertEqual(id.slug.count(where: { $0 == "_" }), 2)
+    }
+
+    func testSlugEncodingAvoidsCrossComponentAndUnsafeCharacterCollisions() {
+        let underscoreLogin = ConnectionID(provider: "github", host: "github.com", login: "a_b")
+        let underscoreHost = ConnectionID(provider: "github", host: "github.com_a", login: "b")
+        let escapedSlash = ConnectionID(provider: "github", host: "github.com", login: "x/y")
+        let literalHyphen = ConnectionID(provider: "github", host: "github.com", login: "x-y")
+
+        XCTAssertNotEqual(underscoreLogin.slug, underscoreHost.slug)
+        XCTAssertNotEqual(escapedSlash.slug, literalHyphen.slug)
     }
 
     func testGitHubDotComHelperUsesGitHubProviderAndHost() {
@@ -49,6 +60,7 @@ final class ConnectionIDTests: XCTestCase {
 
     private func isSlugSafe(_ character: Character) -> Bool {
         character.isASCII
-            && (character.isLetter || character.isNumber || character == "." || character == "_" || character == "-")
+            && (character.isLetter || character.isNumber || character == "." || character == "_" || character == "%"
+                || character == "-")
     }
 }
