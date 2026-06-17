@@ -50,7 +50,19 @@ final class GitLabProvider: CodeHostProvider {
     }
 
     func fetchDraftPullRequests(accessToken: String, limit: Int = 100) async throws -> [DraftReview] {
-        []
+        let payload = try await graphQL(
+            query: Self.authoredMergeRequestsQuery,
+            variables: ["first": limit],
+            accessToken: accessToken
+        )
+
+        guard
+            let currentUser = payload["currentUser"] as? [String: Any],
+            let mergeRequests = currentUser["authoredMergeRequests"] as? [String: Any],
+            let nodes = mergeRequests["nodes"] as? [[String: Any]]
+        else { throw GitHubAuthError.invalidResponse }
+
+        return nodes.compactMap(Self.parseDraftReview)
     }
 
     func graphQL(query: String, variables: [String: Any], accessToken: String) async throws -> [String: Any] {
@@ -181,6 +193,32 @@ final class GitLabProvider: CodeHostProvider {
         )
     }
 
+    private static func parseDraftReview(_ node: [String: Any]) -> DraftReview? {
+        guard
+            node["draft"] as? Bool == true,
+            let id = node["id"] as? String,
+            let number = intValue(node["iid"]),
+            let title = node["title"] as? String,
+            let repo = (node["project"] as? [String: Any])?["fullPath"] as? String
+        else { return nil }
+
+        let url = (node["webUrl"] as? String).flatMap(URL.init(string:))
+        let updatedAt = (node["updatedAt"] as? String).flatMap(ISO8601DateFormatter().date(from:)) ?? Date()
+        let pipelineStatus = (node["headPipeline"] as? [String: Any])?["status"] as? String
+
+        return DraftReview(
+            id: id,
+            repo: repo,
+            number: number,
+            title: title,
+            url: url,
+            ci: mapCI(pipelineStatus),
+            ciDetail: pipelineStatus ?? "no pipeline",
+            commits: intValue(node["commitCount"]) ?? 0,
+            updatedAt: updatedAt
+        )
+    }
+
     private static func parseReviewers(_ node: [String: Any]) -> [Reviewer] {
         guard
             let reviewers = node["reviewers"] as? [String: Any],
@@ -248,6 +286,7 @@ final class GitLabProvider: CodeHostProvider {
             updatedAt
             draft
             project { fullPath }
+            commitCount
             approvalsRequired
             approvalsLeft
             resolvableDiscussionsCount

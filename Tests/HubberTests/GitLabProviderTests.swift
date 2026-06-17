@@ -8,12 +8,10 @@ final class GitLabProviderTests: XCTestCase {
         super.tearDown()
     }
 
-    func testConformsToCodeHostProviderAndRemainingStubsReturnEmptyArrays() async throws {
+    func testConformsToCodeHostProvider() {
         let provider: any CodeHostProvider = GitLabProvider()
 
-        let drafts = try await provider.fetchDraftPullRequests(accessToken: "tok", limit: 100)
-
-        XCTAssertTrue(drafts.isEmpty)
+        XCTAssertTrue(provider is GitLabProvider)
     }
 
     func testGraphQLPostsToGitLabEndpointWithBearerTokenAndReturnsData() async throws {
@@ -229,6 +227,54 @@ final class GitLabProviderTests: XCTestCase {
         XCTAssertEqual(pending.state, .pending)
     }
 
+    func testFetchDraftPullRequestsMapsAuthoredDraftMergeRequestsOnly() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.authoredMergeRequestsResponse)
+        }
+        let provider = try GitLabProvider(baseURL: XCTUnwrap(URL(string: "https://gitlab.com")), session: makeSession())
+
+        let drafts = try await provider.fetchDraftPullRequests(accessToken: "glpat-author", limit: 7)
+
+        let body = try XCTUnwrap(MockURLProtocol.lastRequest?.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let variables = try XCTUnwrap(json["variables"] as? [String: Any])
+        XCTAssertEqual(variables["first"] as? Int, 7)
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString, "https://gitlab.com/api/graphql")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization"), "Bearer glpat-author")
+        XCTAssertEqual(drafts.count, 2)
+        XCTAssertNil(drafts.first(where: { $0.id == "gid://gitlab/MergeRequest/901" }))
+        XCTAssertNil(drafts.first(where: { $0.id == "gid://gitlab/MergeRequest/902" }))
+
+        let successDraft = try XCTUnwrap(drafts.first(where: { $0.id == "gid://gitlab/MergeRequest/903" }))
+        XCTAssertEqual(successDraft.repo, "namespace/premium-project")
+        XCTAssertEqual(successDraft.number, 44)
+        XCTAssertEqual(successDraft.title, "Draft should be included in drafts")
+        XCTAssertEqual(
+            successDraft.url?.absoluteString,
+            "https://gitlab.com/namespace/premium-project/-/merge_requests/44"
+        )
+        XCTAssertEqual(successDraft.ci, .passing)
+        XCTAssertEqual(successDraft.ciDetail, "SUCCESS")
+        XCTAssertEqual(successDraft.commits, 6)
+        XCTAssertEqual(successDraft.updatedAt, try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-17T08:00:00Z")))
+
+        let noPipelineDraft = try XCTUnwrap(drafts.first(where: { $0.id == "gid://gitlab/MergeRequest/904" }))
+        XCTAssertEqual(noPipelineDraft.repo, "namespace/free-project")
+        XCTAssertEqual(noPipelineDraft.number, 45)
+        XCTAssertEqual(noPipelineDraft.title, "Draft without pipeline")
+        XCTAssertEqual(
+            noPipelineDraft.url?.absoluteString,
+            "https://gitlab.com/namespace/free-project/-/merge_requests/45"
+        )
+        XCTAssertEqual(noPipelineDraft.ci, .pending)
+        XCTAssertEqual(noPipelineDraft.ciDetail, "no pipeline")
+        XCTAssertEqual(noPipelineDraft.commits, 0)
+        XCTAssertEqual(
+            noPipelineDraft.updatedAt,
+            try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-17T07:00:00Z"))
+        )
+    }
+
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
@@ -314,6 +360,7 @@ final class GitLabProviderTests: XCTestCase {
                 "updatedAt": "2026-06-17T10:00:00Z",
                 "draft": false,
                 "project": { "fullPath": "namespace/free-project" },
+                "commitCount": 1,
                 "resolvableDiscussionsCount": 0,
                 "resolvedDiscussionsCount": 0,
                 "mergeStatusEnum": "CANNOT_BE_MERGED",
@@ -328,6 +375,7 @@ final class GitLabProviderTests: XCTestCase {
                 "updatedAt": "2026-06-17T09:00:00Z",
                 "draft": false,
                 "project": { "fullPath": "namespace/premium-project" },
+                "commitCount": 3,
                 "approvalsRequired": 2,
                 "approvalsLeft": 1,
                 "resolvableDiscussionsCount": 5,
@@ -357,17 +405,35 @@ final class GitLabProviderTests: XCTestCase {
               {
                 "id": "gid://gitlab/MergeRequest/903",
                 "iid": "44",
-                "title": "Draft should be excluded from outgoing",
+                "title": "Draft should be included in drafts",
                 "webUrl": "https://gitlab.com/namespace/premium-project/-/merge_requests/44",
                 "updatedAt": "2026-06-17T08:00:00Z",
                 "draft": true,
                 "project": { "fullPath": "namespace/premium-project" },
+                "commitCount": "6",
                 "approvalsRequired": 1,
                 "approvalsLeft": 1,
                 "resolvableDiscussionsCount": 9,
                 "resolvedDiscussionsCount": 0,
                 "mergeStatusEnum": "CAN_BE_MERGED",
                 "headPipeline": { "status": "SUCCESS" },
+                "reviewers": { "nodes": [] }
+              },
+              {
+                "id": "gid://gitlab/MergeRequest/904",
+                "iid": "45",
+                "title": "Draft without pipeline",
+                "webUrl": "https://gitlab.com/namespace/free-project/-/merge_requests/45",
+                "updatedAt": "2026-06-17T07:00:00Z",
+                "draft": true,
+                "project": { "fullPath": "namespace/free-project" },
+                "commitCount": null,
+                "approvalsRequired": 0,
+                "approvalsLeft": 0,
+                "resolvableDiscussionsCount": 0,
+                "resolvedDiscussionsCount": 0,
+                "mergeStatusEnum": "CANNOT_BE_MERGED",
+                "headPipeline": null,
                 "reviewers": { "nodes": [] }
               }
             ]
