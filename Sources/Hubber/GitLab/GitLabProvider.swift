@@ -31,10 +31,22 @@ final class GitLabProvider: CodeHostProvider {
 
     func fetchOutgoingPullRequests(
         accessToken: String,
-        viewerLogin: String,
-        unresolvedMode: UnresolvedThreadMode
+        viewerLogin _: String,
+        unresolvedMode _: UnresolvedThreadMode
     ) async throws -> [OutgoingReview] {
-        []
+        let payload = try await graphQL(
+            query: Self.authoredMergeRequestsQuery,
+            variables: ["first": 100],
+            accessToken: accessToken
+        )
+
+        guard
+            let currentUser = payload["currentUser"] as? [String: Any],
+            let mergeRequests = currentUser["authoredMergeRequests"] as? [String: Any],
+            let nodes = mergeRequests["nodes"] as? [[String: Any]]
+        else { throw GitHubAuthError.invalidResponse }
+
+        return nodes.compactMap(Self.parseOutgoingReview)
     }
 
     func fetchDraftPullRequests(accessToken: String, limit: Int = 100) async throws -> [DraftReview] {
@@ -85,6 +97,19 @@ final class GitLabProvider: CodeHostProvider {
         }
     }
 
+    static func mapReviewState(_ state: String?) -> ReviewerState {
+        switch state?.uppercased() {
+        case "APPROVED":
+            .approved
+        case "REQUESTED_CHANGES":
+            .changesRequested
+        case "REVIEWED":
+            .commented
+        default:
+            .pending
+        }
+    }
+
     private static func parseIncomingReview(_ node: [String: Any]) -> IncomingReview? {
         guard
             node["draft"] as? Bool == false,
@@ -121,6 +146,66 @@ final class GitLabProvider: CodeHostProvider {
         )
     }
 
+    private static func parseOutgoingReview(_ node: [String: Any]) -> OutgoingReview? {
+        guard
+            node["draft"] as? Bool == false,
+            let id = node["id"] as? String,
+            let number = intValue(node["iid"]),
+            let title = node["title"] as? String,
+            let repo = (node["project"] as? [String: Any])?["fullPath"] as? String
+        else { return nil }
+
+        let url = (node["webUrl"] as? String).flatMap(URL.init(string:))
+        let updatedAt = (node["updatedAt"] as? String).flatMap(ISO8601DateFormatter().date(from:)) ?? Date()
+        let pipelineStatus = (node["headPipeline"] as? [String: Any])?["status"] as? String
+        let requiredApprovals = intValue(node["approvalsRequired"]) ?? 0
+        let approvalsLeft = intValue(node["approvalsLeft"]) ?? requiredApprovals
+        let resolvableDiscussions = intValue(node["resolvableDiscussionsCount"]) ?? 0
+        let resolvedDiscussions = intValue(node["resolvedDiscussionsCount"]) ?? 0
+        let mergeStatus = node["mergeStatusEnum"] as? String
+
+        return OutgoingReview(
+            id: id,
+            repo: repo,
+            number: number,
+            title: title,
+            url: url,
+            ci: mapCI(pipelineStatus),
+            ciDetail: pipelineStatus ?? "no pipeline",
+            unresolved: max(0, resolvableDiscussions - resolvedDiscussions),
+            approvals: max(0, requiredApprovals - approvalsLeft),
+            requiredApprovals: requiredApprovals,
+            reviewers: parseReviewers(node),
+            updatedAgoHours: max(0, Date().timeIntervalSince(updatedAt) / 3600),
+            mergeable: mergeStatus?.uppercased() == "CAN_BE_MERGED"
+        )
+    }
+
+    private static func parseReviewers(_ node: [String: Any]) -> [Reviewer] {
+        guard
+            let reviewers = node["reviewers"] as? [String: Any],
+            let reviewerNodes = reviewers["nodes"] as? [[String: Any]]
+        else { return [] }
+
+        return reviewerNodes.compactMap { reviewer -> Reviewer? in
+            guard let login = reviewer["username"] as? String else { return nil }
+
+            let avatarURL = (reviewer["avatarUrl"] as? String).flatMap(URL.init(string:))
+            let interaction = reviewer["mergeRequestInteraction"] as? [String: Any]
+            let user = GitHubUser(
+                login: login,
+                initials: String(login.prefix(2)).uppercased(),
+                color: colorForLogin(login),
+                avatarURL: avatarURL
+            )
+
+            return Reviewer(
+                user: user,
+                state: mapReviewState(interaction?["reviewState"] as? String)
+            )
+        }
+    }
+
     private static func intValue(_ value: Any?) -> Int? {
         if let int = value as? Int {
             return int
@@ -145,6 +230,37 @@ final class GitLabProvider: CodeHostProvider {
             project { fullPath }
             author { username avatarUrl }
             diffStatsSummary { additions deletions fileCount }
+          }
+        }
+      }
+    }
+    """
+
+    private static let authoredMergeRequestsQuery = """
+    query AuthoredMRs($first: Int!) {
+      currentUser {
+        authoredMergeRequests(state: opened, first: $first) {
+          nodes {
+            id
+            iid
+            title
+            webUrl
+            updatedAt
+            draft
+            project { fullPath }
+            approvalsRequired
+            approvalsLeft
+            resolvableDiscussionsCount
+            resolvedDiscussionsCount
+            mergeStatusEnum
+            headPipeline { status }
+            reviewers {
+              nodes {
+                username
+                avatarUrl
+                mergeRequestInteraction { reviewState }
+              }
+            }
           }
         }
       }

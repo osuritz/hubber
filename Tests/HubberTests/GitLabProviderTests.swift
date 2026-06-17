@@ -11,14 +11,8 @@ final class GitLabProviderTests: XCTestCase {
     func testConformsToCodeHostProviderAndRemainingStubsReturnEmptyArrays() async throws {
         let provider: any CodeHostProvider = GitLabProvider()
 
-        let outgoing = try await provider.fetchOutgoingPullRequests(
-            accessToken: "tok",
-            viewerLogin: "osuritz",
-            unresolvedMode: .allOpen
-        )
         let drafts = try await provider.fetchDraftPullRequests(accessToken: "tok", limit: 100)
 
-        XCTAssertTrue(outgoing.isEmpty)
         XCTAssertTrue(drafts.isEmpty)
     }
 
@@ -148,6 +142,93 @@ final class GitLabProviderTests: XCTestCase {
         }
     }
 
+    func testFetchOutgoingPullRequestsMapsAuthoredMergeRequestsAndSkipsDrafts() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.authoredMergeRequestsResponse)
+        }
+        let provider = try GitLabProvider(baseURL: XCTUnwrap(URL(string: "https://gitlab.com")), session: makeSession())
+
+        let reviews = try await provider.fetchOutgoingPullRequests(
+            accessToken: "glpat-author",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        XCTAssertEqual(MockURLProtocol.lastRequest?.url?.absoluteString, "https://gitlab.com/api/graphql")
+        XCTAssertEqual(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization"), "Bearer glpat-author")
+        XCTAssertEqual(reviews.count, 2)
+        XCTAssertNil(reviews.first(where: { $0.id == "gid://gitlab/MergeRequest/903" }))
+    }
+
+    func testFetchOutgoingPullRequestsDefaultsMissingApprovalsForFreeTier() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.authoredMergeRequestsResponse)
+        }
+        let provider = try GitLabProvider(baseURL: XCTUnwrap(URL(string: "https://gitlab.com")), session: makeSession())
+
+        let reviews = try await provider.fetchOutgoingPullRequests(
+            accessToken: "glpat-author",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        let freeTier = try XCTUnwrap(reviews.first(where: { $0.id == "gid://gitlab/MergeRequest/901" }))
+        XCTAssertEqual(freeTier.requiredApprovals, 0)
+        XCTAssertEqual(freeTier.approvals, 0)
+    }
+
+    func testFetchOutgoingPullRequestsMapsPremiumApprovalsUnresolvedPipelineAndMergeability() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.authoredMergeRequestsResponse)
+        }
+        let provider = try GitLabProvider(baseURL: XCTUnwrap(URL(string: "https://gitlab.com")), session: makeSession())
+
+        let reviews = try await provider.fetchOutgoingPullRequests(
+            accessToken: "glpat-author",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        let premium = try XCTUnwrap(reviews.first(where: { $0.id == "gid://gitlab/MergeRequest/902" }))
+        XCTAssertEqual(premium.repo, "namespace/premium-project")
+        XCTAssertEqual(premium.number, 43)
+        XCTAssertEqual(premium.title, "Premium approvals")
+        XCTAssertEqual(premium.url?.absoluteString, "https://gitlab.com/namespace/premium-project/-/merge_requests/43")
+        XCTAssertEqual(premium.requiredApprovals, 2)
+        XCTAssertEqual(premium.approvals, 1)
+        XCTAssertEqual(premium.unresolved, 3)
+        XCTAssertEqual(premium.ci, .failing)
+        XCTAssertEqual(premium.ciDetail, "FAILED")
+        XCTAssertTrue(premium.mergeable)
+        XCTAssertLessThanOrEqual(premium.updatedAgoHours, 24 * 370)
+    }
+
+    func testFetchOutgoingPullRequestsMapsReviewerStates() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.authoredMergeRequestsResponse)
+        }
+        let provider = try GitLabProvider(baseURL: XCTUnwrap(URL(string: "https://gitlab.com")), session: makeSession())
+
+        let reviews = try await provider.fetchOutgoingPullRequests(
+            accessToken: "glpat-author",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        let premium = try XCTUnwrap(reviews.first(where: { $0.id == "gid://gitlab/MergeRequest/902" }))
+        XCTAssertEqual(premium.reviewers.count, 3)
+
+        let approved = try XCTUnwrap(premium.reviewers.first(where: { $0.user.login == "alice" }))
+        XCTAssertEqual(approved.state, .approved)
+        XCTAssertEqual(approved.user.avatarURL?.absoluteString, "https://gitlab.com/alice.png")
+
+        let changesRequested = try XCTUnwrap(premium.reviewers.first(where: { $0.user.login == "bob" }))
+        XCTAssertEqual(changesRequested.state, .changesRequested)
+
+        let pending = try XCTUnwrap(premium.reviewers.first(where: { $0.user.login == "carol" }))
+        XCTAssertEqual(pending.state, .pending)
+    }
+
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
@@ -211,6 +292,83 @@ final class GitLabProviderTests: XCTestCase {
                 "project": { "fullPath": "namespace/project" },
                 "author": { "username": "carol", "avatarUrl": null },
                 "diffStatsSummary": { "additions": 99, "deletions": 99, "fileCount": 9 }
+              }
+            ]
+          }
+        }
+      }
+    }
+    """.utf8)
+
+    private static let authoredMergeRequestsResponse = Data("""
+    {
+      "data": {
+        "currentUser": {
+          "authoredMergeRequests": {
+            "nodes": [
+              {
+                "id": "gid://gitlab/MergeRequest/901",
+                "iid": "42",
+                "title": "Free tier approvals",
+                "webUrl": "https://gitlab.com/namespace/free-project/-/merge_requests/42",
+                "updatedAt": "2026-06-17T10:00:00Z",
+                "draft": false,
+                "project": { "fullPath": "namespace/free-project" },
+                "resolvableDiscussionsCount": 0,
+                "resolvedDiscussionsCount": 0,
+                "mergeStatusEnum": "CANNOT_BE_MERGED",
+                "headPipeline": null,
+                "reviewers": { "nodes": [] }
+              },
+              {
+                "id": "gid://gitlab/MergeRequest/902",
+                "iid": "43",
+                "title": "Premium approvals",
+                "webUrl": "https://gitlab.com/namespace/premium-project/-/merge_requests/43",
+                "updatedAt": "2026-06-17T09:00:00Z",
+                "draft": false,
+                "project": { "fullPath": "namespace/premium-project" },
+                "approvalsRequired": 2,
+                "approvalsLeft": 1,
+                "resolvableDiscussionsCount": 5,
+                "resolvedDiscussionsCount": 2,
+                "mergeStatusEnum": "CAN_BE_MERGED",
+                "headPipeline": { "status": "FAILED" },
+                "reviewers": {
+                  "nodes": [
+                    {
+                      "username": "alice",
+                      "avatarUrl": "https://gitlab.com/alice.png",
+                      "mergeRequestInteraction": { "reviewState": "APPROVED" }
+                    },
+                    {
+                      "username": "bob",
+                      "avatarUrl": null,
+                      "mergeRequestInteraction": { "reviewState": "REQUESTED_CHANGES" }
+                    },
+                    {
+                      "username": "carol",
+                      "avatarUrl": null,
+                      "mergeRequestInteraction": { "reviewState": "UNREVIEWED" }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "gid://gitlab/MergeRequest/903",
+                "iid": "44",
+                "title": "Draft should be excluded from outgoing",
+                "webUrl": "https://gitlab.com/namespace/premium-project/-/merge_requests/44",
+                "updatedAt": "2026-06-17T08:00:00Z",
+                "draft": true,
+                "project": { "fullPath": "namespace/premium-project" },
+                "approvalsRequired": 1,
+                "approvalsLeft": 1,
+                "resolvableDiscussionsCount": 9,
+                "resolvedDiscussionsCount": 0,
+                "mergeStatusEnum": "CAN_BE_MERGED",
+                "headPipeline": { "status": "SUCCESS" },
+                "reviewers": { "nodes": [] }
               }
             ]
           }
