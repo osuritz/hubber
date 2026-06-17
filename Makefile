@@ -1,12 +1,23 @@
-.PHONY: lint format fix build app zip dmg dist pkg
+.PHONY: lint format fix build test ci app zip dmg dist pkg
 
 SWIFT_PATHS = Sources/ Tests/
 
 build:
 	swift build
 
+test:
+	swift test
+
 lint:
 	swiftlint lint --no-cache $(SWIFT_PATHS)
+
+## Mirror exactly what CI (.github/workflows/swift.yml) runs. Use this as the
+## pre-push gate so "passes locally" means the same thing as "passes in CI".
+## Note: `swift test` compiles the test target (plain `swift build` does not),
+## and `swiftformat --lint` only checks — it does NOT rewrite files like
+## `make format` does.
+ci: build test lint
+	swiftformat --lint $(SWIFT_PATHS)
 
 format:
 	swiftformat $(SWIFT_PATHS)

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Pre-push gate: run the same checks CI runs (.github/workflows/swift.yml) so a
+# locally-green tree means a CI-green tree. This exists because CI was turned
+# off on every PR to cut macOS runner spend, and the local routine (build +
+# lint) was a strict subset of CI — it never ran `swift test` (which compiles
+# the test target; plain `swift build` does not) or `swiftformat --lint`.
+#
+# Bypass for emergencies with:  git push --no-verify
+# Or skip just this hook with:  SKIP_CI_HOOK=1 git push
+
+if [ "${SKIP_CI_HOOK:-0}" = "1" ]; then
+	echo "pre-push: SKIP_CI_HOOK=1 set — skipping CI checks." >&2
+	exit 0
+fi
+
+echo "pre-push: running 'make ci' (build + test + lint + swiftformat --lint)…" >&2
+
+if ! make ci; then
+	echo >&2
+	echo "pre-push: 'make ci' failed — push aborted." >&2
+	echo "  Fix the issues above, or bypass with: git push --no-verify" >&2
+	exit 1
+fi
+
+echo "pre-push: all checks passed." >&2
+exit 0

@@ -31,10 +31,15 @@ brew install swiftlint swiftformat
 Run via the Makefile:
 
 ```sh
-make lint    # check for violations
-make format  # reformat source files
+make lint    # check for SwiftLint violations
+make format  # reformat source files in place (SwiftFormat — rewrites files)
 make fix     # autocorrect SwiftLint violations, then reformat
 ```
+
+Note that `make lint` covers SwiftLint only. CI additionally runs
+`swiftformat --lint` (check mode, fails on drift), which is *not* the same as
+`make format` (which silently rewrites files). Use `make ci` (below) to catch
+formatting drift the way CI does.
 
 Rules are configured in `.swiftlint.yml` and `.swiftformat`. Key constraints: 120-character line limit, Swift 6.0, Google Swift Style Guide conventions (no force unwraps/casts/tries, sorted imports, trailing commas in multi-line collections).
 
@@ -48,6 +53,36 @@ swift run Hubber
 ```
 
 `swift run Hubber` starts the menu-bar accessory app and keeps running until the app quits. Left-click the status item to open the popover; right-click it to show the menu with `Quit`.
+
+## Validating Before You Push
+
+CI (`.github/workflows/swift.yml`) is currently manual-only to cut macOS runner
+spend, so **local validation is the safety net** — and a plain `swift build`
+is not enough. `swift build` does *not* compile the test target, so test-target
+compile errors (e.g. Swift 6.2 actor-isolation) and test failures slip through.
+
+Run the full CI-parity gate before pushing:
+
+```sh
+make ci      # build + swift test + swiftlint + swiftformat --lint
+make test    # just the test target, on its own
+```
+
+`make ci` runs exactly what CI runs, in the same modes. If `make ci` is green,
+CI will be green.
+
+### Pre-push hook
+
+A tracked Git hook (`.githooks/pre-push`) runs `make ci` automatically on every
+push. Hooks live in `.githooks/` (version-controlled), so after a fresh clone
+enable them once with:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+Bypass the hook for an emergency push with `git push --no-verify`, or skip just
+this check with `SKIP_CI_HOOK=1 git push`.
 
 ## Project Layout
 
