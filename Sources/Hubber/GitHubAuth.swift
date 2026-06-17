@@ -23,8 +23,14 @@ enum GitHubTokenStore {
 }
 
 final class GitHubKeychainTokenStore: GitHubTokenStoring {
+    static let legacyAccount = "github-app-user-token"
+
     private let service = "com.osuritz.hubber.github-auth"
-    private let account = "github-app-user-token"
+    private let account: String
+
+    init(account: String = GitHubKeychainTokenStore.legacyAccount) {
+        self.account = account
+    }
 
     func load() throws -> GitHubStoredToken? {
         var query = baseQuery
@@ -127,14 +133,6 @@ final class GitHubDevelopmentFileTokenStore: GitHubTokenStoring {
         try FileManager.default.removeItem(at: tokenURL)
     }
 
-    static var defaultTokenURL: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        let baseURL = appSupport
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
-        return baseURL
-            .appendingPathComponent("Hubber", isDirectory: true)
-            .appendingPathComponent("github-auth-dev.json")
-    }
 }
 
 // MARK: - GitHubAuthServicing protocol
