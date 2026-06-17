@@ -3,11 +3,16 @@
 
 name: Swift
 
+# Temporarily set to manual-only (workflow_dispatch) to cut macOS CI spend
+# while the project is under heavy active development. macos-26 runners bill
+# at 10x, and automatic runs on every push/PR were the main cost driver.
+# Re-enable the push/pull_request triggers below when development settles.
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
+  # push:
+  #   branches: [ "main" ]
+  # pull_request:
+  #   branches: [ "main" ]
 
 # Cancel superseded runs on the same ref. macOS minutes bill at 10x, and an
 # active agent pushes frequently, so we don't want stacked redundant runs.
