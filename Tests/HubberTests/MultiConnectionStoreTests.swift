@@ -59,9 +59,11 @@ private final class MultiConnectionAuthService: GitHubDeviceFlowServicing, @unch
 private final class MutableTokenStore: GitHubTokenStoring, @unchecked Sendable {
     private let lock = NSLock()
     private var token: GitHubStoredToken?
+    private let deleteError: Error?
 
-    init(token: GitHubStoredToken?) {
+    init(token: GitHubStoredToken?, deleteError: Error? = nil) {
         self.token = token
+        self.deleteError = deleteError
     }
 
     func load() throws -> GitHubStoredToken? {
@@ -73,7 +75,21 @@ private final class MutableTokenStore: GitHubTokenStoring, @unchecked Sendable {
     }
 
     func delete() throws {
+        if let deleteError {
+            throw deleteError
+        }
         lock.withLock { token = nil }
+    }
+}
+
+private enum MultiConnectionTokenStoreError: LocalizedError {
+    case deleteFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .deleteFailed:
+            "Token delete failed"
+        }
     }
 }
 
@@ -440,10 +456,51 @@ final class MultiConnectionStoreTests: XCTestCase {
         XCTAssertEqual(ConnectionRegistry(defaults: defaults).load(), [id])
     }
 
+    func testRestoreAllConnectionsPrunesRegisteredSignedOutGhostWithNoToken() async throws {
+        let defaults = try makeDefaults()
+        let ghostID = ConnectionID.gitHubDotCom(login: "ghost")
+        try ConnectionRegistry(defaults: defaults).save([ghostID])
+        let store = makeStore(defaults: defaults, restoreOnInit: false) { _ in
+            try self.makeConnection(
+                login: "ghost",
+                tokenStore: MutableTokenStore(token: nil)
+            )
+        }
+
+        store.restoreAllConnections()
+        try await waitForRestoreSettled(store)
+
+        XCTAssertTrue(store.connections.isEmpty)
+        XCTAssertEqual(ConnectionRegistry(defaults: defaults).load(), [])
+    }
+
+    func testRemoveConnectionKeepsConnectionAndRegistryWhenTokenDeleteFails() async throws {
+        let defaults = try makeDefaults()
+        let id = ConnectionID.gitHubDotCom(login: "delete-fails")
+        let store = makeStore(defaults: defaults, restoreOnInit: false)
+        try store.addConnection(
+            id: id,
+            tokenStore: MutableTokenStore(
+                token: storedToken(login: "delete-fails"),
+                deleteError: MultiConnectionTokenStoreError.deleteFailed
+            )
+        )
+
+        await store.removeConnection(id)
+
+        XCTAssertEqual(store.connections.map(\.id), [id])
+        XCTAssertEqual(ConnectionRegistry(defaults: defaults).load(), [id])
+        guard case let .error(message) = store.connections.first?.authState else {
+            return XCTFail("Expected delete failure to leave connection in error state")
+        }
+        XCTAssertEqual(message, "Token delete failed")
+    }
+
     private func makeConnection(
         login: String,
         authService: MultiConnectionAuthService? = nil,
         provider: MultiConnectionProvider = MultiConnectionProvider(),
+        tokenStore: (any GitHubTokenStoring)? = nil,
         sleeper: MultiConnectionSleeper? = nil
     ) throws -> Connection {
         let sleeper = sleeper ?? MultiConnectionSleeper()
@@ -453,7 +510,7 @@ final class MultiConnectionStoreTests: XCTestCase {
             id: id,
             provider: provider,
             authService: authService ?? MultiConnectionAuthService(login: login),
-            tokenStore: MutableTokenStore(token: storedToken(login: login)),
+            tokenStore: tokenStore ?? MutableTokenStore(token: storedToken(login: login)),
             snapshotStore: SnapshotStore(snapshotURL: temporarySnapshotURL(login: login)),
             scheduler: RefreshScheduler(
                 idle: MultiConnectionIdleProvider(),
@@ -544,6 +601,17 @@ final class MultiConnectionStoreTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTFail("Timed out waiting for \(count) restored connections; states: \(store.connections.map(\.authState))")
+    }
+
+    private func waitForRestoreSettled(_ store: HubberStore) async throws {
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if !store.connections.contains(where: { $0.authState == .restoring }) {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTFail("Timed out waiting for restore to settle; states: \(store.connections.map(\.authState))")
     }
 
     private func waitForAggregateIncomingIDs(_ store: HubberStore, _ ids: [String]) async throws {

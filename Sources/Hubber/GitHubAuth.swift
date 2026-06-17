@@ -372,7 +372,7 @@ final class HubberStore: ObservableObject {
     let settings: SettingsStore // exposed so views can bind
     let telemetry: Telemetry // exposed so views can emit events
     var provider: any CodeHostProvider {
-        primaryConnection?.provider ?? CachingCodeHostProvider(wrapping: GitHubProvider())
+        primaryConnection?.provider ?? fallbackProvider
     }
 
     // MARK: - Notification pipeline
@@ -388,6 +388,8 @@ final class HubberStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     /// Separate bag cleared on every rebind so removed connections are unsubscribed.
     private var connectionCancellables = Set<AnyCancellable>()
+    private var restorePrunableConnectionIDs = Set<ConnectionID>()
+    private let fallbackProvider: any CodeHostProvider
 
     // Dependencies stored for building legacy connection
     private let legacyAuthService: any GitHubAuthServicing
@@ -416,6 +418,7 @@ final class HubberStore: ObservableObject {
         self.telemetry = telemetry
         self.snapshotStore = snapshotStore
         self.dispatcher = dispatcher
+        fallbackProvider = CachingCodeHostProvider(wrapping: GitHubProvider())
         legacyAuthService = authService
         legacyProvider = provider
         legacyTokenStore = tokenStore
@@ -503,21 +506,30 @@ final class HubberStore: ObservableObject {
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
         let conn = connections[index]
         await conn.signOut()
+        guard !conn.authState.isError else {
+            rebindConnections()
+            return
+        }
         conn.snapshotStore.delete()
         connections.remove(at: index)
         rebindConnections()
         try? registry.remove(id)
     }
 
-    /// Signs out ALL connections and clears the registry.
+    /// Signs out ALL connections and removes cleanly signed-out entries from the registry.
     func signOut() async {
+        var remainingConnections: [Connection] = []
         for conn in connections {
             await conn.signOut()
+            guard !conn.authState.isError else {
+                remainingConnections.append(conn)
+                continue
+            }
             conn.snapshotStore.delete()
+            try? registry.remove(conn.id)
         }
-        connections.removeAll()
+        connections = remainingConnections
         rebindConnections()
-        registry.removeAll()
     }
 
     /// Restores connections from the registry. If the registry is empty, falls back to
@@ -525,6 +537,7 @@ final class HubberStore: ObservableObject {
     func restoreAllConnections() {
         let ids = registry.load()
         if ids.isEmpty {
+            restorePrunableConnectionIDs.removeAll()
             // Legacy single-connection path: build and restore one connection
             let conn = buildLegacyConnection()
             connections = [conn]
@@ -552,6 +565,7 @@ final class HubberStore: ObservableObject {
                 wireCallbacks(on: conn)
                 built.append(conn)
             }
+            restorePrunableConnectionIDs = Set(built.map(\.id))
             connections = built
             rebindConnections()
             for conn in connections {
@@ -566,7 +580,14 @@ final class HubberStore: ObservableObject {
         connectionCancellables.removeAll()
         Publishers.MergeMany(connections.map(\.objectWillChange))
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.recomputeAggregate() }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                // Forwarded primary-connection properties such as `authState` are not @Published on
+                // this store, so their popover refresh depends on this explicit emission.
+                objectWillChange.send()
+                recomputeAggregate()
+                pruneSignedOutGhosts()
+            }
             .store(in: &connectionCancellables)
         recomputeAggregate()
     }
@@ -574,6 +595,34 @@ final class HubberStore: ObservableObject {
     private func recomputeAggregate() {
         data = ConnectionAggregator.aggregate(connections.map(\.data))
         isRefreshingPullRequests = connections.contains { $0.isRefreshingPullRequests }
+    }
+
+    private func pruneSignedOutGhosts() {
+        let registeredIDs = Set(registry.load())
+        var settledIDs: [ConnectionID] = []
+        let ghostIDs = connections.compactMap { conn -> ConnectionID? in
+            guard restorePrunableConnectionIDs.contains(conn.id), conn.authState != .restoring else {
+                return nil
+            }
+            settledIDs.append(conn.id)
+            guard registeredIDs.contains(conn.id), conn.authState == .signedOut else {
+                return nil
+            }
+            guard (try? conn.tokenStore.load()) == nil else {
+                return nil
+            }
+            return conn.id
+        }
+
+        restorePrunableConnectionIDs.subtract(settledIDs)
+        guard !ghostIDs.isEmpty else { return }
+
+        let ghosts = Set(ghostIDs)
+        connections.removeAll { ghosts.contains($0.id) }
+        for id in ghostIDs {
+            try? registry.remove(id)
+        }
+        rebindConnections()
     }
 
     // MARK: - Legacy restoreSession (used by existing tests via restoreOnInit path)
@@ -694,5 +743,14 @@ final class HubberStore: ObservableObject {
 
     func appendDeveloperLog(_ message: String) {
         primaryConnection?.appendDeveloperLog(message)
+    }
+}
+
+private extension HubberAuthState {
+    var isError: Bool {
+        if case .error = self {
+            return true
+        }
+        return false
     }
 }
