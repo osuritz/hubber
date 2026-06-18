@@ -57,7 +57,6 @@ final class AddAccountController: ObservableObject {
     private let policy: ProviderAccessPolicy
     private let authServiceFactory: (_ provider: String, _ host: String) -> any GitHubDeviceFlowServicing
     private let addAccount: (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void
-    private var deviceAuthService: (any GitHubDeviceFlowServicing)?
     private var currentAuthorization: GitHubDeviceAuthorization?
 
     init(
@@ -122,7 +121,6 @@ final class AddAccountController: ObservableObject {
             return
         }
         let auth = authServiceFactory("github", host)
-        deviceAuthService = auth
         do {
             let authorization = try await auth.startDeviceFlow()
             currentAuthorization = authorization
