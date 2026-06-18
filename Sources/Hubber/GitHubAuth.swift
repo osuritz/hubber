@@ -402,9 +402,6 @@ final class HubberStore: ObservableObject {
     private let legacyProvider: any CodeHostProvider
     private let legacyTokenStore: any GitHubTokenStoring
     private let legacyIdle: any MachineIdleProviding
-    /// Optional factory used by tests to supply pre-built `Connection` objects during
-    /// `restoreAllConnections()`. When `nil`, the store builds connections from injected
-    /// legacy deps (single-connection path).
     private let connectionFactory: ((ConnectionID) throws -> Connection)?
 
     init(
@@ -468,14 +465,8 @@ final class HubberStore: ObservableObject {
 
     // MARK: - Coordinator: add / remove / restore
 
-    /// Builds a new `Connection` with injected or default dependencies and appends it.
-    /// - Parameters:
-    ///   - id: The `ConnectionID` that identifies this connection (and keys its stores).
-    ///   - provider: Optional provider override (for tests). Defaults to a fresh caching GitHub provider.
-    ///   - authService: Optional auth-service override. Defaults to the store's legacy auth service.
-    ///   - tokenStore: Optional token-store override. Defaults to a `GitHubTokenStore.makeStore(for:id)`.
-    ///   - snapshotStore: Optional snapshot-store override. Defaults to `SnapshotStore(connectionID:id)`.
-    ///   - scheduler: Optional scheduler override. Defaults to a fresh `RefreshScheduler`.
+    enum AddAccountError: Error { case alreadyAdded }
+
     @discardableResult
     func addConnection(
         id: ConnectionID,
@@ -489,26 +480,51 @@ final class HubberStore: ObservableObject {
             return existing
         }
 
-        let factoryBuilt = ConnectionFactory.providerAndAuth(for: id)
-        let resolvedProvider = provider ?? factoryBuilt.provider
-        let resolvedAuthService = authService ?? factoryBuilt.authService
-        let resolvedTokenStore = tokenStore ?? GitHubTokenStore.makeStore(for: id)
-        let resolvedSnapshotStore = snapshotStore ?? SnapshotStore(connectionID: id)
-        let resolvedScheduler = scheduler ?? RefreshScheduler(idle: legacyIdle)
+        let conn: Connection
+        if
+            provider == nil,
+            authService == nil,
+            tokenStore == nil,
+            snapshotStore == nil,
+            scheduler == nil,
+            let connectionFactory {
+            conn = try connectionFactory(id)
+        } else {
+            let factoryBuilt = ConnectionFactory.providerAndAuth(for: id)
+            let resolvedProvider = provider ?? factoryBuilt.provider
+            let resolvedAuthService = authService ?? factoryBuilt.authService
+            let resolvedTokenStore = tokenStore ?? GitHubTokenStore.makeStore(for: id)
+            let resolvedSnapshotStore = snapshotStore ?? SnapshotStore(connectionID: id)
+            let resolvedScheduler = scheduler ?? RefreshScheduler(idle: legacyIdle)
 
-        let conn = Connection(
-            id: id,
-            provider: resolvedProvider,
-            authService: resolvedAuthService,
-            tokenStore: resolvedTokenStore,
-            snapshotStore: resolvedSnapshotStore,
-            scheduler: resolvedScheduler,
-            settings: settings
-        )
+            conn = Connection(
+                id: id,
+                provider: resolvedProvider,
+                authService: resolvedAuthService,
+                tokenStore: resolvedTokenStore,
+                snapshotStore: resolvedSnapshotStore,
+                scheduler: resolvedScheduler,
+                settings: settings
+            )
+        }
         wireCallbacks(on: conn)
         connections.append(conn)
         rebindConnections()
         try registry.append(id)
+        return conn
+    }
+
+    @discardableResult
+    func addResolvedAccount(
+        id: ConnectionID,
+        token: GitHubStoredToken,
+        user: GitHubAuthenticatedUser
+    ) async throws -> Connection {
+        guard !connections.contains(where: { $0.id == id }) else {
+            throw AddAccountError.alreadyAdded
+        }
+        let conn = try addConnection(id: id)
+        await conn.adopt(token: token, user: user)
         return conn
     }
 
