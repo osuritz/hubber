@@ -166,6 +166,20 @@ final class Connection: ObservableObject, Identifiable {
         }
     }
 
+    /// Adopts an already-validated token + resolved user from an external auth flow (multi-account
+    /// add, where the login was resolved before this Connection existed). Stores the token as-is,
+    /// preserving a device-flow refresh token, and finishes the session without re-fetching.
+    func adopt(token: GitHubStoredToken, user: GitHubAuthenticatedUser) async {
+        authState = .restoring
+        do {
+            try await saveStoredToken(token)
+            finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
+        } catch {
+            authState = .error(error.localizedDescription)
+            appendDeveloperLog("Adopt token failed: \(error.localizedDescription)")
+        }
+    }
+
     func cancelSignIn() {
         authTask?.cancel()
         authTask = nil
