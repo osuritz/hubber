@@ -48,7 +48,8 @@ final class ProviderHostRoutingTests: XCTestCase {
         XCTAssertEqual(gitLabRequest.value(forHTTPHeaderField: "Authorization"), "Bearer gl-secret")
         XCTAssertNotEqual(gitLabRequest.value(forHTTPHeaderField: "Authorization"), "Bearer gh-secret")
 
-        // GitHub Enterprise Server base-URL routing belongs to #82; GitHub still targets api.github.com here.
+        // GitHub now routes per-baseURL (#82): the default targets api.github.com; GHES routing
+        // is covered by the GHES-specific tests above.
         MockURLProtocol.reset()
         MockURLProtocol.handler = { request in
             try (Self.response(for: request), Self.dataResponse)
@@ -65,6 +66,69 @@ final class ProviderHostRoutingTests: XCTestCase {
         XCTAssertEqual(gitHubRequest.url?.host, "api.github.com")
         XCTAssertEqual(gitHubRequest.value(forHTTPHeaderField: "Authorization"), "Bearer gh-secret")
         XCTAssertNotEqual(gitHubRequest.value(forHTTPHeaderField: "Authorization"), "Bearer gl-secret")
+    }
+
+    func testGitHubProviderRoutesGraphQLToGHESHostWithBearerToken() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.dataResponse)
+        }
+        let provider = try GitHubProvider(
+            baseURL: XCTUnwrap(URL(string: "https://github.enterprise.acme.com")),
+            session: makeSession()
+        )
+
+        _ = try await provider.graphQL(
+            query: "query Test { viewer { login } }",
+            variables: [:],
+            accessToken: "ghes-secret"
+        )
+
+        let request = try XCTUnwrap(MockURLProtocol.lastRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://github.enterprise.acme.com/api/graphql")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ghes-secret")
+    }
+
+    func testGitHubProviderDefaultStillRoutesToApiGitHubCom() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.dataResponse)
+        }
+        let provider = GitHubProvider(session: makeSession())
+
+        _ = try await provider.graphQL(
+            query: "query Test { viewer { login } }",
+            variables: [:],
+            accessToken: "gh-secret"
+        )
+
+        let request = try XCTUnwrap(MockURLProtocol.lastRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://api.github.com/graphql")
+    }
+
+    // MC-MDM-06: a github.com provider and a GHES provider in the same test each send their
+    // token only to their own host — no cross-host credential leakage.
+    func testGitHubDotComAndGHESProvidersKeepCredentialsIsolatedByHost() async throws {
+        nonisolated(unsafe) var seen: [(host: String?, auth: String?)] = []
+        MockURLProtocol.handler = { request in
+            seen.append((request.url?.host, request.value(forHTTPHeaderField: "Authorization")))
+            return try (Self.response(for: request), Self.dataResponse)
+        }
+
+        let dotCom = GitHubProvider(session: makeSession())
+        let ghes = try GitHubProvider(
+            baseURL: XCTUnwrap(URL(string: "https://github.enterprise.acme.com")),
+            session: makeSession()
+        )
+
+        _ = try await dotCom.graphQL(query: "query { viewer { login } }", variables: [:], accessToken: "dotcom-token")
+        _ = try await ghes.graphQL(query: "query { viewer { login } }", variables: [:], accessToken: "ghes-token")
+
+        let dotComRequest = seen.first { $0.host == "api.github.com" }
+        let ghesRequest = seen.first { $0.host == "github.enterprise.acme.com" }
+        XCTAssertEqual(dotComRequest?.auth, "Bearer dotcom-token")
+        XCTAssertEqual(ghesRequest?.auth, "Bearer ghes-token")
+        // The GHES token must never reach api.github.com and vice versa.
+        XCTAssertNil(seen.first { $0.host == "api.github.com" && $0.auth == "Bearer ghes-token" })
+        XCTAssertNil(seen.first { $0.host == "github.enterprise.acme.com" && $0.auth == "Bearer dotcom-token" })
     }
 
     private func makeSession() -> URLSession {
