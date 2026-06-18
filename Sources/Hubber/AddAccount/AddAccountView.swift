@@ -236,12 +236,9 @@ struct AddAccountView: View {
             }
     }
 
-    private func tokenHelpURL(_ provider: AddAccountProvider) -> URL {
-        switch provider {
-        case .gitLab:
-            URL(string: "https://gitlab.com/-/user_settings/personal_access_tokens")!
-        case .gitHubDotCom, .gitHubEnterprise:
-            URL(string: "https://github.com/settings/tokens")!
-        }
+    private func tokenHelpURL(_: AddAccountProvider) -> URL {
+        // Hubber's token-permission guide — covers all three providers, the minimal scopes to
+        // grant (Hubber is read-only), and links to each provider's token-creation page. See #99.
+        URL(string: "https://github.com/osuritz/hubber/blob/main/docs/token-permissions.md")!
     }
 }
