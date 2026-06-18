@@ -23,6 +23,7 @@ enum PullRequestCI: String {
     case failing
     case running
     case pending
+    case noChecks
 }
 
 enum ReviewerState: String {

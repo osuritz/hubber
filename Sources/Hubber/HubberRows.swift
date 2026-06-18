@@ -10,7 +10,6 @@ struct RowDensityCfg {
     let rv: CGFloat
     let ci: CGFloat
     let gap: CGFloat
-    let draftIcon: CGFloat
 }
 
 extension RowDensity {
@@ -24,8 +23,7 @@ extension RowDensity {
                 secondary: false,
                 rv: 20,
                 ci: 18,
-                gap: 9,
-                draftIcon: 28
+                gap: 9
             )
         case .normal:
             RowDensityCfg(
@@ -35,8 +33,7 @@ extension RowDensity {
                 secondary: true,
                 rv: 24,
                 ci: 22,
-                gap: 11,
-                draftIcon: 36
+                gap: 11
             )
         case .spacious:
             RowDensityCfg(
@@ -46,8 +43,7 @@ extension RowDensity {
                 secondary: true,
                 rv: 26,
                 ci: 24,
-                gap: 13,
-                draftIcon: 40
+                gap: 13
             )
         }
     }
@@ -267,9 +263,6 @@ struct DraftPRRow: View {
     var body: some View {
         let cfg = density.cfg
         RowShell(density: density, isLast: isLast) {
-            DraftDocIcon(size: cfg.draftIcon)
-                .alignmentGuide(.top) { $0[.top] }
-
             VStack(alignment: .leading, spacing: cfg.secondary ? 3 : 0) {
                 PRTitleLine(number: draft.number, title: draft.title)
 
@@ -309,6 +302,7 @@ struct DraftPRRow: View {
         case .failing: "Failing"
         case .running: "Running"
         case .pending: "Pending"
+        case .noChecks: "No checks"
         }
     }
 }
@@ -374,33 +368,12 @@ struct CIBadgeView: View {
                 Image(systemName: "clock")
                     .font(.system(size: size * 0.44))
                     .foregroundStyle(color)
+            case .noChecks:
+                Circle().stroke(color, lineWidth: 1.5)
+                Image(systemName: "minus")
+                    .font(.system(size: size * 0.5, weight: .semibold))
+                    .foregroundStyle(color)
             }
-        }
-        .frame(width: size, height: size)
-    }
-}
-
-// MARK: - DraftDocIcon (circular bg + dashed doc icon)
-
-struct DraftDocIcon: View {
-    let size: CGFloat
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(HubberDesign.fill)
-
-            // Dashed document shape (non-color cue: dashed border signals "draft/not ready")
-            RoundedRectangle(cornerRadius: 3)
-                .stroke(
-                    HubberDesign.text3,
-                    style: StrokeStyle(lineWidth: 1.2, dash: [2.4, 2.0])
-                )
-                .frame(width: size * 0.50, height: size * 0.62)
-
-            Image(systemName: "doc")
-                .font(.system(size: size * 0.25))
-                .foregroundStyle(HubberDesign.text3)
         }
         .frame(width: size, height: size)
     }
