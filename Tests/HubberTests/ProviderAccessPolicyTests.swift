@@ -92,6 +92,52 @@ final class ProviderAccessPolicyTests: XCTestCase {
         XCTAssertFalse(reason.isEmpty)
     }
 
+    // MARK: - Host-generic canConnect(host:) — #82
+
+    // MC-MDM-03: allowlist containing the GHES host permits that host (but not github.com).
+    func testAllowlistWithGHESHostPermitsGHESButNotGitHubDotCom() {
+        let policy = ProviderAccessPolicy(
+            allowPersonalGitHub: false,
+            allowlist: ["github.enterprise.acme.com"]
+        )
+        XCTAssertTrue(policy.canConnect(host: "github.enterprise.acme.com"))
+        XCTAssertNil(policy.blockedReason(host: "github.enterprise.acme.com"))
+        XCTAssertFalse(policy.canConnect(host: "github.com"))
+    }
+
+    // MC-MDM-04: a host not in a non-empty allowlist is blocked.
+    func testAllowlistWithoutHostBlocksThatHost() {
+        let policy = ProviderAccessPolicy(allowPersonalGitHub: true, allowlist: ["github.com"])
+        XCTAssertFalse(policy.canConnect(host: "gitlab.com"))
+        XCTAssertNotNil(policy.blockedReason(host: "gitlab.com"))
+    }
+
+    /// Empty allowlist = no host restriction: enterprise hosts allowed; github.com gated by the flag.
+    func testEmptyAllowlistAllowsAnyEnterpriseHostButGatesGitHubDotCom() {
+        let permissive = ProviderAccessPolicy(allowPersonalGitHub: true, allowlist: [])
+        XCTAssertTrue(permissive.canConnect(host: "github.enterprise.acme.com"))
+        XCTAssertTrue(permissive.canConnect(host: "github.com"))
+
+        let blocked = ProviderAccessPolicy(allowPersonalGitHub: false, allowlist: [])
+        XCTAssertTrue(blocked.canConnect(host: "github.enterprise.acme.com"))
+        XCTAssertFalse(blocked.canConnect(host: "github.com"))
+    }
+
+    /// The github.com shim must stay provably identical to canConnect(host: "github.com").
+    func testCanConnectGitHubDotComShimMatchesHostPredicate() {
+        let cases = [
+            ProviderAccessPolicy(allowPersonalGitHub: true, allowlist: []),
+            ProviderAccessPolicy(allowPersonalGitHub: false, allowlist: []),
+            ProviderAccessPolicy(allowPersonalGitHub: false, allowlist: ["github.com"]),
+            ProviderAccessPolicy(allowPersonalGitHub: false, allowlist: ["github.enterprise.acme.com"]),
+            ProviderAccessPolicy(allowPersonalGitHub: true, allowlist: ["github.enterprise.acme.com"]),
+        ]
+        for policy in cases {
+            XCTAssertEqual(policy.canConnectGitHubDotCom, policy.canConnect(host: "github.com"))
+            XCTAssertEqual(policy.blockedReason, policy.blockedReason(host: "github.com"))
+        }
+    }
+
     // MARK: - SettingsStore integration
 
     func testSettingsStoreDefaultProviderAllowlistIsEmpty() throws {

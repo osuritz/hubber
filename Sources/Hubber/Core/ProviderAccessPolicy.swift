@@ -31,21 +31,38 @@ struct ProviderAccessPolicy {
     /// `allowPersonalGitHub`) to be accessible.
     let allowlist: [String]
 
-    // MARK: - github.com (personal) policy
+    // MARK: - Host-generic policy
+
+    /// True when the current policy permits connecting to `host`.
+    ///
+    /// - Non-empty allowlist: `host` must appear in the allowlist, OR be github.com with
+    ///   `allowPersonalGitHub == true` (the personal-github override never grants an enterprise host).
+    /// - Empty allowlist (no restriction configured): github.com is gated by `allowPersonalGitHub`;
+    ///   every other host is permitted.
+    func canConnect(host: String) -> Bool {
+        if !allowlist.isEmpty {
+            if allowlist.contains(host) { return true }
+            return host == "github.com" && allowPersonalGitHub
+        }
+        if host == "github.com" { return allowPersonalGitHub }
+        return true
+    }
+
+    /// A user-facing explanation of why connecting to `host` is blocked, or `nil` when not blocked.
+    func blockedReason(host: String) -> String? {
+        guard !canConnect(host: host) else { return nil }
+        return "Sign-in to \(host) is restricted by your organization."
+    }
+
+    // MARK: - github.com (personal) shims — preserved for existing call sites
 
     /// True when the current policy permits signing in to github.com with a personal account.
     var canConnectGitHubDotCom: Bool {
-        if !allowlist.isEmpty {
-            // Non-empty allowlist: github.com must appear explicitly, OR personal is allowed.
-            return allowlist.contains("github.com") || allowPersonalGitHub
-        }
-        // Empty allowlist: no host restriction; fall back to the personal-flag.
-        return allowPersonalGitHub
+        canConnect(host: "github.com")
     }
 
-    /// A user-facing explanation of why sign-in is blocked, or `nil` when not blocked.
+    /// A user-facing explanation of why github.com sign-in is blocked, or `nil` when not blocked.
     var blockedReason: String? {
-        guard !canConnectGitHubDotCom else { return nil }
-        return "Sign-in to github.com is restricted by your organization."
+        blockedReason(host: "github.com")
     }
 }
