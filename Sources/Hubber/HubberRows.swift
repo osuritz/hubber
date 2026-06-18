@@ -104,6 +104,8 @@ struct PRTitleLine: View {
                 .foregroundStyle(HubberDesign.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                // Full title on hover, since the line truncates.
+                .help(title)
         }
     }
 }
@@ -263,6 +265,12 @@ struct DraftPRRow: View {
     var body: some View {
         let cfg = density.cfg
         RowShell(density: density, isLast: isLast) {
+            // CI badge as the leading status column — same position as OutgoingReviewRow,
+            // so the CI indicator reads consistently across tabs (a gray dash for drafts
+            // without checks; real status for drafts that do have a pipeline).
+            CIBadgeView(ci: draft.ci, size: cfg.ci)
+                .alignmentGuide(.top) { $0[.top] + 1 }
+
             VStack(alignment: .leading, spacing: cfg.secondary ? 3 : 0) {
                 PRTitleLine(number: draft.number, title: draft.title)
 
@@ -277,32 +285,6 @@ struct DraftPRRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Small CI badge + text label on right
-            HStack(spacing: 5) {
-                CIBadgeView(ci: draft.ci, size: cfg.ci - 4)
-                if cfg.secondary {
-                    let isResultState = draft.ci == .passing || draft.ci == .failing
-                    Text(draftCILabel)
-                        .font(HubberType.ciDetail)
-                        .foregroundStyle(
-                            isResultState
-                                ? HubberDesign.ciColor(for: draft.ci)
-                                : HubberDesign.text2
-                        )
-                }
-            }
-            .alignmentGuide(.top) { $0[.top] + 1 }
-        }
-    }
-
-    private var draftCILabel: String {
-        switch draft.ci {
-        case .passing: "Passing"
-        case .failing: "Failing"
-        case .running: "Running"
-        case .pending: "Pending"
-        case .noChecks: "No checks"
         }
     }
 }
