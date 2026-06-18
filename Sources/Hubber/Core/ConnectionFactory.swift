@@ -8,6 +8,22 @@ enum ConnectionFactory {
         URL(string: "https://\(id.host)") ?? URL(string: "https://github.com")!
     }
 
+    /// Builds an auth service for a provider+host before a login is known (identity resolution
+    /// during add-account). Mirrors `providerAndAuth(for:)`'s auth half.
+    static func authService(
+        provider: String,
+        host: String,
+        session: URLSession = .shared
+    ) -> any GitHubDeviceFlowServicing {
+        let url = URL(string: "https://\(host)") ?? URL(string: "https://github.com")!
+        switch provider.lowercased() {
+        case "gitlab":
+            return GitLabAuthService(baseURL: url, session: session)
+        default:
+            return GitHubAuthService(baseURL: url, session: session)
+        }
+    }
+
     static func providerAndAuth(
         for id: ConnectionID,
         session: URLSession = .shared
