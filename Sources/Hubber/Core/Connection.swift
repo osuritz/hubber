@@ -132,6 +132,40 @@ final class Connection: ObservableObject, Identifiable {
         }
     }
 
+    /// Token-based sign-in (Personal Access Token) for providers without device flow
+    /// (GitLab, GitHub Enterprise, EMU/company github.com accounts). Validates the token by
+    /// resolving the authenticated user, stores a non-refreshable token, and starts the session.
+    func signIn(withToken token: String) async {
+        let policy = settings.providerAccessPolicy
+        guard policy.canConnect(host: id.host) else {
+            let reason = policy.blockedReason(host: id.host) ?? "Sign-in is restricted by your organization."
+            appendDeveloperLog("Token sign-in blocked by policy: \(reason)")
+            authState = .error(reason)
+            return
+        }
+
+        authState = .restoring
+        do {
+            let user = try await authService.fetchAuthenticatedUser(accessToken: token)
+            let stored = GitHubStoredToken(
+                accessToken: token,
+                accessTokenExpiresAt: nil,
+                refreshToken: nil,
+                refreshTokenExpiresAt: nil,
+                tokenType: "bearer",
+                login: user.login
+            )
+            try await saveStoredToken(stored)
+            finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
+        } catch GitHubAuthError.badCredentials {
+            authState = .error("That token was rejected. Check the token and its scopes.")
+            appendDeveloperLog("Token sign-in rejected (bad credentials)")
+        } catch {
+            authState = .error(error.localizedDescription)
+            appendDeveloperLog("Token sign-in failed: \(error.localizedDescription)")
+        }
+    }
+
     func cancelSignIn() {
         authTask?.cancel()
         authTask = nil
