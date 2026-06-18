@@ -480,7 +480,7 @@ final class HubberStore: ObservableObject {
     func addConnection(
         id: ConnectionID,
         provider: (any CodeHostProvider)? = nil,
-        authService: (any GitHubAuthServicing)? = nil,
+        authService: (any GitHubDeviceFlowServicing)? = nil,
         tokenStore: (any GitHubTokenStoring)? = nil,
         snapshotStore: SnapshotStore? = nil,
         scheduler: RefreshScheduler? = nil
@@ -489,8 +489,9 @@ final class HubberStore: ObservableObject {
             return existing
         }
 
-        let resolvedProvider = provider ?? CachingCodeHostProvider(wrapping: GitHubProvider())
-        let resolvedAuthService = authService ?? legacyAuthService
+        let factoryBuilt = ConnectionFactory.providerAndAuth(for: id)
+        let resolvedProvider = provider ?? factoryBuilt.provider
+        let resolvedAuthService = authService ?? factoryBuilt.authService
         let resolvedTokenStore = tokenStore ?? GitHubTokenStore.makeStore(for: id)
         let resolvedSnapshotStore = snapshotStore ?? SnapshotStore(connectionID: id)
         let resolvedScheduler = scheduler ?? RefreshScheduler(idle: legacyIdle)
@@ -562,10 +563,11 @@ final class HubberStore: ObservableObject {
                     guard let c = try? factory(id) else { continue }
                     conn = c
                 } else {
+                    let resolved = ConnectionFactory.providerAndAuth(for: id)
                     conn = Connection(
                         id: id,
-                        provider: legacyProvider,
-                        authService: legacyAuthService,
+                        provider: resolved.provider,
+                        authService: resolved.authService,
                         tokenStore: GitHubTokenStore.makeStore(for: id),
                         snapshotStore: SnapshotStore(connectionID: id),
                         scheduler: RefreshScheduler(idle: legacyIdle),

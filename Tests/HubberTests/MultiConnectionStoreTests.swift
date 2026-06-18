@@ -461,6 +461,25 @@ final class MultiConnectionStoreTests: XCTestCase {
         XCTAssertEqual(ConnectionRegistry(defaults: defaults).load(), [id])
     }
 
+    func testRestoreAllConnectionsRebuildsGitLabConnectionFromRegistry() throws {
+        let suite = "restore-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // Pre-register a GitLab connection id.
+        let registry = ConnectionRegistry(defaults: defaults)
+        let glID = ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz")
+        try registry.append(glID)
+
+        // Store built with restoreOnInit:false and NO injected factory → uses the default factory.
+        let store = HubberStore(defaults: defaults, restoreOnInit: false)
+        store.restoreAllConnections()
+
+        let conn = try XCTUnwrap(store.connections.first { $0.id == glID })
+        XCTAssertTrue(conn.provider is CachingCodeHostProvider)
+        XCTAssertTrue(conn.authService is GitLabAuthService)
+    }
+
     func testRestoreAllConnectionsPrunesRegisteredSignedOutGhostWithNoToken() async throws {
         let defaults = try makeDefaults()
         let ghostID = ConnectionID.gitHubDotCom(login: "ghost")

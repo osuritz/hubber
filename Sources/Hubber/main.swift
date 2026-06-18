@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defer: false
     )
     private let statusMenu = NSMenu()
-    private let store = HubberStore()
+    private let store = HubberStore(restoreOnInit: false)
     private let metricSubscriber = MetricSubscriber()
     private var appActivationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         updateStatusItem()
         subscribeToStore()
+        store.restoreAllConnections()
 
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in
