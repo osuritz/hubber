@@ -245,6 +245,25 @@ final class MultiConnectionStoreTests: XCTestCase {
         XCTAssertEqual(second.authState, .signedIn(login: "second"))
     }
 
+    func testShouldPinPanelTracksAddingAccount() throws {
+        // Regression: the add-account device flow runs via a standalone auth service (no Connection
+        // enters .waitingForUser), so `isAuthenticating` never covers it. The popover must still
+        // pin while the add-account sheet is open, or it closes when the browser opens for auth.
+        let suite = "pin-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = makeStore(defaults: defaults, restoreOnInit: false)
+
+        XCTAssertFalse(store.isAuthenticating) // no primary connection authenticating
+        XCTAssertFalse(store.shouldPinPanel)
+
+        store.setAddingAccount(true)
+        XCTAssertTrue(store.shouldPinPanel) // pinned while adding, even with no authenticating connection
+
+        store.setAddingAccount(false)
+        XCTAssertFalse(store.shouldPinPanel)
+    }
+
     func testRateLimitedConnectionDoesNotChangeOtherConnectionSchedulerCadence() async throws {
         let sleeperA = MultiConnectionSleeper()
         let sleeperB = MultiConnectionSleeper()
@@ -459,6 +478,25 @@ final class MultiConnectionStoreTests: XCTestCase {
         XCTAssertEqual(store.authState, .signedIn(login: "roundtrip"))
         XCTAssertEqual(store.signedInLogin, "roundtrip")
         XCTAssertEqual(ConnectionRegistry(defaults: defaults).load(), [id])
+    }
+
+    func testRestoreAllConnectionsRebuildsGitLabConnectionFromRegistry() throws {
+        let suite = "restore-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // Pre-register a GitLab connection id.
+        let registry = ConnectionRegistry(defaults: defaults)
+        let glID = ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz")
+        try registry.append(glID)
+
+        // Store built with restoreOnInit:false and NO injected factory → uses the default factory.
+        let store = HubberStore(defaults: defaults, restoreOnInit: false)
+        store.restoreAllConnections()
+
+        let conn = try XCTUnwrap(store.connections.first { $0.id == glID })
+        XCTAssertTrue(conn.provider is CachingCodeHostProvider)
+        XCTAssertTrue(conn.authService is GitLabAuthService)
     }
 
     func testRestoreAllConnectionsPrunesRegisteredSignedOutGhostWithNoToken() async throws {

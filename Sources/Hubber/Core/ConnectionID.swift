@@ -24,6 +24,18 @@ struct ConnectionID: Hashable, Codable, CustomStringConvertible, Sendable {
             .joined(separator: "_")
     }
 
+    /// Human label for the header / Settings: "GitHub", "GitHub Enterprise", or "GitLab".
+    var providerDisplayName: String {
+        switch provider {
+        case "gitlab":
+            "GitLab"
+        case "github":
+            host == "github.com" ? "GitHub" : "GitHub Enterprise"
+        default:
+            provider.capitalized
+        }
+    }
+
     static func gitHubDotCom(login: String) -> ConnectionID {
         ConnectionID(provider: "github", host: "github.com", login: login)
     }

@@ -277,6 +277,24 @@ private func makeDualConnectionStore(
 /// internal coordinator method exposed via `@testable import`.
 @MainActor
 final class MultiConnectionNotificationTests: XCTestCase {
+    func testHiddenAccountSuppressedWhenNotifyHiddenAccountsOff() {
+        // Two connections' data; hide the second; with notifyHiddenAccounts == false the pass
+        // should diff only the visible connection.
+        let visibleID = ConnectionID.gitHubDotCom(login: "osuritz")
+        let hiddenID = ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz")
+        let visibility = ConnectionVisibility().setting(hiddenID, visible: false)
+
+        let all: [(id: ConnectionID, data: HubberData)] = [
+            (visibleID, HubberData(incoming: [], outgoing: [], drafts: [])),
+            (hiddenID, HubberData(incoming: [], outgoing: [], drafts: [])),
+        ]
+
+        XCTAssertEqual(HubberStore.notificationConnectionIDs(all, visibility: visibility, notifyHidden: true).count, 2)
+        XCTAssertEqual(
+            HubberStore.notificationConnectionIDs(all, visibility: visibility, notifyHidden: false),
+            [visibleID]
+        )
+    }
 
     // MARK: - MC-NOTIF-02
 

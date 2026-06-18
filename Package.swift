@@ -5,19 +5,19 @@ import PackageDescription
 let package = Package(
     name: "Hubber",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v14),
     ],
     products: [
-        .executable(name: "Hubber", targets: ["Hubber"])
+        .executable(name: "Hubber", targets: ["Hubber"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/TelemetryDeck/SwiftSDK", from: "2.0.0")
+        .package(url: "https://github.com/TelemetryDeck/SwiftSDK", from: "2.0.0"),
     ],
     targets: [
         .executableTarget(
             name: "Hubber",
             dependencies: [
-                .product(name: "TelemetryDeck", package: "SwiftSDK")
+                .product(name: "TelemetryDeck", package: "SwiftSDK"),
             ],
             path: "Sources/Hubber",
             resources: [
@@ -28,6 +28,6 @@ let package = Package(
             name: "HubberTests",
             dependencies: ["Hubber"],
             path: "Tests/HubberTests"
-        )
+        ),
     ]
 )

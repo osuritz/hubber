@@ -9,6 +9,7 @@ struct HubberPopoverView: View {
     @State private var selectedTab: WorkTab = .incoming
     @State private var showSettings = false
     @State private var showSignInSuccess = false
+    @State private var showingAdd = false
 
     var body: some View {
         ZStack {
@@ -51,11 +52,23 @@ struct HubberPopoverView: View {
 
         case .signedOut:
             SignInScreen(store: store)
+                .overlay(alignment: .bottom) {
+                    addDifferentAccountLink
+                }
+                .sheet(isPresented: $showingAdd) {
+                    addAccountSheet
+                }
 
         case let .error(message):
             SignInScreen(store: store)
                 .overlay(alignment: .top) {
                     authErrorBanner(message: message)
+                }
+                .overlay(alignment: .bottom) {
+                    addDifferentAccountLink
+                }
+                .sheet(isPresented: $showingAdd) {
+                    addAccountSheet
                 }
 
         case let .waitingForUser(authorization):
@@ -86,6 +99,32 @@ struct HubberPopoverView: View {
             .background(HubberDesign.sloRed.bg)
     }
 
+    private var addDifferentAccountLink: some View {
+        Button("Add GitHub Enterprise or GitLab…") {
+            showingAdd = true
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 11))
+        .foregroundStyle(HubberDesign.text2)
+        .padding(.bottom, 12)
+    }
+
+    private var addAccountSheet: some View {
+        AddAccountView(
+            policy: store.settings.providerAccessPolicy,
+            isDuplicate: { [weak store] id in store?.connections.contains { $0.id == id } ?? false },
+            addAccount: { [weak store] id, token, user in
+                _ = try await store?.addResolvedAccount(
+                    id: id,
+                    token: token,
+                    user: user
+                )
+            },
+            onActiveChange: { store.setAddingAccount($0) },
+            onDone: { showingAdd = false }
+        )
+    }
+
     /// The normal popover chrome (header + tabs + scrollable content + footer).
     private var normalChrome: some View {
         VStack(spacing: 0) {
@@ -110,33 +149,7 @@ struct HubberPopoverView: View {
     private var header: some View {
         VStack(spacing: 11) {
             HStack(spacing: 0) {
-                // #31: Provider-switcher layout seam.
-                // The tap-target (minWidth: 44) is reserved for a future provider picker.
-                // Currently shows "GitHub · @login" as a static label.
-                // To add provider switching: wrap this in a Button/Menu with the same frame.
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.triangle.pull")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(HubberDesign.accent)
-
-                    // "GitHub · @login" — provider name + login
-                    HStack(spacing: 4) {
-                        Text("GitHub")
-                            .font(HubberType.headerTitle)
-                            .foregroundStyle(HubberDesign.text)
-
-                        Text("·")
-                            .font(.system(size: 13))
-                            .foregroundStyle(HubberDesign.text3)
-
-                        Text(store.usernameDisplay)
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(HubberDesign.text2)
-                    }
-                }
-                // Reserved provider-switcher tap-target (future: make this a Button/Menu)
-                .frame(minWidth: 44, alignment: .leading)
-                .contentShape(Rectangle())
+                AccountMenuView(store: store)
 
                 Spacer()
 

@@ -13,6 +13,18 @@ struct TabSuccesses {
 
 @MainActor
 extension HubberStore {
+    /// The connection ids whose data participates in the notification pass. When `notifyHidden`
+    /// is false, hidden connections are excluded.
+    static func notificationConnectionIDs(
+        _ items: [(id: ConnectionID, data: HubberData)],
+        visibility: ConnectionVisibility,
+        notifyHidden: Bool
+    ) -> [ConnectionID] {
+        items
+            .filter { notifyHidden || visibility.isVisible($0.id) }
+            .map(\.id)
+    }
+
     /// Coordinator-owned union diff.
     ///
     /// Called by the per-connection `onRefreshSucceeded` callback, wired in `wireCallbacks(on:)`.
@@ -35,11 +47,17 @@ extension HubberStore {
     }
 
     private func performNotificationPass(_ refreshed: Connection?, _ tabSuccesses: TabSuccesses) async {
-        let current = ConnectionAggregator.aggregate(connections.map(\.data))
-        let baselinesForDiff = connections.map { connection in
+        let participatingIDs = Set(Self.notificationConnectionIDs(
+            connections.map { (id: $0.id, data: $0.data) },
+            visibility: settings.connectionVisibility,
+            notifyHidden: settings.notifyHiddenAccounts
+        ))
+        let participating = connections.filter { participatingIDs.contains($0.id) }
+        let current = ConnectionAggregator.aggregate(participating.map(\.data))
+        let baselinesForDiff = participating.map { connection in
             connection.notificationBaseline ?? NotificationDiffer.snapshot(from: connection.data)
         }
-        let allBaselinesNil = connections.allSatisfy { $0.notificationBaseline == nil }
+        let allBaselinesNil = participating.allSatisfy { $0.notificationBaseline == nil }
         // Pass nil only if ALL connections have nil baselines (initial-load-no-fire rule).
         // Nil-baseline connections in a mixed set contribute their current data as already known.
         let previous: ReviewSnapshot? = allBaselinesNil

@@ -114,7 +114,7 @@ struct SignInScreen: View {
 
 // MARK: - SignInButtonStyle
 
-private struct SignInButtonStyle: ButtonStyle {
+struct SignInButtonStyle: ButtonStyle {
     let colorScheme: ColorScheme
 
     func makeBody(configuration: Configuration) -> some View {

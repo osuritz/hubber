@@ -79,6 +79,9 @@ fastlane/test_output
 .claude/worktrees/
 tmpclaude-*
 
+# Superpowers brainstorming mockups (local-only)
+.superpowers/
+
 # AI context notes (if kept local-only)
 # Remove these two if your team actively shares system instructions
 CLAUDE.local.md
