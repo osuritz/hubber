@@ -3,8 +3,10 @@ import SwiftUI
 
 final class GitHubProvider: CodeHostProvider {
     private let session: URLSession
+    private let endpoints: GitHubEndpoints
 
-    init(session: URLSession = .shared) {
+    init(baseURL: URL = GitHubEndpoints.dotComWebBaseURL, session: URLSession = .shared) {
+        endpoints = GitHubEndpoints(webBaseURL: baseURL)
         self.session = session
     }
 
@@ -192,7 +194,7 @@ final class GitHubProvider: CodeHostProvider {
     // MARK: - GraphQL transport
 
     func graphQL(query: String, variables: [String: Any], accessToken: String) async throws -> [String: Any] {
-        var request = URLRequest(url: URL(string: "https://api.github.com/graphql")!)
+        var request = URLRequest(url: endpoints.graphQL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")

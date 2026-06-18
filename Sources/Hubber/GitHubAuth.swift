@@ -158,15 +158,21 @@ typealias GitHubAuthServicing = GitHubDeviceFlowServicing
 final class GitHubAuthService: GitHubAuthServicing, Sendable {
     private let clientID: String
     private let session: URLSession
+    private let endpoints: GitHubEndpoints
 
-    init(clientID: String = GitHubAppConfig.clientID, session: URLSession = .shared) {
+    init(
+        clientID: String = GitHubAppConfig.clientID,
+        baseURL: URL = GitHubEndpoints.dotComWebBaseURL,
+        session: URLSession = .shared
+    ) {
         self.clientID = clientID
+        endpoints = GitHubEndpoints(webBaseURL: baseURL)
         self.session = session
     }
 
     func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
         let response: DeviceCodeResponse = try await postForm(
-            url: URL(string: "https://github.com/login/device/code")!,
+            url: endpoints.deviceCode,
             parameters: ["client_id": clientID]
         )
 
@@ -190,7 +196,7 @@ final class GitHubAuthService: GitHubAuthServicing, Sendable {
             try await Task.sleep(for: .seconds(interval))
 
             let response: TokenResponse = try await postForm(
-                url: URL(string: "https://github.com/login/oauth/access_token")!,
+                url: endpoints.accessToken,
                 parameters: [
                     "client_id": clientID,
                     "device_code": deviceAuthorization.deviceCode,
@@ -232,7 +238,7 @@ final class GitHubAuthService: GitHubAuthServicing, Sendable {
         }
 
         let response: TokenResponse = try await postForm(
-            url: URL(string: "https://github.com/login/oauth/access_token")!,
+            url: endpoints.accessToken,
             parameters: [
                 "client_id": clientID,
                 "grant_type": "refresh_token",
@@ -253,7 +259,7 @@ final class GitHubAuthService: GitHubAuthServicing, Sendable {
     }
 
     func fetchAuthenticatedUser(accessToken: String) async throws -> GitHubAuthenticatedUser {
-        var request = URLRequest(url: URL(string: "https://api.github.com/user")!)
+        var request = URLRequest(url: endpoints.authenticatedUser)
         request.httpMethod = "GET"
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
