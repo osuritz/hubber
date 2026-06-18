@@ -19,7 +19,10 @@ let package = Package(
             dependencies: [
                 .product(name: "TelemetryDeck", package: "SwiftSDK")
             ],
-            path: "Sources/Hubber"
+            path: "Sources/Hubber",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "HubberTests",
