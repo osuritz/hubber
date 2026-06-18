@@ -48,16 +48,18 @@ final class AddAccountControllerTests: XCTestCase {
     private func make(
         auth: FakeAuthService = FakeAuthService(),
         policy: ProviderAccessPolicy = ProviderAccessPolicy(allowPersonalGitHub: true, allowlist: []),
+        isDuplicate: @escaping (ConnectionID) -> Bool = { _ in false },
         onAdd: @escaping AddAccountCallback = { _, _, _ in }
     ) -> AddAccountController {
         AddAccountController(
             policy: policy,
             authServiceFactory: { _, _ in auth },
+            isDuplicate: isDuplicate,
             addAccount: onAdd
         )
     }
 
-    func testTokenSignInResolvesLoginAndAdds() async {
+    func testTokenSignInResolvesLoginThenMaterializesOnFinalize() async {
         var added: ConnectionID?
         let c = make(onAdd: { id, token, _ in
             added = id
@@ -65,8 +67,21 @@ final class AddAccountControllerTests: XCTestCase {
             XCTAssertEqual(token.accessToken, "glpat")
         })
         await c.connectWithToken(provider: .gitLab, serverURL: "https://gitlab.com", token: "glpat")
-        XCTAssertEqual(added, ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz"))
+        // Reaches .added (plays the dialog animation) WITHOUT materializing yet.
         guard case .added = c.stage else { return XCTFail("expected .added, got \(c.stage)") }
+        XCTAssertNil(added)
+        // Materialization is deferred to finalize() (called after the success animation).
+        await c.finalize()
+        XCTAssertEqual(added, ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz"))
+    }
+
+    func testDuplicateAccountFailsWithoutMaterializing() async {
+        var added: ConnectionID?
+        let c = make(isDuplicate: { _ in true }, onAdd: { id, _, _ in added = id })
+        await c.connectWithToken(provider: .gitLab, serverURL: "https://gitlab.com", token: "glpat")
+        guard case .failed = c.stage else { return XCTFail("expected .failed, got \(c.stage)") }
+        await c.finalize() // no pending → no-op
+        XCTAssertNil(added)
     }
 
     func testBadTokenSurfacesError() async {
@@ -94,7 +109,9 @@ final class AddAccountControllerTests: XCTestCase {
             XCTAssertEqual(token.login, "osuritz")
         })
         await c.beginDeviceFlow()
-        XCTAssertEqual(added, ConnectionID.gitHubDotCom(login: "osuritz"))
         guard case .added = c.stage else { return XCTFail("expected .added, got \(c.stage)") }
+        XCTAssertNil(added)
+        await c.finalize()
+        XCTAssertEqual(added, ConnectionID.gitHubDotCom(login: "osuritz"))
     }
 }

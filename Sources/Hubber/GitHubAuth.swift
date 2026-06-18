@@ -465,8 +465,6 @@ final class HubberStore: ObservableObject {
 
     // MARK: - Coordinator: add / remove / restore
 
-    enum AddAccountError: Error { case alreadyAdded }
-
     @discardableResult
     func addConnection(
         id: ConnectionID,
@@ -511,20 +509,6 @@ final class HubberStore: ObservableObject {
         connections.append(conn)
         rebindConnections()
         try registry.append(id)
-        return conn
-    }
-
-    @discardableResult
-    func addResolvedAccount(
-        id: ConnectionID,
-        token: GitHubStoredToken,
-        user: GitHubAuthenticatedUser
-    ) async throws -> Connection {
-        guard !connections.contains(where: { $0.id == id }) else {
-            throw AddAccountError.alreadyAdded
-        }
-        let conn = try addConnection(id: id)
-        await conn.adopt(token: token, user: user)
         return conn
     }
 
@@ -714,6 +698,19 @@ final class HubberStore: ObservableObject {
     /// device code and switch to the browser without the panel closing on them.
     var isAuthenticating: Bool {
         primaryConnection?.isAuthenticating ?? false
+    }
+
+    /// True while the add-account sheet is open (any provider/step). Like `isAuthenticating`, this
+    /// pins the popover so hopping to the browser — authorizing a device code, or following the
+    /// "create a token" link — doesn't dismiss the in-progress add flow. Set by `AddAccountView`'s
+    /// lifecycle. (The add-account device flow runs via a standalone auth service, not a
+    /// `Connection`, so `isAuthenticating` alone never covers it.)
+    /// `shouldPinPanel` + `addResolvedAccount` live in the `HubberStore+AddAccount` extension; this
+    /// stored property and its setter stay here because `private(set)` is file-scoped.
+    @Published private(set) var isAddingAccount = false
+
+    func setAddingAccount(_ active: Bool) {
+        isAddingAccount = active
     }
 
     func startSignIn() {

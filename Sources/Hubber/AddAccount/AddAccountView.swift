@@ -9,13 +9,21 @@ struct AddAccountView: View {
     // would be rebuilt at .picker mid-flow (and the .added transition would be orphaned).
     @StateObject private var controller: AddAccountController
     var onDone: () -> Void
+    /// Called with `true` while this sheet is on screen and `false` when it leaves, so the host can
+    /// pin the popover open (browser hops during device-flow / "create a token" must not dismiss it).
+    var onActiveChange: (Bool) -> Void
 
     init(
         policy: ProviderAccessPolicy,
+        isDuplicate: @escaping (ConnectionID) -> Bool,
         addAccount: @escaping (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void,
+        onActiveChange: @escaping (Bool) -> Void,
         onDone: @escaping () -> Void
     ) {
-        _controller = StateObject(wrappedValue: AddAccountController(policy: policy, addAccount: addAccount))
+        _controller = StateObject(
+            wrappedValue: AddAccountController(policy: policy, isDuplicate: isDuplicate, addAccount: addAccount)
+        )
+        self.onActiveChange = onActiveChange
         self.onDone = onDone
     }
 
@@ -27,30 +35,40 @@ struct AddAccountView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
 
-            switch controller.stage {
-            case .picker:
-                providerPicker
-            case let .form(provider):
-                if provider == .gitHubDotCom, !usePATForGitHub {
-                    gitHubDotComStart
-                } else {
-                    patForm(provider: provider)
+            // Stable content height across stages so the spinner → success transition doesn't
+            // resize the sheet mid-animation (which dropped the success animation on the fast
+            // PAT path; the slow device-flow path didn't resize as much).
+            Group {
+                switch controller.stage {
+                case .picker:
+                    providerPicker
+                case let .form(provider):
+                    if provider == .gitHubDotCom, !usePATForGitHub {
+                        gitHubDotComStart
+                    } else {
+                        patForm(provider: provider)
+                    }
+                case .authenticating:
+                    ProgressView("Connecting...")
+                        .frame(maxWidth: .infinity)
+                case let .deviceCode(authorization):
+                    deviceCode(authorization)
+                case let .failed(message):
+                    errorState(message)
+                case let .added(id):
+                    successState(login: id.login)
                 }
-            case .authenticating:
-                ProgressView("Connecting...")
-                    .frame(maxWidth: .infinity)
-            case let .deviceCode(authorization):
-                deviceCode(authorization)
-            case let .failed(message):
-                errorState(message)
-            case .added:
-                addedState
             }
+            .frame(maxWidth: .infinity, minHeight: 188, alignment: .center)
         }
         .padding(20)
         .frame(width: 360)
         .onAppear {
             serverURL = controller.selectedProvider.defaultServerURL
+            onActiveChange(true)
+        }
+        .onDisappear {
+            onActiveChange(false)
         }
     }
 
@@ -203,22 +221,19 @@ struct AddAccountView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var addedState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(HubberDesign.sloGreen.fg)
-            Text("Account added")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(HubberDesign.text)
-        }
-        .frame(maxWidth: .infinity)
-        .onAppear {
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(0.8))
-                onDone()
+    /// Plays the success animation in the dialog, then materializes the account (deferred via
+    /// `controller.finalize()` so the new connection's sign-in/refresh churn happens as the dialog
+    /// closes — never during the animation) and dismisses.
+    private func successState(login: String) -> some View {
+        SignInSuccessScreen(login: login)
+            .frame(maxWidth: .infinity, minHeight: 150)
+            .onAppear {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1.4))
+                    await controller.finalize()
+                    onDone()
+                }
             }
-        }
     }
 
     private func tokenHelpURL(_ provider: AddAccountProvider) -> URL {

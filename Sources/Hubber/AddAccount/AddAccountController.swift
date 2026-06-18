@@ -56,19 +56,43 @@ final class AddAccountController: ObservableObject {
 
     private let policy: ProviderAccessPolicy
     private let authServiceFactory: (_ provider: String, _ host: String) -> any GitHubDeviceFlowServicing
+    private let isDuplicate: (ConnectionID) -> Bool
     private let addAccount: (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void
+
     private var currentAuthorization: GitHubDeviceAuthorization?
+
+    /// Resolved-but-not-yet-materialized account. We reach `.added` (and play the success animation
+    /// in the dialog) BEFORE materializing, so the new connection's sign-in/refresh churn doesn't
+    /// re-render and tear down the dialog mid-animation. `finalize()` materializes it afterward.
+    private struct PendingAccount {
+        let id: ConnectionID
+        let token: GitHubStoredToken
+        let user: GitHubAuthenticatedUser
+    }
+
+    private var pending: PendingAccount?
 
     init(
         policy: ProviderAccessPolicy,
         authServiceFactory: @escaping (String, String) -> any GitHubDeviceFlowServicing = {
             ConnectionFactory.authService(provider: $0, host: $1)
         },
+        isDuplicate: @escaping (ConnectionID) -> Bool = { _ in false },
         addAccount: @escaping (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void
     ) {
         self.policy = policy
         self.authServiceFactory = authServiceFactory
+        self.isDuplicate = isDuplicate
         self.addAccount = addAccount
+    }
+
+    /// Materializes the account resolved by `connectWithToken`/`beginDeviceFlow`. Called by the
+    /// dialog AFTER the success animation finishes, so the refresh churn happens as the dialog
+    /// closes — never during the animation.
+    func finalize() async {
+        guard let pending else { return }
+        self.pending = nil
+        try? await addAccount(pending.id, pending.token, pending.user)
     }
 
     func choose(_ provider: AddAccountProvider) {
@@ -93,6 +117,10 @@ final class AddAccountController: ObservableObject {
         do {
             let user = try await auth.fetchAuthenticatedUser(accessToken: token)
             let id = ConnectionID(provider: provider.providerString, host: host, login: user.login)
+            guard !isDuplicate(id) else {
+                stage = .failed("This account is already added.")
+                return
+            }
             let stored = GitHubStoredToken(
                 accessToken: token,
                 accessTokenExpiresAt: nil,
@@ -101,12 +129,10 @@ final class AddAccountController: ObservableObject {
                 tokenType: "bearer",
                 login: user.login
             )
-            try await addAccount(id, stored, user)
+            pending = PendingAccount(id: id, token: stored, user: user)
             stage = .added(id)
         } catch GitHubAuthError.badCredentials {
             stage = .failed("That token was rejected. Check the token and its scopes.")
-        } catch HubberStore.AddAccountError.alreadyAdded {
-            stage = .failed("This account is already added.")
         } catch {
             stage = .failed(error.localizedDescription)
         }
@@ -129,10 +155,12 @@ final class AddAccountController: ObservableObject {
             let user = try await auth.fetchAuthenticatedUser(accessToken: token.accessToken)
             token.login = user.login
             let id = ConnectionID.gitHubDotCom(login: user.login)
-            try await addAccount(id, token, user)
+            guard !isDuplicate(id) else {
+                stage = .failed("This account is already added.")
+                return
+            }
+            pending = PendingAccount(id: id, token: token, user: user)
             stage = .added(id)
-        } catch HubberStore.AddAccountError.alreadyAdded {
-            stage = .failed("This account is already added.")
         } catch is CancellationError {
             stage = .picker
         } catch {

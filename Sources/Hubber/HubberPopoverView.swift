@@ -112,6 +112,7 @@ struct HubberPopoverView: View {
     private var addAccountSheet: some View {
         AddAccountView(
             policy: store.settings.providerAccessPolicy,
+            isDuplicate: { [weak store] id in store?.connections.contains { $0.id == id } ?? false },
             addAccount: { [weak store] id, token, user in
                 _ = try await store?.addResolvedAccount(
                     id: id,
@@ -119,6 +120,7 @@ struct HubberPopoverView: View {
                     user: user
                 )
             },
+            onActiveChange: { store.setAddingAccount($0) },
             onDone: { showingAdd = false }
         )
     }
