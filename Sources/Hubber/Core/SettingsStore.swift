@@ -86,6 +86,17 @@ final class SettingsStore: ObservableObject {
         ProviderAccessPolicy(allowPersonalGitHub: allowPersonalGitHub, allowlist: providerAllowlist)
     }
 
+    // MARK: - Connection visibility (#61)
+
+    /// Which connections are shown in the unified inbox. Persisted as JSON in UserDefaults.
+    @Published var connectionVisibility: ConnectionVisibility {
+        didSet {
+            if let data = try? JSONEncoder().encode(connectionVisibility) {
+                defaults.set(data, forKey: "connectionVisibility")
+            }
+        }
+    }
+
     // MARK: - Notifications (#37)
 
     /// Master toggle — when false, no notifications are sent regardless of per-type flags.
@@ -172,6 +183,7 @@ final class SettingsStore: ObservableObject {
             fallback: true
         )
         providerAllowlist = Self.resolveProviderAllowlist(defaults: defaults, managed: managed)
+        connectionVisibility = Self.resolveConnectionVisibility(defaults: defaults)
     }
 
     // MARK: - isLocked
@@ -413,5 +425,14 @@ final class SettingsStore: ObservableObject {
             return arr
         }
         return (defaults.array(forKey: ManagedKey.providerAllowlist) as? [String]) ?? []
+    }
+
+    /// Loads persisted connection visibility (UserDefaults only — not MDM-managed).
+    private static func resolveConnectionVisibility(defaults: UserDefaults) -> ConnectionVisibility {
+        guard
+            let data = defaults.data(forKey: "connectionVisibility"),
+            let value = try? JSONDecoder().decode(ConnectionVisibility.self, from: data)
+        else { return ConnectionVisibility() }
+        return value
     }
 }

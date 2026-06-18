@@ -603,7 +603,10 @@ final class HubberStore: ObservableObject {
     }
 
     private func recomputeAggregate() {
-        data = ConnectionAggregator.aggregate(connections.map(\.data))
+        data = ConnectionAggregator.aggregate(
+            connections.map { (id: $0.id, data: $0.data) },
+            visibility: settings.connectionVisibility
+        )
         isRefreshingPullRequests = connections.contains { $0.isRefreshingPullRequests }
     }
 
@@ -672,6 +675,12 @@ final class HubberStore: ObservableObject {
     func setPopoverOpen(_ open: Bool) {
         isPopoverOpen = open
         connections.forEach { $0.isPopoverOpen = open }
+    }
+
+    /// Shows or hides a connection in the unified inbox + badge. Persisted via SettingsStore.
+    func setConnectionVisible(_ id: ConnectionID, _ visible: Bool) {
+        settings.connectionVisibility = settings.connectionVisibility.setting(id, visible: visible)
+        recomputeAggregate()
     }
 
     var usernameDisplay: String {
