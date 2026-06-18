@@ -32,6 +32,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// but the subscriber is still registered from launch time).
     private var metricKitStarted = false
 
+    /// The menu-bar status-item glyph: a custom "rubber stamp" template image that
+    /// auto-inverts for light/dark menu bars. In DEBUG the stroke weight is selectable
+    /// via `HUBBER_STAMP_LEVEL` (0 = full, 1 = thinner, 2 = thinnest) so the weight can
+    /// be judged live in the menu bar; release builds use a fixed weight. Falls back to
+    /// the previous SF Symbol if the bundled asset is missing.
+    /// The menu-bar status-item glyph: the custom "rubber stamp" template image (vector PDF),
+    /// which auto-inverts for light/dark menu bars and stays crisp at any scale. Falls back to
+    /// the previous SF Symbol if the bundled asset is somehow missing.
+    private static func menubarGlyph() -> NSImage? {
+        if
+            let url = Bundle.module.url(forResource: "stamp-vector", withExtension: "pdf"),
+            let image = NSImage(contentsOf: url) {
+            image.isTemplate = true
+            image.size = NSSize(width: 18, height: 18)
+            image.accessibilityDescription = "Hubber"
+            return image
+        }
+        return NSImage(systemSymbolName: "arrow.triangle.pull", accessibilityDescription: "Hubber")
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         startTelemetry()
         NSApp.setActivationPolicy(.accessory)
@@ -46,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusMenu()
 
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "arrow.triangle.pull", accessibilityDescription: "Hubber")
+            button.image = Self.menubarGlyph()
             button.imagePosition = .imageLeading
             button.target = self
             button.action = #selector(togglePanel(_:))
@@ -409,8 +429,13 @@ let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
 
-// Register the UNUserNotificationCenter delegate for tap-to-open.
+// Register the UNUserNotificationCenter delegate for tap-to-open — but only inside a real
+// `.app` bundle. `UNUserNotificationCenter.current()` raises an uncatchable NSException
+// ("bundleProxyForCurrentProcess is nil") when there is no app bundle (e.g. under `swift run`
+// or xctest), so we must not touch it there. Mirrors NotificationDispatcher.isBundledApp.
 // AppDelegate adopts UNUserNotificationCenterDelegate below.
-UNUserNotificationCenter.current().delegate = delegate
+if Bundle.main.bundleURL.pathExtension == "app" {
+    UNUserNotificationCenter.current().delegate = delegate
+}
 
 app.run()
