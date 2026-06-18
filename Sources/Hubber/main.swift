@@ -236,6 +236,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             panel.setFrameOrigin(panelOrigin(relativeTo: sender))
             panel.orderFrontRegardless()
+            // Don't let AppKit focus-ring the first control (the Refresh button) on open;
+            // the key-view loop still engages the moment the user tabs.
+            panel.makeFirstResponder(nil)
             store.setPopoverOpen(true)
             emitSessionOpenedEvents()
         }

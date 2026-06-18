@@ -127,6 +127,8 @@ enum HubberDesign {
     /// neutral — not an action signal
     static let ciRunning = Color(light: "#8E8E93", dark: "#98989D")
     static let ciPending = Color(light: "#8E8E93", dark: "#98989D")
+    /// muted neutral — no CI configured/run (distinct from pending)
+    static let ciNoChecks = Color(light: "#C7C7CC", dark: "#5A5A5E")
 
     static func ciColor(for ci: PullRequestCI) -> Color {
         switch ci {
@@ -134,6 +136,7 @@ enum HubberDesign {
         case .failing: ciFailing
         case .running: ciRunning
         case .pending: ciPending
+        case .noChecks: ciNoChecks
         }
     }
 
