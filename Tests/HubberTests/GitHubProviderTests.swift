@@ -16,6 +16,12 @@ final class GitHubProviderTests: XCTestCase {
         super.tearDown()
     }
 
+    func testNoChecksCIStateRoundTripsRawValue() {
+        XCTAssertEqual(PullRequestCI.noChecks.rawValue, "noChecks")
+        XCTAssertEqual(PullRequestCI(rawValue: "noChecks"), .noChecks)
+        XCTAssertNotEqual(PullRequestCI.noChecks, .pending)
+    }
+
     // MARK: - Incoming
 
     func testFetchIncomingReviewsMapsGraphQLNodes() async throws {
@@ -260,6 +266,22 @@ final class GitHubProviderTests: XCTestCase {
         )
 
         XCTAssertTrue(prs.isEmpty)
+    }
+
+    func testFetchOutgoingPullRequestsMapsMissingStatusCheckRollupToNoChecks() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.outgoingWithUnresolvedResponse)
+        }
+
+        let prs = try await provider.fetchOutgoingPullRequests(
+            accessToken: "tok",
+            viewerLogin: "osuritz",
+            unresolvedMode: .allOpen
+        )
+
+        XCTAssertEqual(prs.count, 1)
+        XCTAssertEqual(prs[0].ci, .noChecks)
+        XCTAssertEqual(prs[0].ciDetail, "No checks")
     }
 
     static let outgoingPRsResponse = Data("""

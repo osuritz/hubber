@@ -132,7 +132,7 @@ final class GitLabProviderTests: XCTestCase {
             ("WAITING_FOR_RESOURCE", .pending),
             ("PREPARING", .pending),
             ("EXPLODING", .pending),
-            (nil, .pending),
+            (nil, .noChecks),
         ]
 
         for (status, expected) in cases {
@@ -221,7 +221,7 @@ final class GitLabProviderTests: XCTestCase {
         XCTAssertEqual(bare.requiredApprovals, 0)
         XCTAssertEqual(bare.approvals, 0)
         XCTAssertEqual(bare.unresolved, 0)
-        XCTAssertEqual(bare.ci, .pending)
+        XCTAssertEqual(bare.ci, .noChecks)
         XCTAssertEqual(bare.ciDetail, "no pipeline")
         XCTAssertFalse(bare.mergeable)
         XCTAssertTrue(bare.reviewers.isEmpty)
@@ -292,7 +292,7 @@ final class GitLabProviderTests: XCTestCase {
             noPipelineDraft.url?.absoluteString,
             "https://gitlab.com/namespace/free-project/-/merge_requests/45"
         )
-        XCTAssertEqual(noPipelineDraft.ci, .pending)
+        XCTAssertEqual(noPipelineDraft.ci, .noChecks)
         XCTAssertEqual(noPipelineDraft.ciDetail, "no pipeline")
         XCTAssertEqual(noPipelineDraft.commits, 0)
         XCTAssertEqual(

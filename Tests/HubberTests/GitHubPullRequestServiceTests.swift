@@ -26,8 +26,8 @@ final class GitHubProviderDraftTests: XCTestCase {
         XCTAssertEqual(drafts[0].title, "Draft one")
         XCTAssertEqual(drafts[0].url?.absoluteString, "https://github.com/osuritz/rehearsal/pull/86")
         XCTAssertEqual(drafts[0].commits, 3)
-        XCTAssertEqual(drafts[0].ci, .pending)
-        XCTAssertEqual(drafts[0].ciDetail, "not checked")
+        XCTAssertEqual(drafts[0].ci, .noChecks)
+        XCTAssertEqual(drafts[0].ciDetail, "No checks")
         let updatedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-01T07:03:33Z"))
         XCTAssertEqual(drafts[0].updatedAt, updatedAt)
     }

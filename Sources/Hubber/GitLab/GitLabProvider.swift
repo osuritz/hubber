@@ -97,15 +97,16 @@ final class GitLabProvider: CodeHostProvider {
     }
 
     static func mapCI(_ status: String?) -> PullRequestCI {
-        switch status?.uppercased() {
+        guard let status else { return .noChecks }
+        switch status.uppercased() {
         case "SUCCESS":
-            .passing
+            return .passing
         case "FAILED":
-            .failing
+            return .failing
         case "RUNNING":
-            .running
+            return .running
         default:
-            .pending
+            return .pending
         }
     }
 

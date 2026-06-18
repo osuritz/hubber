@@ -70,7 +70,7 @@ extension GitHubProvider {
             let commitNodes = commits["nodes"] as? [[String: Any]],
             let rollup = commitNodes.first?["commit"] as? [String: Any],
             let statusNode = rollup["statusCheckRollup"] as? [String: Any]
-        else { return (.pending, "No checks") }
+        else { return (.noChecks, "No checks") }
 
         let state = statusNode["state"] as? String ?? ""
         let contexts = statusNode["contexts"] as? [String: Any]
@@ -103,7 +103,7 @@ extension GitHubProvider {
             }
             return (.pending, "Pending")
         default:
-            return (.pending, "No checks")
+            return (.noChecks, "No checks")
         }
     }
 

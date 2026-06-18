@@ -183,8 +183,8 @@ final class GitHubProvider: CodeHostProvider {
                 number: number,
                 title: title,
                 url: url,
-                ci: .pending,
-                ciDetail: "not checked",
+                ci: .noChecks,
+                ciDetail: "No checks",
                 commits: commits,
                 updatedAt: updatedAt
             )
