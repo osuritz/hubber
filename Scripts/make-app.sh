@@ -22,12 +22,24 @@ fi
 echo "==> Building Hubber.app version ${VERSION}"
 
 # ---------------------------------------------------------------------------
-# 1. Universal release build
+# 1. Build the binary.
+#    HUBBER_BUILD_CONFIG=release (default) → universal distribution binary.
+#    HUBBER_BUILD_CONFIG=debug   → native-arch dev binary, compiled with
+#    `#if DEBUG`, so the app uses the file token store (GitHubDevelopmentFileTokenStore)
+#    instead of the Keychain — no repeated "allow access" prompts after each
+#    ad-hoc-signed rebuild. Driven by `make app-dev`.
 # ---------------------------------------------------------------------------
-echo "==> swift build -c release --arch arm64 --arch x86_64"
-swift build -c release --arch arm64 --arch x86_64
+CONFIG="${HUBBER_BUILD_CONFIG:-release}"
+if [[ "$CONFIG" == "debug" ]]; then
+  echo "==> swift build (debug, native arch — dev build: file token store)"
+  swift build
+  BINARY=".build/debug/Hubber"
+else
+  echo "==> swift build -c release --arch arm64 --arch x86_64"
+  swift build -c release --arch arm64 --arch x86_64
+  BINARY=".build/apple/Products/Release/Hubber"
+fi
 
-BINARY=".build/apple/Products/Release/Hubber"
 if [[ ! -f "$BINARY" ]]; then
   echo "ERROR: expected binary not found at $BINARY" >&2
   exit 1

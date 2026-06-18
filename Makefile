@@ -1,4 +1,4 @@
-.PHONY: lint format fix build test ci app zip dmg dist pkg
+.PHONY: lint format fix build test ci app app-dev zip dmg dist pkg
 
 SWIFT_PATHS = Sources/ Tests/
 
@@ -33,6 +33,13 @@ fix:
 ## Build a universal, ad-hoc-signed Hubber.app in the project root.
 app:
 	bash Scripts/make-app.sh $(VERSION)
+
+## Build a local DEBUG Hubber.app for development. Compiled with `#if DEBUG`, so
+## it uses the file token store (not the Keychain) and won't re-prompt for
+## Keychain access after every ad-hoc-signed rebuild. Use this for local testing;
+## `make app` stays the release/distribution build.
+app-dev:
+	HUBBER_BUILD_CONFIG=debug bash Scripts/make-app.sh $(VERSION)
 
 ## Package Hubber.app into dist/Hubber.zip (preserves code signature via ditto).
 zip: app
