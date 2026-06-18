@@ -127,6 +127,10 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(sut.notifyPRMerged)
     }
 
+    func testDefaultNotifyHiddenAccountsIsTrue() {
+        XCTAssertTrue(sut.notifyHiddenAccounts)
+    }
+
     func testNotificationsEnabledPersistedToUserDefaults() {
         sut.notificationsEnabled = false
         XCTAssertFalse(defaults.bool(forKey: "notificationsEnabled"))

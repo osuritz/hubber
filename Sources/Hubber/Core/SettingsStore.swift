@@ -124,6 +124,11 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(notifyPRMerged, forKey: "notifyPRMerged") }
     }
 
+    /// When false, accounts hidden via the visibility toggles do not produce notifications.
+    @Published var notifyHiddenAccounts: Bool {
+        didSet { defaults.set(notifyHiddenAccounts, forKey: "notifyHiddenAccounts") }
+    }
+
     /// The set of enabled event types (empty when `notificationsEnabled == false`).
     var enabledNotificationTypes: Set<NotificationEventType> {
         guard notificationsEnabled else { return [] }
@@ -184,6 +189,7 @@ final class SettingsStore: ObservableObject {
         )
         providerAllowlist = Self.resolveProviderAllowlist(defaults: defaults, managed: managed)
         connectionVisibility = Self.resolveConnectionVisibility(defaults: defaults)
+        notifyHiddenAccounts = Self.resolveNotifyHiddenAccounts(defaults: defaults, managed: managed)
     }
 
     // MARK: - isLocked
@@ -434,5 +440,18 @@ final class SettingsStore: ObservableObject {
             let value = try? JSONDecoder().decode(ConnectionVisibility.self, from: data)
         else { return ConnectionVisibility() }
         return value
+    }
+
+    private static func resolveNotifyHiddenAccounts(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> Bool {
+        bool(
+            managedKey: "notifyHiddenAccounts",
+            defaultsKey: "notifyHiddenAccounts",
+            defaults: defaults,
+            managed: managed,
+            fallback: true
+        )
     }
 }
