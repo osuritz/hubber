@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sparkle appcast for Hubber. Served via GitHub Pages at
+  https://osuritz.github.io/hubber/appcast.xml (this file's SUFeedURL).
+
+  This is the initial placeholder: no <item> entries yet, so a running app sees
+  "you're up to date". The Release workflow regenerates this file with a signed
+  <item> on every tagged release (see .github/workflows/release.yml).
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Hubber</title>
+    <link>https://osuritz.github.io/hubber/appcast.xml</link>
+    <description>Most recent updates to Hubber</description>
+    <language>en</language>
+  </channel>
+</rss>
