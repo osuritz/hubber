@@ -12,7 +12,7 @@ struct OnboardingFlow: View {
             case .welcome:
                 OnboardingWelcomeStep(coordinator: coordinator)
             case .consent:
-                OnboardingStepStub(coordinator: coordinator, stepIndex: 1, title: "Analytics consent")
+                OnboardingConsentStep(coordinator: coordinator, store: store)
             case .connect:
                 OnboardingStepStub(coordinator: coordinator, stepIndex: 2, title: "Connect account")
             case .notifications:
