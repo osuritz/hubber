@@ -215,6 +215,120 @@ struct OnboardingConsentStep: View {
     }
 }
 
+// MARK: - Connect (#105)
+
+struct OnboardingConnectStep: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+    @ObservedObject var store: HubberStore
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var showingAdd = false
+
+    private var isRestricted: Bool {
+        !store.settings.providerAccessPolicy.canConnectGitHubDotCom
+    }
+
+    var body: some View {
+        OnboardingScaffold(stepIndex: 2, stepCount: OnboardingCoordinator.Step.allCases.count) {
+            content
+        }
+        .onAppear {
+            if case .signedIn = store.authState { coordinator.skipConnectIfAlreadyConnected(true) }
+            else if !store.connections.isEmpty { coordinator.skipConnectIfAlreadyConnected(true) }
+        }
+        .onChange(of: store.authState) { _, newState in
+            if case .signedIn = newState { coordinator.advance() }
+        }
+        .sheet(isPresented: $showingAdd) { addAccountSheet }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch store.authState {
+        case let .waitingForUser(authorization):
+            DeviceCodeScreen(store: store, authorization: authorization)
+        case let .error(message):
+            connectPrompt(errorMessage: message)
+        default:
+            connectPrompt(errorMessage: nil)
+        }
+    }
+
+    private func connectPrompt(errorMessage: String?) -> some View {
+        VStack(spacing: 0) {
+            Image(systemName: "person.badge.key")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(HubberDesign.accent)
+                .padding(.bottom, 16)
+            Text("Connect your account")
+                .font(.system(size: 17, weight: .semibold))
+                .tracking(-0.3)
+                .foregroundStyle(HubberDesign.text)
+                .padding(.bottom, 8)
+            Text("Sign in with GitHub to start seeing the PRs waiting on you. Hubber only requests read-only access.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(HubberDesign.text2)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .frame(maxWidth: 264)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 18)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 11))
+                    .foregroundStyle(HubberDesign.sloRed.fg)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 264)
+                    .padding(.bottom, 12)
+            }
+
+            Button { store.startSignIn() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 17))
+                    Text(errorMessage == nil ? "Sign in with GitHub" : "Try again")
+                        .font(.system(size: 13.5, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+            }
+            .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+            .frame(maxWidth: 264)
+            .disabled(isRestricted)
+            .opacity(isRestricted ? 0.45 : 1)
+
+            if isRestricted {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 11))
+                    Text("Sign-in is restricted by your organization.")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(HubberDesign.text2)
+                .padding(.top, 10)
+            }
+
+            Button("Add GitHub Enterprise or GitLab…") { showingAdd = true }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(HubberDesign.text2)
+                .padding(.top, 12)
+        }
+    }
+
+    private var addAccountSheet: some View {
+        AddAccountView(
+            policy: store.settings.providerAccessPolicy,
+            isDuplicate: { [weak store] id in store?.connections.contains { $0.id == id } ?? false },
+            addAccount: { [weak store] id, token, user in
+                _ = try await store?.addResolvedAccount(id: id, token: token, user: user)
+            },
+            onActiveChange: { store.setAddingAccount($0) },
+            onDone: { showingAdd = false }
+        )
+    }
+}
+
 // MARK: - Step stubs (replaced by later tasks)
 
 /// Minimal placeholder used until the real step lands. Title + Continue (advances the flow).

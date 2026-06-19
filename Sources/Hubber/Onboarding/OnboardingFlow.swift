@@ -14,7 +14,7 @@ struct OnboardingFlow: View {
             case .consent:
                 OnboardingConsentStep(coordinator: coordinator, store: store)
             case .connect:
-                OnboardingStepStub(coordinator: coordinator, stepIndex: 2, title: "Connect account")
+                OnboardingConnectStep(coordinator: coordinator, store: store)
             case .notifications:
                 OnboardingStepStub(coordinator: coordinator, stepIndex: 3, title: "Notifications")
             case .launchAtLogin:
