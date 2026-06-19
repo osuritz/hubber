@@ -31,8 +31,12 @@ separately as epic #79 (M4b), blocked on a paid Apple account.
    env, omitted when unset — no secrets hardcoded).
 4. Version threading so release builds carry the real `CFBundleVersion`.
 5. Local verification against the `Hubber Self-Signed` identity.
+6. A **rollout runbook** at `docs/runbooks/sparkle-auto-update.md` that documents the
+   deferred operational process end-to-end (see "Rollout runbook" below). The PR builds
+   the mechanism; the runbook captures how to operate it while the detail is fresh.
 
-### Out of scope (→ rollout follow-up)
+### Out of scope (→ rollout follow-up, executed via the runbook)
+The runbook *documents* each of these; actually performing them is the follow-up:
 - EdDSA keypair generation and storage (Keychain + `SPARKLE_PRIVATE_KEY` CI secret).
 - Appcast hosting decision (GitHub Pages vs. Releases) and the stable `SUFeedURL`.
 - `generate_appcast` step in `release.yml`.
@@ -138,9 +142,38 @@ out rather than papered over with a brittle test. The issue's signature-rejectio
 end-to-end auto-update acceptance criteria require keys + a live appcast and are
 verified in the rollout follow-up.
 
+## Rollout runbook
+
+New file `docs/runbooks/sparkle-auto-update.md` — an ordered, checklist-driven operator
+guide for the deferred rollout. It distills issue #51's investigation into the
+project-specific procedure (real repo `osuritz/hubber`, bundle id `com.osuritz.hubber`,
+the `Hubber Self-Signed` cert, and the exact `SPARKLE_FEED_URL` / `SPARKLE_PUBLIC_ED_KEY`
+env vars this PR's `make-app.sh` reads). It covers, in order:
+
+1. **One-time key setup** — run Sparkle's `generate_keys` (locate via `find .build/artifacts`),
+   record the public key, export the private key, store it as the `SPARKLE_PRIVATE_KEY`
+   GitHub Actions secret, and delete the local export.
+2. **Appcast hosting** — the chosen host (decision recorded at rollout time) and the stable
+   `SUFeedURL` value to set.
+3. **CI signing cert** — export `Hubber Self-Signed` as a `.p12`, store it + its password as
+   secrets, and import it into a temporary keychain in `release.yml`; set
+   `HUBBER_SIGN_IDENTITY` for the release build.
+4. **Per-release flow** — bump version/tag, build, package, run `generate_appcast` with the
+   private key, publish the appcast, create the GitHub Release with assets.
+5. **Acceptance tests** — the issue's testable criteria (real N→N+1 auto-update with no
+   Gatekeeper prompt, "Check for Updates…" UI, wrong-signature rejection, `SUPublicEDKey`
+   mismatch rejection).
+6. **Key-rotation / recovery and cert-expiry notes** — back up the private key; renew the
+   cert before 2027-06-16.
+
+The runbook is authored as documentation in this PR; the steps are *executed* in the
+follow-up. Each step links back to issue #51 and (where relevant) epics #79 (M4b).
+
 ## Conventions
-Single PR; body includes `Closes #51`; no co-author trailer; watch the PR's CI to green
-before merging (locally-green ≠ CI-green).
+Single PR. Because this PR intentionally defers the rollout, it does **not** satisfy
+issue #51's end-to-end acceptance criteria — so the PR body uses **`Refs #51`**, not
+`Closes #51`; #51 stays open and is closed by the rollout follow-up. No co-author
+trailer. Watch the PR's CI to green before merging (locally-green ≠ CI-green).
 
 ## Risks / notes
 - **Ad-hoc + Sparkle on dev builds:** without Hardened Runtime, Library Validation is
