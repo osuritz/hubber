@@ -251,16 +251,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configureStatusMenu() {
         statusMenu.removeAllItems()
 
-        // Routed straight to Sparkle's controller so its canCheckForUpdates
-        // validation enables/disables this item without AppDelegate proxying it.
-        let checkForUpdates = statusMenu.addItem(
-            withTitle: "Check for Updates…",
-            action: updaterController.checkForUpdatesAction,
-            keyEquivalent: ""
-        )
-        checkForUpdates.target = updaterController.checkForUpdatesTarget
+        // Only surface "Check for Updates…" when this build actually carries an update feed.
+        // Dev builds omit SUFeedURL, so Sparkle would error on a missing feed — hide the item
+        // until a feed ships (#113). Routed straight to Sparkle's controller so its
+        // canCheckForUpdates validation enables/disables it without AppDelegate proxying.
+        if updaterController.isUpdateMechanismAvailable {
+            let checkForUpdates = statusMenu.addItem(
+                withTitle: "Check for Updates…",
+                action: updaterController.checkForUpdatesAction,
+                keyEquivalent: ""
+            )
+            checkForUpdates.target = updaterController.checkForUpdatesTarget
+            statusMenu.addItem(.separator())
+        }
 
-        statusMenu.addItem(.separator())
         statusMenu.addItem(
             withTitle: "Sign Out",
             action: #selector(signOut(_:)),
