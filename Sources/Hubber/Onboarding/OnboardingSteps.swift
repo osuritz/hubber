@@ -237,6 +237,7 @@ struct OnboardingConnectStep: View {
             coordinator.skipConnectIfAlreadyConnected(alreadyConnected)
         }
         .onChange(of: store.authState) { _, newState in
+            guard coordinator.currentStep == .connect else { return }
             if case .signedIn = newState { coordinator.advance() }
         }
         .sheet(isPresented: $showingAdd) { addAccountSheet }
@@ -475,35 +476,6 @@ struct OnboardingLaunchAtLoginStep: View {
                         coordinator.advance()
                     }
                 }
-            }
-        }
-    }
-}
-
-// MARK: - Step stubs (replaced by later tasks)
-
-/// Minimal placeholder used until the real step lands. Title + Continue (advances the flow).
-struct OnboardingStepStub: View {
-    @ObservedObject var coordinator: OnboardingCoordinator
-    let stepIndex: Int
-    let title: String
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        OnboardingScaffold(stepIndex: stepIndex, stepCount: OnboardingCoordinator.Step.allCases.count) {
-            VStack(spacing: 16) {
-                Text(title)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(HubberDesign.text)
-                Button { coordinator.advance() } label: {
-                    Text("Continue")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 16)
-                }
-                .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
-                .frame(maxWidth: 264)
             }
         }
     }

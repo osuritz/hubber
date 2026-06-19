@@ -33,6 +33,7 @@ struct HubberPopoverView: View {
         .onChange(of: store.authState) { oldState, newState in
             // Only trigger on the in-panel device flow: waitingForUser → signedIn.
             // Do NOT trigger on cold-launch restore (restoring → signedIn).
+            guard onboarding.isCompleted else { return }
             if case .waitingForUser = oldState, case .signedIn = newState {
                 showSignInSuccess = true
                 Task { @MainActor in
