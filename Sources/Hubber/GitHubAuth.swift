@@ -415,6 +415,7 @@ final class HubberStore: ObservableObject {
         settings: SettingsStore = SettingsStore(),
         idle: any MachineIdleProviding = SystemIdleProvider(),
         telemetry: Telemetry? = nil,
+        telemetryGate injectedGate: GatedTelemetrySink? = nil,
         dispatcher: any NotificationDispatching = UNNotificationDispatcher(),
         snapshotStore: SnapshotStore = SnapshotStore(),
         defaults: UserDefaults = .standard,
@@ -428,7 +429,7 @@ final class HubberStore: ObservableObject {
             self.telemetry = telemetry
             telemetryGate = nil
         } else {
-            let gate = GatedTelemetrySink(enabled: settings.analyticsEnabled, underlying: TelemetryDeckSink())
+            let gate = injectedGate ?? GatedTelemetrySink(enabled: settings.analyticsEnabled, underlying: TelemetryDeckSink())
             self.telemetry = Telemetry(sink: gate)
             telemetryGate = gate
         }
