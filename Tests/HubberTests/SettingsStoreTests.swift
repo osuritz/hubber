@@ -97,6 +97,23 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.badgeMode, .off)
     }
 
+    // MARK: - tabBadgeMode
+
+    func testDefaultTabBadgeModeIsNeedsAttention() {
+        XCTAssertEqual(sut.tabBadgeMode, .needsAttention)
+    }
+
+    func testTabBadgeModePersistedToUserDefaults() {
+        sut.tabBadgeMode = .totalCount
+        XCTAssertEqual(defaults.string(forKey: "tabBadgeMode"), TabBadgeMode.totalCount.rawValue)
+    }
+
+    func testUserDefaultsValueOverridesTabBadgeModeDefault() {
+        defaults.set(TabBadgeMode.totalCount.rawValue, forKey: "tabBadgeMode")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.tabBadgeMode, .totalCount)
+    }
+
     // MARK: - Notification settings (#37)
 
     func testDefaultNotificationsEnabledIsTrue() {

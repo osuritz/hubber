@@ -170,6 +170,24 @@ struct SettingsView: View {
                 }
             }
 
+            // Tab Badges
+            SettingsSection(title: "Tab Badges") {
+                SettingsGroup {
+                    SettingsRow(isStack: true, isLast: true) {
+                        Text("Badges show")
+                            .font(HubberType.settingsLabel)
+                            .foregroundStyle(HubberDesign.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            TabBadgeMode.self,
+                            selection: $settings.tabBadgeMode,
+                            isEnabled: !settings.isLocked("tabBadgeMode"),
+                            title: \.title
+                        )
+                    }
+                }
+            }
+
             // Notifications
             SettingsSection(title: "Notifications") {
                 SettingsGroup {

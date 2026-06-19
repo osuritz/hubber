@@ -85,6 +85,7 @@ enum ManagedKey {
 
     // Appearance / badge
     static let badgeMode = "badgeMode"
+    static let tabBadgeMode = "tabBadgeMode"
     static let rowDensity = "rowDensity"
 
     // PR modes
