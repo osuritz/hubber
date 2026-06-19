@@ -10,8 +10,8 @@ final class OnboardingCoordinator: ObservableObject {
     }
 
     private let defaults: UserDefaults
-    private static let completedKey = "onboardingCompleted"
-    private static let stepKey = "onboardingStep"
+    private nonisolated static let completedKey = "onboardingCompleted"
+    private nonisolated static let stepKey = "onboardingStep"
 
     @Published private(set) var currentStep: Step
     @Published private(set) var isCompleted: Bool
@@ -54,5 +54,11 @@ final class OnboardingCoordinator: ObservableObject {
     static func reset(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: completedKey)
         defaults.removeObject(forKey: stepKey)
+    }
+
+    /// Whether first-run onboarding has been completed. Read by non-UI code (e.g. the sign-in
+    /// notification request) that must defer to the onboarding flow's own prompts while it runs.
+    nonisolated static func isCompleted(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: completedKey)
     }
 }

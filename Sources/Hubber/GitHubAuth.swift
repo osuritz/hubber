@@ -480,6 +480,11 @@ final class HubberStore: ObservableObject {
             await handleRefreshSucceeded(conn, tabSuccesses)
         }
         conn.onSignedIn = { [weak self] in
+            // During first-run onboarding, the notification priming step (#107) owns the OS
+            // permission prompt — requesting here on connect would surface the system dialog
+            // before the soft pre-prompt. Skip until onboarding completes; afterwards keep
+            // M3's request-at-login behavior for re-sign-ins.
+            guard OnboardingCoordinator.isCompleted() else { return }
             await self?.requestNotificationAuthorization()
         }
     }
@@ -697,8 +702,12 @@ final class HubberStore: ObservableObject {
 
     /// Sets the launch-at-login preference: persists the desired state and applies it to the system.
     func setLaunchAtLogin(_ enabled: Bool) {
-        settings.launchAtLoginEnabled = enabled
+        // A user action must not override an MDM-forced value.
+        guard !settings.isLocked(ManagedKey.launchAtLogin) else { return }
         try? launchAtLogin.setEnabled(enabled)
+        // Persist the ACTUAL resulting state (not the intent), so the toggle can't lie if
+        // registration failed or the login item changed outside the app.
+        settings.launchAtLoginEnabled = launchAtLogin.isEnabled
     }
 
     /// Applies the resolved (incl. MDM-forced) desired launch-at-login state to the system at launch.

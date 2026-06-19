@@ -33,6 +33,12 @@ final class GatedTelemetrySink: TelemetrySink, @unchecked Sendable {
         // enabled-check, the init-once claim, and the SDK initialization are atomic.
         // initializeSDK() runs under the lock (it is called at most once and must not
         // re-enter this sink); the underlying forward happens OUTSIDE the lock.
+        //
+        // In-flight semantics: a setEnabled(false) that races a send already past this gate may
+        // still forward that one signal. This is acceptable — analytics WAS enabled at decision
+        // time, so the "no signal before consent" guarantee holds; the toggle stops every
+        // subsequent send. (Holding the lock across the underlying send instead would risk
+        // blocking/reentrancy and buys nothing for the consent guarantee.)
         let shouldForward: Bool = lock.withLock {
             guard enabled else { return false }
             if !initialized {

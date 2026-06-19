@@ -46,11 +46,12 @@ pseudonymous personal data, which is why analytics are opt-in.
 **How to opt out.** Turn off "Share anonymous usage analytics" in Settings → Privacy. It takes
 effect immediately — no restart — and stops all further events.
 
-## Crash & hang diagnostics (local only)
+## Diagnostics (local only)
 
-Hubber subscribes to Apple's MetricKit to log crash and hang summaries to your Mac's local system
-log (`os_log`) for debugging. **This data never leaves your device** and is not sent to Hubber or
-any third party. You can disable it under Settings → Privacy ("Diagnostic logging").
+Hubber subscribes to Apple's MetricKit to log crash and hang summaries — and basic performance
+metric payloads (app version, OS version) — to your Mac's local system log (`os_log`) for
+debugging. **This data never leaves your device** and is not sent to Hubber or any third party.
+You can disable it under Settings → Privacy ("Diagnostic logging").
 
 ## Authentication
 

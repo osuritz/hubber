@@ -98,4 +98,10 @@ final class OnboardingCoordinatorTests: XCTestCase {
         XCTAssertFalse(resumed.isCompleted)
         XCTAssertEqual(resumed.currentStep, .welcome)
     }
+
+    func testIsCompletedStaticReflectsPersistedFlag() {
+        XCTAssertFalse(OnboardingCoordinator.isCompleted(defaults: defaults))
+        OnboardingCoordinator(defaults: defaults).complete()
+        XCTAssertTrue(OnboardingCoordinator.isCompleted(defaults: defaults))
+    }
 }

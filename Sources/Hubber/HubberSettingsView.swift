@@ -205,8 +205,8 @@ struct SettingsView: View {
                                 .font(HubberType.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text(
-                                "Crash & hang diagnostics are written to your Mac's local log "
-                                    + "only — never sent anywhere."
+                                "Crash, hang, and performance diagnostics are written to your "
+                                    + "Mac's local log only — never sent anywhere."
                             )
                             .font(HubberType.settingsSub)
                             .foregroundStyle(HubberDesign.text2)

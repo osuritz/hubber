@@ -151,6 +151,38 @@ struct OnboardingSecondaryButton: View {
     }
 }
 
+// MARK: - Managed (MDM-locked) notice
+
+/// Shown in place of a step's choice when an MDM profile forces the setting — the user can't
+/// change it, only acknowledge and continue. Reused by the consent and launch-at-login steps.
+struct OnboardingManagedNotice: View {
+    let message: String
+    let onContinue: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 11))
+                Text(message)
+                    .font(.system(size: 11))
+            }
+            .foregroundStyle(HubberDesign.text2)
+
+            Button(action: onContinue) {
+                Text("Continue")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+            }
+            .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+            .frame(maxWidth: 264)
+        }
+    }
+}
+
 // MARK: - Analytics consent (#102)
 
 struct OnboardingConsentStep: View {
@@ -179,7 +211,7 @@ struct OnboardingConsentStep: View {
                     .padding(.bottom, 8)
 
                 Text(
-                    "Share anonymous usage data — counts and timings only. "
+                    "Share anonymous usage data — counts and basic interactions only. "
                         + "Never repo names, PR titles, logins, or any personal data. "
                         + "You can change this anytime in Settings."
                 )
@@ -192,7 +224,13 @@ struct OnboardingConsentStep: View {
                 .padding(.bottom, 18)
 
                 if isManaged {
-                    managedNotice
+                    OnboardingManagedNotice(
+                        message: store.settings.analyticsEnabled
+                            ? "Analytics is enabled by your organization."
+                            : "Analytics is disabled by your organization."
+                    ) {
+                        coordinator.advance()
+                    }
                 } else {
                     choiceButtons
                 }
@@ -230,29 +268,6 @@ struct OnboardingConsentStep: View {
         }
     }
 
-    private var managedNotice: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 11))
-                Text(store.settings.analyticsEnabled
-                    ? "Analytics is enabled by your organization."
-                    : "Analytics is disabled by your organization.")
-                    .font(.system(size: 11))
-            }
-            .foregroundStyle(HubberDesign.text2)
-
-            Button { coordinator.advance() } label: {
-                Text("Continue")
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 16)
-            }
-            .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
-            .frame(maxWidth: 264)
-        }
-    }
 }
 
 // MARK: - Connect (#105)
@@ -272,9 +287,13 @@ struct OnboardingConnectStep: View {
             content
         }
         .onAppear {
-            var alreadyConnected = !store.connections.isEmpty
-            if case .signedIn = store.authState { alreadyConnected = true }
-            coordinator.skipConnectIfAlreadyConnected(alreadyConnected)
+            // Skip the required connect step only when an account is actually signed in — NOT
+            // merely when a Connection object exists. restoreAllConnections() builds a tokenless
+            // legacy Connection on a fresh install, so checking `connections.isEmpty` would
+            // wrongly skip connecting and finish onboarding signed out (Codex review).
+            if case .signedIn = store.authState {
+                coordinator.skipConnectIfAlreadyConnected(true)
+            }
         }
         .onChange(of: store.authState) { _, newState in
             guard coordinator.currentStep == .connect else { return }
@@ -474,6 +493,12 @@ struct OnboardingLaunchAtLoginStep: View {
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
 
+    /// When MDM forces launchAtLogin, the user can't change it — show the managed state and
+    /// let them continue (reconcileLaunchAtLogin already applied the forced value at launch).
+    private var isManaged: Bool {
+        store.settings.isLocked(ManagedKey.launchAtLogin)
+    }
+
     var body: some View {
         OnboardingScaffold(stepIndex: 4, stepCount: OnboardingCoordinator.Step.allCases.count) {
             VStack(spacing: 0) {
@@ -498,22 +523,32 @@ struct OnboardingLaunchAtLoginStep: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 18)
 
-                VStack(spacing: 10) {
-                    Button {
-                        store.setLaunchAtLogin(true)
+                if isManaged {
+                    OnboardingManagedNotice(
+                        message: store.settings.launchAtLoginEnabled
+                            ? "Opening at login is enabled by your organization."
+                            : "Opening at login is set by your organization."
+                    ) {
                         coordinator.advance()
-                    } label: {
-                        Text("Open Hubber at login")
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 16)
                     }
-                    .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
-                    .frame(maxWidth: 264)
+                } else {
+                    VStack(spacing: 10) {
+                        Button {
+                            store.setLaunchAtLogin(true)
+                            coordinator.advance()
+                        } label: {
+                            Text("Open Hubber at login")
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 16)
+                        }
+                        .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+                        .frame(maxWidth: 264)
 
-                    OnboardingSecondaryButton(title: "Not now") {
-                        coordinator.advance()
+                        OnboardingSecondaryButton(title: "Not now") {
+                            coordinator.advance()
+                        }
                     }
                 }
             }
