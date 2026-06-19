@@ -83,4 +83,19 @@ final class OnboardingCoordinatorTests: XCTestCase {
         sut.skipConnectIfAlreadyConnected(true) // on welcome
         XCTAssertEqual(sut.currentStep, .welcome)
     }
+
+    func testResetClearsPersistedStateSoFlowReplaysNextLaunch() {
+        let coordinator = OnboardingCoordinator(defaults: defaults)
+        coordinator.advance() // welcome -> consent (persists onboardingStep)
+        coordinator.complete() // persists onboardingCompleted
+        XCTAssertTrue(defaults.bool(forKey: "onboardingCompleted"))
+
+        OnboardingCoordinator.reset(defaults: defaults)
+
+        XCTAssertNil(defaults.object(forKey: "onboardingCompleted"))
+        XCTAssertNil(defaults.object(forKey: "onboardingStep"))
+        let resumed = OnboardingCoordinator(defaults: defaults)
+        XCTAssertFalse(resumed.isCompleted)
+        XCTAssertEqual(resumed.currentStep, .welcome)
+    }
 }

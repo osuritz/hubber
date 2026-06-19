@@ -47,4 +47,12 @@ final class OnboardingCoordinator: ObservableObject {
         isCompleted = true
         defaults.set(true, forKey: Self.completedKey)
     }
+
+    /// Clears persisted onboarding state so the full flow runs again on the next launch.
+    /// Used by the Developer panel to re-trigger onboarding for testing; takes effect on
+    /// the next start (a live coordinator instance keeps its current state until then).
+    static func reset(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: completedKey)
+        defaults.removeObject(forKey: stepKey)
+    }
 }
