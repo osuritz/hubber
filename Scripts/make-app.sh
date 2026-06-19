@@ -139,6 +139,8 @@ fi
 # ---------------------------------------------------------------------------
 # 2c. Sparkle feed URL + public key are injected from the environment so no
 #     secrets are committed. Omitted when unset (dev builds; pre-rollout CI).
+#     IMPORTANT: this must run BEFORE code signing below — mutating Info.plist
+#     after signing would invalidate the app's seal.
 # ---------------------------------------------------------------------------
 PLIST="$CONTENTS/Info.plist"
 if [[ -n "${SPARKLE_FEED_URL:-}" ]]; then
