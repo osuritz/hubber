@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let statusMenu = NSMenu()
     private let store = HubberStore(restoreOnInit: false)
+    private let updaterController = UpdaterController()
     private let metricSubscriber = MetricSubscriber()
     private var appActivationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
@@ -254,6 +255,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusMenu() {
         statusMenu.removeAllItems()
+
+        // Routed straight to Sparkle's controller so its canCheckForUpdates
+        // validation enables/disables this item without AppDelegate proxying it.
+        let checkForUpdates = statusMenu.addItem(
+            withTitle: "Check for Updates…",
+            action: updaterController.checkForUpdatesAction,
+            keyEquivalent: ""
+        )
+        checkForUpdates.target = updaterController.checkForUpdatesTarget
+
+        statusMenu.addItem(.separator())
         statusMenu.addItem(
             withTitle: "Sign Out",
             action: #selector(signOut(_:)),
@@ -265,7 +277,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(quit(_:)),
             keyEquivalent: "q"
         )
-        statusMenu.items.forEach { $0.target = self }
+        // Point the Hubber-owned items at self, but DON'T clobber the updater item
+        // (its target must stay the Sparkle controller). Separators have no target.
+        for item in statusMenu.items where item.target == nil && !item.isSeparatorItem {
+            item.target = self
+        }
     }
 
     @objc private func togglePanel(_ sender: NSStatusBarButton) {

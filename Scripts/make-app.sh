@@ -62,6 +62,10 @@ mkdir -p "$CONTENTS/Resources"
 # Copy universal binary
 cp "$BINARY" "$CONTENTS/MacOS/Hubber"
 
+# SPM links Sparkle via @rpath but emits @executable_path/../lib, not ../Frameworks.
+# Add the standard Frameworks rpath so dyld finds our embedded copy.
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$CONTENTS/MacOS/Hubber" 2>/dev/null || true
+
 # Copy SwiftPM resource bundles (e.g. Hubber_Hubber.bundle, which carries the
 # menu-bar stamp glyph) into the app so `Bundle.module` resolves them at runtime.
 # Without this the packaged .app finds no bundle and falls back to the placeholder
@@ -110,6 +114,12 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>Copyright © ${YEAR} Olivier Suritz. All rights reserved.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+    <key>SUAllowsAutomaticUpdates</key>
+    <true/>
 </dict>
 </plist>
 PLIST
@@ -139,19 +149,67 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Code signing (no --options runtime; that requires notarization).
-#    Defaults to ad-hoc ("-"). Set HUBBER_SIGN_IDENTITY to a stable self-signed
-#    code-signing certificate name to keep the signature consistent across
-#    rebuilds — that stops the repeated Keychain "allow access" prompts that
-#    ad-hoc causes (its signature changes every build). Gatekeeper still needs
-#    "Open Anyway" for a self-signed identity.
+# 2c. Sparkle feed URL + public key are injected from the environment so no
+#     secrets are committed. Omitted when unset (dev builds; pre-rollout CI).
+#     IMPORTANT: this must run BEFORE code signing below — mutating Info.plist
+#     after signing would invalidate the app's seal.
 # ---------------------------------------------------------------------------
-SIGN_IDENTITY="${HUBBER_SIGN_IDENTITY:--}"
-echo "==> Code signing $APP (identity: $SIGN_IDENTITY)"
-codesign --force --deep --sign "$SIGN_IDENTITY" "$APP"
+PLIST="$CONTENTS/Info.plist"
+if [[ -n "${SPARKLE_FEED_URL:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Add :SUFeedURL string ${SPARKLE_FEED_URL}" "$PLIST"
+  echo "==> Set SUFeedURL"
+fi
+if [[ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string ${SPARKLE_PUBLIC_ED_KEY}" "$PLIST"
+  echo "==> Set SUPublicEDKey"
+fi
 
 # ---------------------------------------------------------------------------
-# 4. Verify signature
+# 3. Embed Sparkle.framework (auto-update). SPM leaves it in the artifacts dir;
+#    it does NOT embed it for us. Discover the path (it varies by SPM version)
+#    rather than hardcoding it.
+# ---------------------------------------------------------------------------
+SPARKLE_FW="$(find .build/artifacts -name 'Sparkle.framework' -maxdepth 6 2>/dev/null | head -1)"
+if [[ -z "$SPARKLE_FW" ]]; then
+  echo "ERROR: Sparkle.framework not found under .build/artifacts — run 'swift build' first" >&2
+  exit 1
+fi
+echo "==> Embedding Sparkle.framework from $SPARKLE_FW"
+mkdir -p "$CONTENTS/Frameworks"
+cp -R "$SPARKLE_FW" "$CONTENTS/Frameworks/"   # cp -R preserves the framework's symlinks
+EMBEDDED_FW="$CONTENTS/Frameworks/Sparkle.framework"
+FW_VERSION="$EMBEDDED_FW/Versions/Current"    # symlink → the real version dir (e.g. B)
+
+# ---------------------------------------------------------------------------
+# 4. Code sign INSIDE-OUT (no --deep). --deep corrupts the nested XPC service and
+#    helper signatures. Sign the framework's components first, then the framework,
+#    then the outer app last. Identity defaults to ad-hoc; set HUBBER_SIGN_IDENTITY
+#    to the stable self-signed cert for release/verification (ad-hoc trips Sparkle's
+#    Library Validation). No --options runtime (that requires notarization).
+# ---------------------------------------------------------------------------
+SIGN_IDENTITY="${HUBBER_SIGN_IDENTITY:--}"
+echo "==> Code signing $APP inside-out (identity: $SIGN_IDENTITY)"
+
+# XPC services (present even for non-sandboxed apps; sign each individually).
+if [[ -d "$FW_VERSION/XPCServices" ]]; then
+  for xpc in "$FW_VERSION/XPCServices/"*.xpc; do
+    [[ -e "$xpc" ]] || continue
+    codesign --force --sign "$SIGN_IDENTITY" "$xpc"
+  done
+fi
+
+# Helper tools inside the framework.
+codesign --force --sign "$SIGN_IDENTITY" "$FW_VERSION/Autoupdate"
+codesign --force --sign "$SIGN_IDENTITY" "$FW_VERSION/Updater.app"
+
+# The framework itself.
+codesign --force --sign "$SIGN_IDENTITY" "$EMBEDDED_FW"
+
+# Finally the outer app (NOT --deep).
+codesign --force --sign "$SIGN_IDENTITY" "$APP"
+
+# ---------------------------------------------------------------------------
+# 5. Verify the whole nested structure.
 # ---------------------------------------------------------------------------
 echo "==> Verifying signature"
 if ! codesign --verify --deep --strict --verbose=2 "$APP" 2>&1; then

@@ -29,14 +29,11 @@ jobs:
       - name: Show toolchain
         run: swift --version
 
-      - name: Universal release build
-        run: swift build -c release --arch arm64 --arch x86_64
-
-      - name: Verify universal binary
-        run: lipo -info .build/apple/Products/Release/Hubber
-
       - name: Assemble Hubber.app and package artifacts
-        run: make dist
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Building release version $VERSION"
+          make dist VERSION="$VERSION"
 
       - name: List artifacts
         run: ls -lh dist/
