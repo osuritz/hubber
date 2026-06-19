@@ -396,6 +396,9 @@ final class HubberStore: ObservableObject {
     private var connectionCancellables = Set<AnyCancellable>()
     private var restorePrunableConnectionIDs = Set<ConnectionID>()
     private let fallbackProvider: any CodeHostProvider
+    /// Live analytics gate when telemetry is not injected (production path); nil when a
+    /// caller injects its own Telemetry (tests). Subscribed to `settings.$analyticsEnabled`.
+    private let telemetryGate: GatedTelemetrySink?
 
     // Dependencies stored for building legacy connection
     private let legacyAuthService: any GitHubAuthServicing
@@ -410,7 +413,7 @@ final class HubberStore: ObservableObject {
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
         settings: SettingsStore = SettingsStore(),
         idle: any MachineIdleProviding = SystemIdleProvider(),
-        telemetry: Telemetry = Telemetry(sink: TelemetryDeckSink()),
+        telemetry: Telemetry? = nil,
         dispatcher: any NotificationDispatching = UNNotificationDispatcher(),
         snapshotStore: SnapshotStore = SnapshotStore(),
         defaults: UserDefaults = .standard,
@@ -418,7 +421,14 @@ final class HubberStore: ObservableObject {
         connectionFactory: ((ConnectionID) throws -> Connection)? = nil
     ) {
         self.settings = settings
-        self.telemetry = telemetry
+        if let telemetry {
+            self.telemetry = telemetry
+            telemetryGate = nil
+        } else {
+            let gate = GatedTelemetrySink(enabled: settings.analyticsEnabled, underlying: TelemetryDeckSink())
+            self.telemetry = Telemetry(sink: gate)
+            telemetryGate = gate
+        }
         self.snapshotStore = snapshotStore
         self.dispatcher = dispatcher
         fallbackProvider = CachingCodeHostProvider(wrapping: GitHubProvider())
@@ -429,6 +439,12 @@ final class HubberStore: ObservableObject {
         self.connectionFactory = connectionFactory
         notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
         registry = ConnectionRegistry(defaults: defaults)
+
+        if let telemetryGate {
+            settings.$analyticsEnabled
+                .sink { [weak telemetryGate] enabled in telemetryGate?.setEnabled(enabled) }
+                .store(in: &cancellables)
+        }
 
         if restoreOnInit {
             restoreSession()

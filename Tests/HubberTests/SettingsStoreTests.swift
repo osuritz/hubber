@@ -412,8 +412,8 @@ final class SettingsStoreTests: XCTestCase {
 
     // MARK: - Task 4: analyticsEnabled + crashReportingEnabled
 
-    func testDefaultAnalyticsEnabledIsTrue() {
-        XCTAssertTrue(sut.analyticsEnabled)
+    func testDefaultAnalyticsEnabledIsFalse() {
+        XCTAssertFalse(sut.analyticsEnabled)
     }
 
     func testDefaultCrashReportingEnabledIsTrue() {

@@ -51,11 +51,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rowDensity.rawValue, forKey: "rowDensity") }
     }
 
-    // MARK: - Privacy / Telemetry kill-switches (#53)
+    // MARK: - Privacy / Telemetry kill-switches (#53, #102)
 
     //
-    // Both default to true. Managed-lockable via MDM; user-toggleable in the Privacy settings
-    // section. Gated at app launch in applicationDidFinishLaunching (main.swift).
+    // analyticsEnabled defaults to FALSE (opt-in, GDPR-safe — see #102); crashReportingEnabled
+    // defaults to true (local os_log only, transmits nothing). Both MDM-lockable and user-toggleable
+    // in Privacy settings. Analytics is gated LIVE via GatedTelemetrySink (#103), not just at launch.
 
     @Published var analyticsEnabled: Bool {
         didSet { defaults.set(analyticsEnabled, forKey: "analyticsEnabled") }
@@ -158,7 +159,7 @@ final class SettingsStore: ObservableObject {
             defaultsKey: ManagedKey.analyticsEnabled,
             defaults: defaults,
             managed: managed,
-            fallback: true
+            fallback: false
         )
         crashReportingEnabled = Self.bool(
             managedKey: ManagedKey.crashReportingEnabled,

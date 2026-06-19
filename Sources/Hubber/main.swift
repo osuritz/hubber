@@ -144,15 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Telemetry / crash reporting
 
-    /// Gates TelemetryDeck and MetricKit on the user/MDM privacy kill-switches.
-    ///
-    /// Both `analyticsEnabled` and `crashReportingEnabled` default to `true`.
-    /// MDM can force either to `false`; users can also toggle them in Privacy settings.
-    /// Sinks that are not started here are also not removed in `applicationWillTerminate`.
+    /// Crash/hang diagnostics (MetricKit → local os_log only) are gated here at launch.
+    /// Analytics (TelemetryDeck) is gated LIVE by GatedTelemetrySink, so it is NOT started here.
     private func startTelemetry() {
-        if store.settings.analyticsEnabled {
-            TelemetryDeckSink.initialize()
-        }
         if store.settings.crashReportingEnabled {
             MXMetricManager.shared.add(metricSubscriber)
             metricKitStarted = true
