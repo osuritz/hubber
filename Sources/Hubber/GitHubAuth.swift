@@ -429,7 +429,8 @@ final class HubberStore: ObservableObject {
             self.telemetry = telemetry
             telemetryGate = nil
         } else {
-            let gate = injectedGate ?? GatedTelemetrySink(enabled: settings.analyticsEnabled, underlying: TelemetryDeckSink())
+            let gate = injectedGate
+                ?? GatedTelemetrySink(enabled: settings.analyticsEnabled, underlying: TelemetryDeckSink())
             self.telemetry = Telemetry(sink: gate)
             telemetryGate = gate
         }
