@@ -204,10 +204,13 @@ struct SettingsView: View {
                             Text("Diagnostic logging")
                                 .font(HubberType.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
-                            Text("Crash & hang diagnostics are written to your Mac's local log only — never sent anywhere.")
-                                .font(HubberType.settingsSub)
-                                .foregroundStyle(HubberDesign.text2)
-                                .fixedSize(horizontal: false, vertical: true)
+                            Text(
+                                "Crash & hang diagnostics are written to your Mac's local log "
+                                    + "only — never sent anywhere."
+                            )
+                            .font(HubberType.settingsSub)
+                            .foregroundStyle(HubberDesign.text2)
+                            .fixedSize(horizontal: false, vertical: true)
                         }
                         Toggle("", isOn: $settings.crashReportingEnabled)
                             .toggleStyle(.switch)

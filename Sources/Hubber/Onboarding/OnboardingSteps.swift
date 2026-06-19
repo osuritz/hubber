@@ -232,8 +232,9 @@ struct OnboardingConnectStep: View {
             content
         }
         .onAppear {
-            if case .signedIn = store.authState { coordinator.skipConnectIfAlreadyConnected(true) }
-            else if !store.connections.isEmpty { coordinator.skipConnectIfAlreadyConnected(true) }
+            var alreadyConnected = !store.connections.isEmpty
+            if case .signedIn = store.authState { alreadyConnected = true }
+            coordinator.skipConnectIfAlreadyConnected(alreadyConnected)
         }
         .onChange(of: store.authState) { _, newState in
             if case .signedIn = newState { coordinator.advance() }
@@ -281,6 +282,18 @@ struct OnboardingConnectStep: View {
                     .padding(.bottom, 12)
             }
 
+            signInButton(errorMessage: errorMessage)
+
+            Button("Add GitHub Enterprise or GitLab…") { showingAdd = true }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(HubberDesign.text2)
+                .padding(.top, 12)
+        }
+    }
+
+    private func signInButton(errorMessage: String?) -> some View {
+        VStack(spacing: 0) {
             Button { store.startSignIn() } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "person.crop.circle")
@@ -307,12 +320,6 @@ struct OnboardingConnectStep: View {
                 .foregroundStyle(HubberDesign.text2)
                 .padding(.top, 10)
             }
-
-            Button("Add GitHub Enterprise or GitLab…") { showingAdd = true }
-                .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(HubberDesign.text2)
-                .padding(.top, 12)
         }
     }
 
@@ -438,14 +445,17 @@ struct OnboardingLaunchAtLoginStep: View {
                     .tracking(-0.3)
                     .foregroundStyle(HubberDesign.text)
                     .padding(.bottom, 8)
-                Text("Hubber works best running quietly in your menu bar. Open it automatically when you log in so you never miss a review.")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(HubberDesign.text2)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-                    .frame(maxWidth: 264)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 18)
+                Text(
+                    "Hubber works best running quietly in your menu bar. Open it automatically "
+                        + "when you log in so you never miss a review."
+                )
+                .font(.system(size: 12.5))
+                .foregroundStyle(HubberDesign.text2)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .frame(maxWidth: 264)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 18)
 
                 VStack(spacing: 10) {
                     Button {
