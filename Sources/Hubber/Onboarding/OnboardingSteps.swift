@@ -42,7 +42,7 @@ struct OnboardingWelcomeStep: View {
     var body: some View {
         OnboardingScaffold(stepIndex: 0, stepCount: OnboardingCoordinator.Step.allCases.count) {
             VStack(spacing: 0) {
-                appIconTile
+                appIcon
                 Text("Welcome to Hubber")
                     .font(.system(size: 19, weight: .semibold))
                     .tracking(-0.4)
@@ -69,17 +69,57 @@ struct OnboardingWelcomeStep: View {
         }
     }
 
-    private var appIconTile: some View {
+    /// The app's own icon — the canonical "Welcome to <App>" mark. Falls back to the brand
+    /// menubar glyph on its tile when running outside a packaged `.app` (e.g. SwiftUI previews).
+    private var appIcon: some View {
+        Group {
+            if isBundledApp {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 64, height: 64)
+                    .shadow(color: .black.opacity(0.22), radius: 9, y: 5)
+            } else {
+                menubarGlyphTile
+            }
+        }
+        .padding(.bottom, 20)
+    }
+
+    private var isBundledApp: Bool {
+        Bundle.main.bundleURL.pathExtension == "app"
+    }
+
+    /// Dark rounded tile carrying the bundled menubar "stamp" glyph (template, tinted white).
+    private var menubarGlyphTile: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(light: "#1f2328", dark: "#0d1117"))
                 .frame(width: 64, height: 64)
                 .shadow(color: .black.opacity(0.30), radius: 11, y: 8)
-            Image(systemName: "arrow.triangle.pull")
-                .font(.system(size: 30, weight: .medium))
-                .foregroundStyle(.white)
+            if let glyph = Self.menubarGlyph {
+                Image(nsImage: glyph)
+                    .renderingMode(.template)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 32, height: 32)
+                    .foregroundStyle(.white)
+            } else {
+                Image(systemName: "arrow.triangle.pull")
+                    .font(.system(size: 30, weight: .medium))
+                    .foregroundStyle(.white)
+            }
         }
-        .padding(.bottom, 20)
+    }
+
+    /// The bundled menubar glyph (vector PDF, template). Mirrors `AppDelegate.menubarGlyph()`.
+    private static var menubarGlyph: NSImage? {
+        guard
+            let url = Bundle.module.url(forResource: "stamp-vector", withExtension: "pdf"),
+            let image = NSImage(contentsOf: url)
+        else { return nil }
+        image.isTemplate = true
+        return image
     }
 }
 
