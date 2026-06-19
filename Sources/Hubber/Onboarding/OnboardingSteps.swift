@@ -329,6 +329,96 @@ struct OnboardingConnectStep: View {
     }
 }
 
+// MARK: - Notifications (#107)
+
+struct OnboardingNotificationsStep: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+    @ObservedObject var store: HubberStore
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var requesting = false
+
+    var body: some View {
+        OnboardingScaffold(stepIndex: 3, stepCount: OnboardingCoordinator.Step.allCases.count) {
+            VStack(spacing: 0) {
+                Image(systemName: "bell.badge")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(HubberDesign.accent)
+                    .padding(.bottom, 16)
+                Text("Stay in the loop")
+                    .font(.system(size: 17, weight: .semibold))
+                    .tracking(-0.3)
+                    .foregroundStyle(HubberDesign.text)
+                    .padding(.bottom, 8)
+                Text(
+                    "Get a heads-up the moment a review is requested from you. "
+                        + "You control exactly which events notify you in Settings."
+                )
+                .font(.system(size: 12.5))
+                .foregroundStyle(HubberDesign.text2)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .frame(maxWidth: 264)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 18)
+
+                if store.notificationsDenied {
+                    deniedGuidance
+                } else {
+                    choiceButtons
+                }
+            }
+        }
+    }
+
+    private var choiceButtons: some View {
+        VStack(spacing: 10) {
+            Button {
+                requesting = true
+                Task {
+                    await store.requestNotificationAuthorization()
+                    requesting = false
+                    coordinator.advance()
+                }
+            } label: {
+                Text(requesting ? "Requesting…" : "Enable notifications")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+            }
+            .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+            .frame(maxWidth: 264)
+            .disabled(requesting)
+
+            OnboardingSecondaryButton(title: "Not now") {
+                coordinator.advance()
+            }
+        }
+    }
+
+    private var deniedGuidance: some View {
+        VStack(spacing: 10) {
+            Text(
+                "Notifications are turned off for Hubber in macOS. "
+                    + "You can enable them in System Settings → Notifications → Hubber."
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(HubberDesign.text2)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 264)
+            Button { coordinator.advance() } label: {
+                Text("Continue")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+            }
+            .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+            .frame(maxWidth: 264)
+        }
+    }
+}
+
 // MARK: - Step stubs (replaced by later tasks)
 
 /// Minimal placeholder used until the real step lands. Title + Continue (advances the flow).

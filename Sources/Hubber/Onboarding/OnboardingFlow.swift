@@ -16,7 +16,7 @@ struct OnboardingFlow: View {
             case .connect:
                 OnboardingConnectStep(coordinator: coordinator, store: store)
             case .notifications:
-                OnboardingStepStub(coordinator: coordinator, stepIndex: 3, title: "Notifications")
+                OnboardingNotificationsStep(coordinator: coordinator, store: store)
             case .launchAtLogin:
                 OnboardingStepStub(coordinator: coordinator, stepIndex: 4, title: "Launch at login")
             }
