@@ -2,6 +2,12 @@ import Foundation
 import XCTest
 @testable import Hubber
 
+// MARK: - Minimal telemetry sink (avoids TelemetryDeck side effects in tests)
+
+private struct LaunchAtLoginNullTelemetrySink: TelemetrySink {
+    func send(_: String, _: [String: String]) {}
+}
+
 /// In-memory fake — never touches SMAppService.
 final class FakeLaunchAtLogin: LaunchAtLoginManaging, @unchecked Sendable {
     private let lock = NSLock()
@@ -64,6 +70,42 @@ final class LaunchAtLoginTests: XCTestCase {
         let fake = FakeLaunchAtLogin()
         try fake.setEnabled(true)
         XCTAssertTrue(fake.isEnabled)
+        XCTAssertEqual(fake.calls, [true])
+    }
+
+    // MARK: - HubberStore integration
+
+    func testSetLaunchAtLoginPersistsAndApplies() {
+        let settings = SettingsStore(defaults: defaults)
+        let fake = FakeLaunchAtLogin()
+        let store = HubberStore(
+            settings: settings,
+            telemetry: Telemetry(sink: LaunchAtLoginNullTelemetrySink()),
+            snapshotStore: SnapshotStore(snapshotURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("lal-test-\(UUID()).json")),
+            defaults: defaults,
+            restoreOnInit: false,
+            launchAtLogin: fake
+        )
+        store.setLaunchAtLogin(true)
+        XCTAssertTrue(settings.launchAtLoginEnabled)
+        XCTAssertTrue(defaults.bool(forKey: "launchAtLogin"))
+        XCTAssertEqual(fake.calls, [true])
+    }
+
+    func testReconcileLaunchAtLoginAppliesResolvedState() {
+        defaults.set(true, forKey: "launchAtLogin")
+        let fake = FakeLaunchAtLogin()
+        let store = HubberStore(
+            settings: SettingsStore(defaults: defaults),
+            telemetry: Telemetry(sink: LaunchAtLoginNullTelemetrySink()),
+            snapshotStore: SnapshotStore(snapshotURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("lal-reconcile-\(UUID()).json")),
+            defaults: defaults,
+            restoreOnInit: false,
+            launchAtLogin: fake
+        )
+        store.reconcileLaunchAtLogin()
         XCTAssertEqual(fake.calls, [true])
     }
 }
