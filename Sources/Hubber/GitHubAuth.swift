@@ -402,9 +402,6 @@ final class HubberStore: ObservableObject {
     private let legacyProvider: any CodeHostProvider
     private let legacyTokenStore: any GitHubTokenStoring
     private let legacyIdle: any MachineIdleProviding
-    /// Optional factory used by tests to supply pre-built `Connection` objects during
-    /// `restoreAllConnections()`. When `nil`, the store builds connections from injected
-    /// legacy deps (single-connection path).
     private let connectionFactory: ((ConnectionID) throws -> Connection)?
 
     init(
@@ -468,19 +465,11 @@ final class HubberStore: ObservableObject {
 
     // MARK: - Coordinator: add / remove / restore
 
-    /// Builds a new `Connection` with injected or default dependencies and appends it.
-    /// - Parameters:
-    ///   - id: The `ConnectionID` that identifies this connection (and keys its stores).
-    ///   - provider: Optional provider override (for tests). Defaults to a fresh caching GitHub provider.
-    ///   - authService: Optional auth-service override. Defaults to the store's legacy auth service.
-    ///   - tokenStore: Optional token-store override. Defaults to a `GitHubTokenStore.makeStore(for:id)`.
-    ///   - snapshotStore: Optional snapshot-store override. Defaults to `SnapshotStore(connectionID:id)`.
-    ///   - scheduler: Optional scheduler override. Defaults to a fresh `RefreshScheduler`.
     @discardableResult
     func addConnection(
         id: ConnectionID,
         provider: (any CodeHostProvider)? = nil,
-        authService: (any GitHubAuthServicing)? = nil,
+        authService: (any GitHubDeviceFlowServicing)? = nil,
         tokenStore: (any GitHubTokenStoring)? = nil,
         snapshotStore: SnapshotStore? = nil,
         scheduler: RefreshScheduler? = nil
@@ -489,21 +478,33 @@ final class HubberStore: ObservableObject {
             return existing
         }
 
-        let resolvedProvider = provider ?? CachingCodeHostProvider(wrapping: GitHubProvider())
-        let resolvedAuthService = authService ?? legacyAuthService
-        let resolvedTokenStore = tokenStore ?? GitHubTokenStore.makeStore(for: id)
-        let resolvedSnapshotStore = snapshotStore ?? SnapshotStore(connectionID: id)
-        let resolvedScheduler = scheduler ?? RefreshScheduler(idle: legacyIdle)
+        let conn: Connection
+        if
+            provider == nil,
+            authService == nil,
+            tokenStore == nil,
+            snapshotStore == nil,
+            scheduler == nil,
+            let connectionFactory {
+            conn = try connectionFactory(id)
+        } else {
+            let factoryBuilt = ConnectionFactory.providerAndAuth(for: id)
+            let resolvedProvider = provider ?? factoryBuilt.provider
+            let resolvedAuthService = authService ?? factoryBuilt.authService
+            let resolvedTokenStore = tokenStore ?? GitHubTokenStore.makeStore(for: id)
+            let resolvedSnapshotStore = snapshotStore ?? SnapshotStore(connectionID: id)
+            let resolvedScheduler = scheduler ?? RefreshScheduler(idle: legacyIdle)
 
-        let conn = Connection(
-            id: id,
-            provider: resolvedProvider,
-            authService: resolvedAuthService,
-            tokenStore: resolvedTokenStore,
-            snapshotStore: resolvedSnapshotStore,
-            scheduler: resolvedScheduler,
-            settings: settings
-        )
+            conn = Connection(
+                id: id,
+                provider: resolvedProvider,
+                authService: resolvedAuthService,
+                tokenStore: resolvedTokenStore,
+                snapshotStore: resolvedSnapshotStore,
+                scheduler: resolvedScheduler,
+                settings: settings
+            )
+        }
         wireCallbacks(on: conn)
         connections.append(conn)
         rebindConnections()
@@ -562,10 +563,11 @@ final class HubberStore: ObservableObject {
                     guard let c = try? factory(id) else { continue }
                     conn = c
                 } else {
+                    let resolved = ConnectionFactory.providerAndAuth(for: id)
                     conn = Connection(
                         id: id,
-                        provider: legacyProvider,
-                        authService: legacyAuthService,
+                        provider: resolved.provider,
+                        authService: resolved.authService,
                         tokenStore: GitHubTokenStore.makeStore(for: id),
                         snapshotStore: SnapshotStore(connectionID: id),
                         scheduler: RefreshScheduler(idle: legacyIdle),
@@ -603,7 +605,10 @@ final class HubberStore: ObservableObject {
     }
 
     private func recomputeAggregate() {
-        data = ConnectionAggregator.aggregate(connections.map(\.data))
+        data = ConnectionAggregator.aggregate(
+            connections.map { (id: $0.id, data: $0.data) },
+            visibility: settings.connectionVisibility
+        )
         isRefreshingPullRequests = connections.contains { $0.isRefreshingPullRequests }
     }
 
@@ -674,6 +679,12 @@ final class HubberStore: ObservableObject {
         connections.forEach { $0.isPopoverOpen = open }
     }
 
+    /// Shows or hides a connection in the unified inbox + badge. Persisted via SettingsStore.
+    func setConnectionVisible(_ id: ConnectionID, _ visible: Bool) {
+        settings.connectionVisibility = settings.connectionVisibility.setting(id, visible: visible)
+        recomputeAggregate()
+    }
+
     var usernameDisplay: String {
         primaryConnection?.usernameDisplay ?? "· not signed in"
     }
@@ -687,6 +698,19 @@ final class HubberStore: ObservableObject {
     /// device code and switch to the browser without the panel closing on them.
     var isAuthenticating: Bool {
         primaryConnection?.isAuthenticating ?? false
+    }
+
+    /// True while the add-account sheet is open (any provider/step). Like `isAuthenticating`, this
+    /// pins the popover so hopping to the browser — authorizing a device code, or following the
+    /// "create a token" link — doesn't dismiss the in-progress add flow. Set by `AddAccountView`'s
+    /// lifecycle. (The add-account device flow runs via a standalone auth service, not a
+    /// `Connection`, so `isAuthenticating` alone never covers it.)
+    /// `shouldPinPanel` + `addResolvedAccount` live in the `HubberStore+AddAccount` extension; this
+    /// stored property and its setter stay here because `private(set)` is file-scoped.
+    @Published private(set) var isAddingAccount = false
+
+    func setAddingAccount(_ active: Bool) {
+        isAddingAccount = active
     }
 
     func startSignIn() {

@@ -184,6 +184,31 @@ final class ConnectionAggregatorTests: XCTestCase {
         )
     }
 
+    /// #5 — conflicting non-pending reviewer states must merge deterministically (order-independent),
+    /// most-advanced (changesRequested > approved > commented > pending) winning.
+    func testMergedBaselineReviewerStateIsDeterministic() {
+        func snap(_ state: ReviewerState) -> OutgoingSnapshot {
+            OutgoingSnapshot(
+                reviewerStates: ["alice": state.rawValue],
+                ci: PullRequestCI.passing.rawValue,
+                mergeable: true,
+                approved: false,
+                repo: "acme/api",
+                number: 7,
+                title: "t",
+                url: nil
+            )
+        }
+        let a = ReviewSnapshot(incomingIDs: [], outgoing: ["pr-7": snap(.approved)])
+        let b = ReviewSnapshot(incomingIDs: [], outgoing: ["pr-7": snap(.changesRequested)])
+
+        let ab = ConnectionAggregator.mergedBaseline([a, b]).outgoing["pr-7"]
+        let ba = ConnectionAggregator.mergedBaseline([b, a]).outgoing["pr-7"]
+
+        XCTAssertEqual(ab?.reviewerStates["alice"], ReviewerState.changesRequested.rawValue)
+        XCTAssertEqual(ab?.reviewerStates["alice"], ba?.reviewerStates["alice"]) // order-independent
+    }
+
     private func data(
         incoming: [IncomingReview] = [],
         outgoing: [OutgoingReview] = [],

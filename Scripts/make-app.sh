@@ -66,6 +66,18 @@ cp "$BINARY" "$CONTENTS/MacOS/Hubber"
 # Add the standard Frameworks rpath so dyld finds our embedded copy.
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$CONTENTS/MacOS/Hubber" 2>/dev/null || true
 
+# Copy SwiftPM resource bundles (e.g. Hubber_Hubber.bundle, which carries the
+# menu-bar stamp glyph) into the app so `Bundle.module` resolves them at runtime.
+# Without this the packaged .app finds no bundle and falls back to the placeholder
+# SF Symbol. The bundles are emitted alongside the built binary.
+PRODUCTS_DIR="$(dirname "$BINARY")"
+shopt -s nullglob
+for bundle in "$PRODUCTS_DIR"/*.bundle; do
+  echo "==> Bundling resources: $(basename "$bundle")"
+  cp -R "$bundle" "$CONTENTS/Resources/"
+done
+shopt -u nullglob
+
 # Write PkgInfo
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 

@@ -86,6 +86,17 @@ final class SettingsStore: ObservableObject {
         ProviderAccessPolicy(allowPersonalGitHub: allowPersonalGitHub, allowlist: providerAllowlist)
     }
 
+    // MARK: - Connection visibility (#61)
+
+    /// Which connections are shown in the unified inbox. Persisted as JSON in UserDefaults.
+    @Published var connectionVisibility: ConnectionVisibility {
+        didSet {
+            if let data = try? JSONEncoder().encode(connectionVisibility) {
+                defaults.set(data, forKey: "connectionVisibility")
+            }
+        }
+    }
+
     // MARK: - Notifications (#37)
 
     /// Master toggle — when false, no notifications are sent regardless of per-type flags.
@@ -111,6 +122,11 @@ final class SettingsStore: ObservableObject {
 
     @Published var notifyPRMerged: Bool {
         didSet { defaults.set(notifyPRMerged, forKey: "notifyPRMerged") }
+    }
+
+    /// When false, accounts hidden via the visibility toggles do not produce notifications.
+    @Published var notifyHiddenAccounts: Bool {
+        didSet { defaults.set(notifyHiddenAccounts, forKey: "notifyHiddenAccounts") }
     }
 
     /// The set of enabled event types (empty when `notificationsEnabled == false`).
@@ -172,6 +188,8 @@ final class SettingsStore: ObservableObject {
             fallback: true
         )
         providerAllowlist = Self.resolveProviderAllowlist(defaults: defaults, managed: managed)
+        connectionVisibility = Self.resolveConnectionVisibility(defaults: defaults)
+        notifyHiddenAccounts = Self.resolveNotifyHiddenAccounts(defaults: defaults, managed: managed)
     }
 
     // MARK: - isLocked
@@ -413,5 +431,27 @@ final class SettingsStore: ObservableObject {
             return arr
         }
         return (defaults.array(forKey: ManagedKey.providerAllowlist) as? [String]) ?? []
+    }
+
+    /// Loads persisted connection visibility (UserDefaults only — not MDM-managed).
+    private static func resolveConnectionVisibility(defaults: UserDefaults) -> ConnectionVisibility {
+        guard
+            let data = defaults.data(forKey: "connectionVisibility"),
+            let value = try? JSONDecoder().decode(ConnectionVisibility.self, from: data)
+        else { return ConnectionVisibility() }
+        return value
+    }
+
+    private static func resolveNotifyHiddenAccounts(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> Bool {
+        bool(
+            managedKey: "notifyHiddenAccounts",
+            defaultsKey: "notifyHiddenAccounts",
+            defaults: defaults,
+            managed: managed,
+            fallback: true
+        )
     }
 }

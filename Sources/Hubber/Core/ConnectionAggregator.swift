@@ -48,6 +48,15 @@ enum ConnectionAggregator {
         return HubberData(incoming: incoming, outgoing: outgoing, drafts: drafts)
     }
 
+    /// Aggregates only the visible connections' data. Pure — takes (id, data) pairs so it is
+    /// testable without building `Connection`s / starting schedulers.
+    static func aggregate(
+        _ items: [(id: ConnectionID, data: HubberData)],
+        visibility: ConnectionVisibility
+    ) -> HubberData {
+        aggregate(items.filter { visibility.isVisible($0.id) }.map(\.data))
+    }
+
     /// Merges multiple per-connection baselines into a single union baseline for the diff.
     ///
     /// - Incoming IDs: plain set union.
@@ -84,12 +93,8 @@ enum ConnectionAggregator {
     ) -> OutgoingSnapshot {
         var mergedReviewerStates = first.reviewerStates
         for (login, state) in second.reviewerStates {
-            if let existingState = mergedReviewerStates[login] {
-                // Non-pending state wins over pending
-                let existingIsPending = existingState == ReviewerState.pending.rawValue
-                if existingIsPending {
-                    mergedReviewerStates[login] = state
-                }
+            if let existing = mergedReviewerStates[login] {
+                mergedReviewerStates[login] = Self.mostAdvancedReviewerState(existing, state)
             } else {
                 mergedReviewerStates[login] = state
             }
@@ -106,5 +111,21 @@ enum ConnectionAggregator {
             title: first.title,
             url: first.url
         )
+    }
+
+    /// Deterministic, order-independent tie-break for a reviewer observed in two baselines:
+    /// the most-advanced state wins, so a reviewer that has progressed in ANY baseline is
+    /// treated as already-observed and won't spuriously re-notify.
+    private static func mostAdvancedReviewerState(_ a: String, _ b: String) -> String {
+        reviewerStatePriority(a) >= reviewerStatePriority(b) ? a : b
+    }
+
+    private static func reviewerStatePriority(_ raw: String) -> Int {
+        switch raw {
+        case ReviewerState.changesRequested.rawValue: 3
+        case ReviewerState.approved.rawValue: 2
+        case ReviewerState.commented.rawValue: 1
+        default: 0 // pending / unknown
+        }
     }
 }

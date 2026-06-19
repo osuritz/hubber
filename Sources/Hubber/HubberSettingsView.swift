@@ -8,11 +8,9 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // GitHub Account
-            SettingsSection(title: "GitHub Account") {
-                SettingsGroup {
-                    GitHubAuthSettingsView(store: store)
-                }
+            // Accounts
+            SettingsSection(title: "Accounts") {
+                AccountsSettingsSection(store: store, settings: settings)
             }
 
             // Incoming Reviews

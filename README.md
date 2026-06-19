@@ -144,3 +144,20 @@ If the status item is hard to find, look on the right side of the macOS menu bar
 - Persist settings
 - Add keyboard shortcuts that match the footer hints
 - Derive the menu-bar badge from live review counts
+
+## License
+
+Hubber is **dual-licensed**:
+
+- **GPL-3.0** (open source) — see [`LICENSE`](LICENSE). Use, modify, and redistribute
+  Hubber under the GNU General Public License v3.0; any version you distribute must also
+  be GPL-3.0 with its source.
+- **Commercial license** — for use without the copyleft obligations (e.g. shipping a
+  closed-source derivative or embedding Hubber in a proprietary product) and for
+  enterprise support. See [`COMMERCIAL.md`](COMMERCIAL.md).
+
+Using Hubber as-is — including inside a company — is free under GPL-3.0; a commercial
+license is only needed to distribute a proprietary derivative or to obtain commercial
+support.
+
+Copyright © 2026 Olivier Suritz.
