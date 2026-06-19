@@ -43,18 +43,27 @@ struct OnboardingWelcomeStep: View {
             VStack(spacing: 0) {
                 appIconTile
                 Text("Welcome to Hubber")
-                    .font(.system(size: 19, weight: .semibold)).tracking(-0.4)
-                    .foregroundStyle(HubberDesign.text).padding(.bottom, 8)
+                    .font(.system(size: 19, weight: .semibold))
+                    .tracking(-0.4)
+                    .foregroundStyle(HubberDesign.text)
+                    .padding(.bottom, 8)
                 Text("Keep an eye on your PR reviews, CI, and drafts — right from the menu bar. Let's get you set up.")
-                    .font(.system(size: 12.5)).foregroundStyle(HubberDesign.text2)
-                    .multilineTextAlignment(.center).lineSpacing(3)
-                    .frame(maxWidth: 264).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(HubberDesign.text2)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 264)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 24)
                 Button { coordinator.advance() } label: {
-                    Text("Get started").font(.system(size: 13.5, weight: .semibold))
-                        .frame(maxWidth: .infinity).padding(.vertical, 10).padding(.horizontal, 16)
+                    Text("Get started")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
                 }
-                .buttonStyle(SignInButtonStyle(colorScheme: colorScheme)).frame(maxWidth: 264)
+                .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+                .frame(maxWidth: 264)
             }
         }
     }
@@ -66,7 +75,8 @@ struct OnboardingWelcomeStep: View {
                 .frame(width: 64, height: 64)
                 .shadow(color: .black.opacity(0.30), radius: 11, y: 8)
             Image(systemName: "arrow.triangle.pull")
-                .font(.system(size: 30, weight: .medium)).foregroundStyle(.white)
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(.white)
         }
         .padding(.bottom, 20)
     }
@@ -84,12 +94,18 @@ struct OnboardingStepStub: View {
     var body: some View {
         OnboardingScaffold(stepIndex: stepIndex, stepCount: OnboardingCoordinator.Step.allCases.count) {
             VStack(spacing: 16) {
-                Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(HubberDesign.text)
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(HubberDesign.text)
                 Button { coordinator.advance() } label: {
-                    Text("Continue").font(.system(size: 13.5, weight: .semibold))
-                        .frame(maxWidth: .infinity).padding(.vertical, 10).padding(.horizontal, 16)
+                    Text("Continue")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
                 }
-                .buttonStyle(SignInButtonStyle(colorScheme: colorScheme)).frame(maxWidth: 264)
+                .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+                .frame(maxWidth: 264)
             }
         }
     }
