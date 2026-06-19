@@ -451,6 +451,13 @@ final class HubberStore: ObservableObject {
                 .store(in: &cancellables)
         }
 
+        // Re-publish when the nested SettingsStore changes so views observing this
+        // store (e.g. the popover header badges reading settings.tabBadgeMode) refresh
+        // live instead of waiting for an unrelated invalidation.
+        settings.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
         if restoreOnInit {
             restoreSession()
         }
