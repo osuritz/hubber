@@ -63,6 +63,7 @@ struct CFManagedPreferences: ManagedPreferences {
 //   sloWindowHours              Int          sloWindowHours          sloHours
 //   sloDisplay                  String       sloDisplay              sloDisplay
 //   badgeMode                   String       badgeMode               badgeMode
+//   tabBadgeMode                String       tabBadgeMode            tabBadgeMode
 //   incomingMode                String       incomingMode            incomingMode
 //   unresolvedThreadMode        String       unresolvedThreadMode    unresolvedMode
 //   rowDensity                  String|Int   rowDensity              rowDensity
