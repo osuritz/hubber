@@ -34,4 +34,15 @@ final class UpdaterController {
     var checkForUpdatesAction: Selector {
         #selector(SPUStandardUpdaterController.checkForUpdates(_:))
     }
+
+    /// True only when this build carries an update feed (`SUFeedURL`), i.e. release/CI builds
+    /// where Sparkle can actually check for updates. Dev builds (and any build without the feed
+    /// injected) omit it, so the "Check for Updates…" menu item is hidden rather than erroring
+    /// on a missing feed. Re-appears automatically once a feed ships (see #113).
+    var isUpdateMechanismAvailable: Bool {
+        guard let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String else {
+            return false
+        }
+        return !feed.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 }

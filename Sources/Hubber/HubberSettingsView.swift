@@ -1,4 +1,11 @@
+import AppKit
 import SwiftUI
+
+/// Stable in-app privacy-policy link (GitHub-hosted PRIVACY.md). Reused by the onboarding
+/// consent step. See #104.
+enum PrivacyLinks {
+    static let privacyPolicy = URL(string: "https://github.com/osuritz/hubber/blob/main/PRIVACY.md")!
+}
 
 // MARK: - SettingsView
 
@@ -122,6 +129,29 @@ struct SettingsView: View {
                 }
             }
 
+            // Launch at login (#106)
+            SettingsSection(title: "General") {
+                SettingsGroup {
+                    SettingsRow(isLast: true) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Open at login")
+                                .font(HubberType.settingsLabel)
+                                .foregroundStyle(HubberDesign.text)
+                            Text("Start Hubber automatically when you log in.")
+                                .font(HubberType.settingsSub)
+                                .foregroundStyle(HubberDesign.text2)
+                        }
+                        Toggle("", isOn: Binding(
+                            get: { settings.launchAtLoginEnabled },
+                            set: { store.setLaunchAtLogin($0) }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .disabled(settings.isLocked(ManagedKey.launchAtLogin))
+                    }
+                }
+            }
+
             // Menubar Badge
             SettingsSection(title: "Menubar Badge") {
                 SettingsGroup {
@@ -167,21 +197,37 @@ struct SettingsView: View {
                             .disabled(settings.isLocked(ManagedKey.analyticsEnabled))
                     }
 
-                    // Crash reporting toggle
-                    SettingsRow(isLast: true) {
+                    // Crash reporting toggle — LOCAL os_log only (transmits nothing). Label must
+                    // not imply transmission. See #104.
+                    SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Send crash & hang reports")
+                            Text("Diagnostic logging")
                                 .font(HubberType.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
-                            Text("Reports help diagnose stability issues. No PII is included.")
-                                .font(HubberType.settingsSub)
-                                .foregroundStyle(HubberDesign.text2)
-                                .fixedSize(horizontal: false, vertical: true)
+                            Text(
+                                "Crash, hang, and performance diagnostics are written to your "
+                                    + "Mac's local log only — never sent anywhere."
+                            )
+                            .font(HubberType.settingsSub)
+                            .foregroundStyle(HubberDesign.text2)
+                            .fixedSize(horizontal: false, vertical: true)
                         }
                         Toggle("", isOn: $settings.crashReportingEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .disabled(settings.isLocked(ManagedKey.crashReportingEnabled))
+                    }
+
+                    // Privacy policy link (#104)
+                    SettingsRow(isLast: true) {
+                        Text("Privacy Policy")
+                            .font(HubberType.settingsLabel)
+                            .foregroundStyle(HubberDesign.text)
+                        Spacer()
+                        Button("Read") { NSWorkspace.shared.open(PrivacyLinks.privacyPolicy) }
+                            .buttonStyle(.plain)
+                            .font(HubberType.settingsSub)
+                            .foregroundStyle(HubberDesign.accent)
                     }
                 }
             }

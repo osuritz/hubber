@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusItem()
         subscribeToStore()
         store.restoreAllConnections()
+        store.reconcileLaunchAtLogin()
 
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in
@@ -144,15 +145,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Telemetry / crash reporting
 
-    /// Gates TelemetryDeck and MetricKit on the user/MDM privacy kill-switches.
-    ///
-    /// Both `analyticsEnabled` and `crashReportingEnabled` default to `true`.
-    /// MDM can force either to `false`; users can also toggle them in Privacy settings.
-    /// Sinks that are not started here are also not removed in `applicationWillTerminate`.
+    /// Crash/hang diagnostics (MetricKit → local os_log only) are gated here at launch.
+    /// Analytics (TelemetryDeck) is gated LIVE by GatedTelemetrySink, so it is NOT started here.
     private func startTelemetry() {
-        if store.settings.analyticsEnabled {
-            TelemetryDeckSink.initialize()
-        }
         if store.settings.crashReportingEnabled {
             MXMetricManager.shared.add(metricSubscriber)
             metricKitStarted = true
@@ -256,16 +251,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configureStatusMenu() {
         statusMenu.removeAllItems()
 
-        // Routed straight to Sparkle's controller so its canCheckForUpdates
-        // validation enables/disables this item without AppDelegate proxying it.
-        let checkForUpdates = statusMenu.addItem(
-            withTitle: "Check for Updates…",
-            action: updaterController.checkForUpdatesAction,
-            keyEquivalent: ""
-        )
-        checkForUpdates.target = updaterController.checkForUpdatesTarget
+        // Only surface "Check for Updates…" when this build actually carries an update feed.
+        // Dev builds omit SUFeedURL, so Sparkle would error on a missing feed — hide the item
+        // until a feed ships (#113). Routed straight to Sparkle's controller so its
+        // canCheckForUpdates validation enables/disables it without AppDelegate proxying.
+        if updaterController.isUpdateMechanismAvailable {
+            let checkForUpdates = statusMenu.addItem(
+                withTitle: "Check for Updates…",
+                action: updaterController.checkForUpdatesAction,
+                keyEquivalent: ""
+            )
+            checkForUpdates.target = updaterController.checkForUpdatesTarget
+            statusMenu.addItem(.separator())
+        }
 
-        statusMenu.addItem(.separator())
         statusMenu.addItem(
             withTitle: "Sign Out",
             action: #selector(signOut(_:)),

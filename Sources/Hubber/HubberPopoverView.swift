@@ -10,6 +10,7 @@ struct HubberPopoverView: View {
     @State private var showSettings = false
     @State private var showSignInSuccess = false
     @State private var showingAdd = false
+    @StateObject private var onboarding = OnboardingCoordinator()
 
     var body: some View {
         ZStack {
@@ -19,7 +20,11 @@ struct HubberPopoverView: View {
             HubberAppearance.panelFill(for: colorScheme)
                 .ignoresSafeArea()
 
-            authBranchedBody
+            if !onboarding.isCompleted {
+                OnboardingFlow(coordinator: onboarding, store: store)
+            } else {
+                authBranchedBody
+            }
         }
         .foregroundStyle(.primary)
         .onChange(of: selectedTab) { _, newTab in
@@ -28,6 +33,7 @@ struct HubberPopoverView: View {
         .onChange(of: store.authState) { oldState, newState in
             // Only trigger on the in-panel device flow: waitingForUser → signedIn.
             // Do NOT trigger on cold-launch restore (restoring → signedIn).
+            guard onboarding.isCompleted else { return }
             if case .waitingForUser = oldState, case .signedIn = newState {
                 showSignInSuccess = true
                 Task { @MainActor in

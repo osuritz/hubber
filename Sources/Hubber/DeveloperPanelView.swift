@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DeveloperPanelView: View {
     @ObservedObject var store: HubberStore
+    @State private var onboardingReset = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -19,28 +20,47 @@ struct DeveloperPanelView: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 8) {
-            Button {
-                store.copyDeveloperLog()
-            } label: {
-                Label("Copy", systemImage: "doc.on.doc")
-            }
-            .disabled(store.developerLog.isEmpty)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    store.copyDeveloperLog()
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .disabled(store.developerLog.isEmpty)
 
-            Button {
-                store.clearDeveloperLog()
-            } label: {
-                Label("Clear", systemImage: "trash")
-            }
-            .disabled(store.developerLog.isEmpty)
+                Button {
+                    store.clearDeveloperLog()
+                } label: {
+                    Label("Clear", systemImage: "trash")
+                }
+                .disabled(store.developerLog.isEmpty)
 
-            Button {
-                Task { await store.sendTestNotification() }
-            } label: {
-                Label("Send test notification", systemImage: "bell")
+                Button {
+                    Task { await store.sendTestNotification() }
+                } label: {
+                    Label("Send test notification", systemImage: "bell")
+                }
+
+                Spacer()
             }
 
-            Spacer()
+            HStack(spacing: 8) {
+                // Clears the persisted onboarding flag so the first-run flow replays on the
+                // next launch — a dev affordance for testing onboarding (we dropped the
+                // user-facing "Replay setup" for v1).
+                Button {
+                    OnboardingCoordinator.reset()
+                    onboardingReset = true
+                } label: {
+                    Label(
+                        onboardingReset ? "Onboarding will replay on restart" : "Replay onboarding",
+                        systemImage: onboardingReset ? "checkmark.circle" : "arrow.counterclockwise"
+                    )
+                }
+
+                Spacer()
+            }
         }
         .controlSize(.small)
     }

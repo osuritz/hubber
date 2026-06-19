@@ -51,11 +51,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rowDensity.rawValue, forKey: "rowDensity") }
     }
 
-    // MARK: - Privacy / Telemetry kill-switches (#53)
+    // MARK: - Privacy / Telemetry kill-switches (#53, #102)
 
     //
-    // Both default to true. Managed-lockable via MDM; user-toggleable in the Privacy settings
-    // section. Gated at app launch in applicationDidFinishLaunching (main.swift).
+    // analyticsEnabled defaults to FALSE (opt-in, GDPR-safe — see #102); crashReportingEnabled
+    // defaults to true (local os_log only, transmits nothing). Both MDM-lockable and user-toggleable
+    // in Privacy settings. Analytics is gated LIVE via GatedTelemetrySink (#103), not just at launch.
 
     @Published var analyticsEnabled: Bool {
         didSet { defaults.set(analyticsEnabled, forKey: "analyticsEnabled") }
@@ -63,6 +64,12 @@ final class SettingsStore: ObservableObject {
 
     @Published var crashReportingEnabled: Bool {
         didSet { defaults.set(crashReportingEnabled, forKey: "crashReportingEnabled") }
+    }
+
+    /// Whether Hubber registers itself as a macOS login item. MDM-lockable. The actual
+    /// SMAppService registration is applied by HubberStore; this is the persisted desired state. (#106)
+    @Published var launchAtLoginEnabled: Bool {
+        didSet { defaults.set(launchAtLoginEnabled, forKey: ManagedKey.launchAtLogin) }
     }
 
     // MARK: - Provider access (#54)
@@ -158,7 +165,7 @@ final class SettingsStore: ObservableObject {
             defaultsKey: ManagedKey.analyticsEnabled,
             defaults: defaults,
             managed: managed,
-            fallback: true
+            fallback: false
         )
         crashReportingEnabled = Self.bool(
             managedKey: ManagedKey.crashReportingEnabled,
@@ -167,6 +174,7 @@ final class SettingsStore: ObservableObject {
             managed: managed,
             fallback: true
         )
+        launchAtLoginEnabled = Self.resolveLaunchAtLogin(defaults: defaults, managed: managed)
         notificationsEnabled = Self.bool(
             managedKey: ManagedKey.notificationsEnabled,
             defaultsKey: ManagedKey.notificationsEnabled,
@@ -305,6 +313,16 @@ final class SettingsStore: ObservableObject {
             managed: managed,
             fallback: BadgeMode.attentionNeeded.rawValue
         )) ?? .attentionNeeded
+    }
+
+    private static func resolveLaunchAtLogin(defaults: UserDefaults, managed: any ManagedPreferences) -> Bool {
+        bool(
+            managedKey: ManagedKey.launchAtLogin,
+            defaultsKey: ManagedKey.launchAtLogin,
+            defaults: defaults,
+            managed: managed,
+            fallback: false
+        )
     }
 
     // MARK: - MDM → UserDefaults → default priority (via injected seam)

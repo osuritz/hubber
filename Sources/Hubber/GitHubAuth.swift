@@ -396,6 +396,9 @@ final class HubberStore: ObservableObject {
     private var connectionCancellables = Set<AnyCancellable>()
     private var restorePrunableConnectionIDs = Set<ConnectionID>()
     private let fallbackProvider: any CodeHostProvider
+    /// Live analytics gate when telemetry is not injected (production path); nil when a
+    /// caller injects its own Telemetry (tests). Subscribed to `settings.$analyticsEnabled`.
+    private let telemetryGate: GatedTelemetrySink?
 
     // Dependencies stored for building legacy connection
     private let legacyAuthService: any GitHubAuthServicing
@@ -403,6 +406,7 @@ final class HubberStore: ObservableObject {
     private let legacyTokenStore: any GitHubTokenStoring
     private let legacyIdle: any MachineIdleProviding
     private let connectionFactory: ((ConnectionID) throws -> Connection)?
+    private let launchAtLogin: any LaunchAtLoginManaging
 
     init(
         authService: any GitHubAuthServicing = GitHubAuthService(),
@@ -410,15 +414,26 @@ final class HubberStore: ObservableObject {
         tokenStore: any GitHubTokenStoring = GitHubTokenStore.makeDefault(),
         settings: SettingsStore = SettingsStore(),
         idle: any MachineIdleProviding = SystemIdleProvider(),
-        telemetry: Telemetry = Telemetry(sink: TelemetryDeckSink()),
+        telemetry: Telemetry? = nil,
+        telemetryGate injectedGate: GatedTelemetrySink? = nil,
         dispatcher: any NotificationDispatching = UNNotificationDispatcher(),
         snapshotStore: SnapshotStore = SnapshotStore(),
         defaults: UserDefaults = .standard,
         restoreOnInit: Bool = true,
-        connectionFactory: ((ConnectionID) throws -> Connection)? = nil
+        connectionFactory: ((ConnectionID) throws -> Connection)? = nil,
+        launchAtLogin: any LaunchAtLoginManaging = SMAppServiceLaunchAtLogin()
     ) {
         self.settings = settings
-        self.telemetry = telemetry
+        self.launchAtLogin = launchAtLogin
+        if let telemetry {
+            self.telemetry = telemetry
+            telemetryGate = nil
+        } else {
+            let gate = injectedGate
+                ?? GatedTelemetrySink(enabled: settings.analyticsEnabled, underlying: TelemetryDeckSink())
+            self.telemetry = Telemetry(sink: gate)
+            telemetryGate = gate
+        }
         self.snapshotStore = snapshotStore
         self.dispatcher = dispatcher
         fallbackProvider = CachingCodeHostProvider(wrapping: GitHubProvider())
@@ -429,6 +444,12 @@ final class HubberStore: ObservableObject {
         self.connectionFactory = connectionFactory
         notificationCoordinator = NotificationCoordinator(dispatcher: dispatcher)
         registry = ConnectionRegistry(defaults: defaults)
+
+        if let telemetryGate {
+            settings.$analyticsEnabled
+                .sink { [weak telemetryGate] enabled in telemetryGate?.setEnabled(enabled) }
+                .store(in: &cancellables)
+        }
 
         if restoreOnInit {
             restoreSession()
@@ -459,6 +480,11 @@ final class HubberStore: ObservableObject {
             await handleRefreshSucceeded(conn, tabSuccesses)
         }
         conn.onSignedIn = { [weak self] in
+            // During first-run onboarding, the notification priming step (#107) owns the OS
+            // permission prompt — requesting here on connect would surface the system dialog
+            // before the soft pre-prompt. Skip until onboarding completes; afterwards keep
+            // M3's request-at-login behavior for re-sign-ins.
+            guard OnboardingCoordinator.isCompleted() else { return }
             await self?.requestNotificationAuthorization()
         }
     }
@@ -672,6 +698,21 @@ final class HubberStore: ObservableObject {
     func requestNotificationAuthorization() async {
         _ = await dispatcher.ensureAuthorized()
         notificationsDenied = dispatcher.notificationsDenied
+    }
+
+    /// Sets the launch-at-login preference: persists the desired state and applies it to the system.
+    func setLaunchAtLogin(_ enabled: Bool) {
+        // A user action must not override an MDM-forced value.
+        guard !settings.isLocked(ManagedKey.launchAtLogin) else { return }
+        try? launchAtLogin.setEnabled(enabled)
+        // Persist the ACTUAL resulting state (not the intent), so the toggle can't lie if
+        // registration failed or the login item changed outside the app.
+        settings.launchAtLoginEnabled = launchAtLogin.isEnabled
+    }
+
+    /// Applies the resolved (incl. MDM-forced) desired launch-at-login state to the system at launch.
+    func reconcileLaunchAtLogin() {
+        try? launchAtLogin.setEnabled(settings.launchAtLoginEnabled)
     }
 
     func setPopoverOpen(_ open: Bool) {
