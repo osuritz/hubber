@@ -65,4 +65,44 @@ final class GatedTelemetrySinkTests: XCTestCase {
         sut.send("three", [:])
         XCTAssertEqual(spy.calls.map(\.event), ["one", "three"])
     }
+
+    func testConcurrentSendsInitializeExactlyOnceAndNeverForwardBeforeInit() {
+        final class OrderingSink: TelemetrySink, @unchecked Sendable {
+            private let lock = NSLock()
+            private var _sawForwardBeforeInit = false
+            private let isInited: @Sendable () -> Bool
+            init(isInited: @escaping @Sendable () -> Bool) {
+                self.isInited = isInited
+            }
+
+            var sawForwardBeforeInit: Bool {
+                lock.withLock { _sawForwardBeforeInit }
+            }
+
+            func send(_ event: String, _ params: [String: String]) {
+                if !isInited() { lock.withLock { _sawForwardBeforeInit = true } }
+            }
+        }
+        final class InitFlag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _value = false
+            var value: Bool {
+                lock.withLock { _value }
+            }
+
+            func set() {
+                lock.withLock { _value = true }
+            }
+        }
+        let counter = CallCounter()
+        let initFlag = InitFlag()
+        let sink = OrderingSink(isInited: { initFlag.value })
+        let sut = GatedTelemetrySink(enabled: true, underlying: sink, initializeSDK: {
+            counter.increment()
+            initFlag.set()
+        })
+        DispatchQueue.concurrentPerform(iterations: 200) { _ in sut.send("e", [:]) }
+        XCTAssertEqual(counter.count, 1, "SDK must initialize exactly once under concurrent sends")
+        XCTAssertFalse(sink.sawForwardBeforeInit, "no send may be forwarded before initialization")
+    }
 }

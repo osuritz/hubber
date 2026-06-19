@@ -3,7 +3,9 @@ import Foundation
 /// A `TelemetrySink` that forwards to an underlying sink only while analytics is enabled,
 /// consulting the LIVE enabled value before every send so the privacy toggle takes effect
 /// immediately (no restart). Lazily initializes the analytics SDK once, just before the first
-/// forwarded send. See #103.
+/// forwarded send. The enabled-check, the init-once claim, and SDK initialization are all
+/// performed under a single lock acquisition so no send can be forwarded to an uninitialized
+/// SDK. See #103.
 final class GatedTelemetrySink: TelemetrySink, @unchecked Sendable {
     private let lock = NSLock()
     private var enabled: Bool
@@ -27,14 +29,19 @@ final class GatedTelemetrySink: TelemetrySink, @unchecked Sendable {
     }
 
     func send(_ event: String, _ params: [String: String]) {
-        let needsInit: Bool = lock.withLock {
+        // Decide and (if needed) initialize under a single critical section so the
+        // enabled-check, the init-once claim, and the SDK initialization are atomic.
+        // initializeSDK() runs under the lock (it is called at most once and must not
+        // re-enter this sink); the underlying forward happens OUTSIDE the lock.
+        let shouldForward: Bool = lock.withLock {
             guard enabled else { return false }
-            if initialized { return false }
-            initialized = true
+            if !initialized {
+                initialized = true
+                initializeSDK()
+            }
             return true
         }
-        guard lock.withLock({ enabled }) else { return }
-        if needsInit { initializeSDK() }
+        guard shouldForward else { return }
         underlying.send(event, params)
     }
 }
