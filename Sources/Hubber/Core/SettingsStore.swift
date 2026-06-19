@@ -66,6 +66,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(crashReportingEnabled, forKey: "crashReportingEnabled") }
     }
 
+    /// Whether Hubber registers itself as a macOS login item. MDM-lockable. The actual
+    /// SMAppService registration is applied by HubberStore; this is the persisted desired state. (#106)
+    @Published var launchAtLoginEnabled: Bool {
+        didSet { defaults.set(launchAtLoginEnabled, forKey: ManagedKey.launchAtLogin) }
+    }
+
     // MARK: - Provider access (#54)
 
     //
@@ -168,6 +174,7 @@ final class SettingsStore: ObservableObject {
             managed: managed,
             fallback: true
         )
+        launchAtLoginEnabled = Self.resolveLaunchAtLogin(defaults: defaults, managed: managed)
         notificationsEnabled = Self.bool(
             managedKey: ManagedKey.notificationsEnabled,
             defaultsKey: ManagedKey.notificationsEnabled,
@@ -306,6 +313,16 @@ final class SettingsStore: ObservableObject {
             managed: managed,
             fallback: BadgeMode.attentionNeeded.rawValue
         )) ?? .attentionNeeded
+    }
+
+    private static func resolveLaunchAtLogin(defaults: UserDefaults, managed: any ManagedPreferences) -> Bool {
+        bool(
+            managedKey: ManagedKey.launchAtLogin,
+            defaultsKey: ManagedKey.launchAtLogin,
+            defaults: defaults,
+            managed: managed,
+            fallback: false
+        )
     }
 
     // MARK: - MDM → UserDefaults → default priority (via injected seam)

@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusItem()
         subscribeToStore()
         store.restoreAllConnections()
+        store.reconcileLaunchAtLogin()
 
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in

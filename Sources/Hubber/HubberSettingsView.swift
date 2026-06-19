@@ -129,6 +129,29 @@ struct SettingsView: View {
                 }
             }
 
+            // Launch at login (#106)
+            SettingsSection(title: "General") {
+                SettingsGroup {
+                    SettingsRow(isLast: true) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Open at login")
+                                .font(HubberType.settingsLabel)
+                                .foregroundStyle(HubberDesign.text)
+                            Text("Start Hubber automatically when you log in.")
+                                .font(HubberType.settingsSub)
+                                .foregroundStyle(HubberDesign.text2)
+                        }
+                        Toggle("", isOn: Binding(
+                            get: { settings.launchAtLoginEnabled },
+                            set: { store.setLaunchAtLogin($0) }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .disabled(settings.isLocked(ManagedKey.launchAtLogin))
+                    }
+                }
+            }
+
             // Menubar Badge
             SettingsSection(title: "Menubar Badge") {
                 SettingsGroup {

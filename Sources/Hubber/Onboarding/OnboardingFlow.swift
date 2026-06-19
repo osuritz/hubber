@@ -18,7 +18,7 @@ struct OnboardingFlow: View {
             case .notifications:
                 OnboardingNotificationsStep(coordinator: coordinator, store: store)
             case .launchAtLogin:
-                OnboardingStepStub(coordinator: coordinator, stepIndex: 4, title: "Launch at login")
+                OnboardingLaunchAtLoginStep(coordinator: coordinator, store: store)
             }
         }
         .transition(.opacity)

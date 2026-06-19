@@ -419,6 +419,57 @@ struct OnboardingNotificationsStep: View {
     }
 }
 
+// MARK: - Launch at login (#106)
+
+struct OnboardingLaunchAtLoginStep: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
+    @ObservedObject var store: HubberStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        OnboardingScaffold(stepIndex: 4, stepCount: OnboardingCoordinator.Step.allCases.count) {
+            VStack(spacing: 0) {
+                Image(systemName: "power")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(HubberDesign.accent)
+                    .padding(.bottom, 16)
+                Text("Open at login")
+                    .font(.system(size: 17, weight: .semibold))
+                    .tracking(-0.3)
+                    .foregroundStyle(HubberDesign.text)
+                    .padding(.bottom, 8)
+                Text("Hubber works best running quietly in your menu bar. Open it automatically when you log in so you never miss a review.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(HubberDesign.text2)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 264)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 18)
+
+                VStack(spacing: 10) {
+                    Button {
+                        store.setLaunchAtLogin(true)
+                        coordinator.advance()
+                    } label: {
+                        Text("Open Hubber at login")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
+                    }
+                    .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
+                    .frame(maxWidth: 264)
+
+                    OnboardingSecondaryButton(title: "Not now") {
+                        coordinator.advance()
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Step stubs (replaced by later tasks)
 
 /// Minimal placeholder used until the real step lands. Title + Continue (advances the flow).

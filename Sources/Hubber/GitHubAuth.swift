@@ -406,6 +406,7 @@ final class HubberStore: ObservableObject {
     private let legacyTokenStore: any GitHubTokenStoring
     private let legacyIdle: any MachineIdleProviding
     private let connectionFactory: ((ConnectionID) throws -> Connection)?
+    private let launchAtLogin: any LaunchAtLoginManaging
 
     init(
         authService: any GitHubAuthServicing = GitHubAuthService(),
@@ -418,9 +419,11 @@ final class HubberStore: ObservableObject {
         snapshotStore: SnapshotStore = SnapshotStore(),
         defaults: UserDefaults = .standard,
         restoreOnInit: Bool = true,
-        connectionFactory: ((ConnectionID) throws -> Connection)? = nil
+        connectionFactory: ((ConnectionID) throws -> Connection)? = nil,
+        launchAtLogin: any LaunchAtLoginManaging = SMAppServiceLaunchAtLogin()
     ) {
         self.settings = settings
+        self.launchAtLogin = launchAtLogin
         if let telemetry {
             self.telemetry = telemetry
             telemetryGate = nil
@@ -688,6 +691,17 @@ final class HubberStore: ObservableObject {
     func requestNotificationAuthorization() async {
         _ = await dispatcher.ensureAuthorized()
         notificationsDenied = dispatcher.notificationsDenied
+    }
+
+    /// Sets the launch-at-login preference: persists the desired state and applies it to the system.
+    func setLaunchAtLogin(_ enabled: Bool) {
+        settings.launchAtLoginEnabled = enabled
+        try? launchAtLogin.setEnabled(enabled)
+    }
+
+    /// Applies the resolved (incl. MDM-forced) desired launch-at-login state to the system at launch.
+    func reconcileLaunchAtLogin() {
+        try? launchAtLogin.setEnabled(settings.launchAtLoginEnabled)
     }
 
     func setPopoverOpen(_ open: Bool) {

@@ -72,6 +72,7 @@ struct CFManagedPreferences: ManagedPreferences {
 //   defaultNotificationEvents   [String]     per-type notify*        enabledNotificationTypes
 //   providerAllowlist           [String]     providerAllowlist       providerAllowlist
 //   allowPersonalGitHub         Bool         allowPersonalGitHub     allowPersonalGitHub
+//   launchAtLogin               Bool         launchAtLogin           launchAtLoginEnabled
 //
 // rowDensity: accepts both Int rawValue and String ("compact"|"normal"|"spacious") in profiles;
 // SettingsStore resolves both forms so IT can write a human-readable profile.
@@ -101,4 +102,7 @@ enum ManagedKey {
     // Provider access
     static let providerAllowlist = "providerAllowlist"
     static let allowPersonalGitHub = "allowPersonalGitHub"
+
+    /// Launch at login
+    static let launchAtLogin = "launchAtLogin"
 }
