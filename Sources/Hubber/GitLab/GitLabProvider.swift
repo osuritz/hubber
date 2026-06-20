@@ -24,7 +24,7 @@ final class GitLabProvider: CodeHostProvider {
             let currentUser = payload["currentUser"] as? [String: Any],
             let mergeRequests = currentUser["reviewRequestedMergeRequests"] as? [String: Any],
             let nodes = mergeRequests["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap(Self.parseIncomingReview)
     }
@@ -44,7 +44,7 @@ final class GitLabProvider: CodeHostProvider {
             let currentUser = payload["currentUser"] as? [String: Any],
             let mergeRequests = currentUser["authoredMergeRequests"] as? [String: Any],
             let nodes = mergeRequests["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap(Self.parseOutgoingReview)
     }
@@ -60,7 +60,7 @@ final class GitLabProvider: CodeHostProvider {
             let currentUser = payload["currentUser"] as? [String: Any],
             let mergeRequests = currentUser["authoredMergeRequests"] as? [String: Any],
             let nodes = mergeRequests["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap(Self.parseDraftReview)
     }
@@ -73,15 +73,15 @@ final class GitLabProvider: CodeHostProvider {
         request.httpBody = try JSONSerialization.data(withJSONObject: ["query": query, "variables": variables])
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw GitHubAuthError.invalidResponse }
+        guard let http = response as? HTTPURLResponse else { throw CodeHostAuthError.invalidResponse }
 
-        if http.statusCode == 401 { throw GitHubAuthError.badCredentials }
+        if http.statusCode == 401 { throw CodeHostAuthError.badCredentials }
         if http.statusCode == 429 {
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
-            throw GitHubAuthError.rateLimited(retryAfter: retryAfter)
+            throw CodeHostAuthError.rateLimited(retryAfter: retryAfter)
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw GitHubAuthError.github("GitLab returned HTTP \(http.statusCode).")
+            throw CodeHostAuthError.providerMessage("GitLab returned HTTP \(http.statusCode).")
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -91,9 +91,9 @@ final class GitLabProvider: CodeHostProvider {
         if
             let errors = json["errors"] as? [[String: Any]],
             let message = errors.first?["message"] as? String {
-            throw GitHubAuthError.github(message)
+            throw CodeHostAuthError.providerMessage(message)
         }
-        throw GitHubAuthError.invalidResponse
+        throw CodeHostAuthError.invalidResponse
     }
 
     static func mapCI(_ status: String?) -> PullRequestCI {
@@ -138,7 +138,7 @@ final class GitLabProvider: CodeHostProvider {
         let avatarURL = (authorNode["avatarUrl"] as? String).flatMap(URL.init(string:))
         let diffStats = node["diffStatsSummary"] as? [String: Any]
         let createdAt = (node["createdAt"] as? String).flatMap(ISO8601DateFormatter().date(from:)) ?? Date()
-        let author = GitHubUser(
+        let author = CodeHostUser(
             login: authorLogin,
             initials: String(authorLogin.prefix(2)).uppercased(),
             color: colorForLogin(authorLogin),
@@ -231,7 +231,7 @@ final class GitLabProvider: CodeHostProvider {
 
             let avatarURL = (reviewer["avatarUrl"] as? String).flatMap(URL.init(string:))
             let interaction = reviewer["mergeRequestInteraction"] as? [String: Any]
-            let user = GitHubUser(
+            let user = CodeHostUser(
                 login: login,
                 initials: String(login.prefix(2)).uppercased(),
                 color: colorForLogin(login),

@@ -22,17 +22,17 @@ private final class WiringSpyDispatcher: NotificationDispatching, @unchecked Sen
 
 // MARK: - Test doubles
 
-private final class WiringTokenStore: GitHubTokenStoring, @unchecked Sendable {
-    private var token: GitHubStoredToken?
-    init(_ t: GitHubStoredToken?) {
+private final class WiringTokenStore: TokenStoring, @unchecked Sendable {
+    private var token: StoredToken?
+    init(_ t: StoredToken?) {
         token = t
     }
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         token
     }
 
-    func save(_ t: GitHubStoredToken) throws {
+    func save(_ t: StoredToken) throws {
         token = t
     }
 
@@ -43,19 +43,19 @@ private final class WiringTokenStore: GitHubTokenStoring, @unchecked Sendable {
 
 private actor WiringAuthService: GitHubDeviceFlowServicing {
     func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
-        throw GitHubAuthError.invalidResponse
+        throw CodeHostAuthError.invalidResponse
     }
 
-    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.invalidResponse
+    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> StoredToken {
+        throw CodeHostAuthError.invalidResponse
     }
 
-    func refresh(_ t: GitHubStoredToken) async throws -> GitHubStoredToken {
+    func refresh(_ t: StoredToken) async throws -> StoredToken {
         t
     }
 
-    func fetchAuthenticatedUser(accessToken _: String) async throws -> GitHubAuthenticatedUser {
-        GitHubAuthenticatedUser(login: "testuser", name: nil, avatarUrl: nil)
+    func fetchAuthenticatedUser(accessToken _: String) async throws -> AuthenticatedUser {
+        AuthenticatedUser(login: "testuser", name: nil, avatarUrl: nil)
     }
 }
 
@@ -297,7 +297,7 @@ final class NotificationWiringTests: XCTestCase {
             number: number,
             title: title,
             url: URL(string: "https://github.com/acme/web/pull/\(number)"),
-            author: GitHubUser(login: "alice", initials: "AL", color: .red),
+            author: CodeHostUser(login: "alice", initials: "AL", color: .red),
             sloClockStart: Date(),
             additions: 5,
             deletions: 1,

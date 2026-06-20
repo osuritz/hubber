@@ -47,7 +47,7 @@ final class GitLabProviderTests: XCTestCase {
                 accessToken: "bad"
             )
             XCTFail("Expected badCredentials")
-        } catch GitHubAuthError.badCredentials {
+        } catch CodeHostAuthError.badCredentials {
             // expected
         }
     }
@@ -65,7 +65,7 @@ final class GitLabProviderTests: XCTestCase {
                 accessToken: "tok"
             )
             XCTFail("Expected github error")
-        } catch let GitHubAuthError.github(message) {
+        } catch let CodeHostAuthError.providerMessage(message) {
             XCTAssertEqual(message, "x")
         }
     }

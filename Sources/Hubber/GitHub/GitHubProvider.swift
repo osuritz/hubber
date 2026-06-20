@@ -31,7 +31,7 @@ final class GitHubProvider: CodeHostProvider {
         guard
             let search = payload["search"] as? [String: Any],
             let nodes = search["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap { node in
             Self.parseIncomingReview(node: node, viewerLogin: viewerLogin)
@@ -61,7 +61,7 @@ final class GitHubProvider: CodeHostProvider {
             viewerLogin: viewerLogin
         )
 
-        let author = GitHubUser(
+        let author = CodeHostUser(
             login: authorLogin,
             initials: String(authorLogin.prefix(2)).uppercased(),
             color: colorForLogin(authorLogin),
@@ -160,7 +160,7 @@ final class GitHubProvider: CodeHostProvider {
             let viewer = payload["viewer"] as? [String: Any],
             let prs = viewer["pullRequests"] as? [String: Any],
             let nodes = prs["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         let iso = ISO8601DateFormatter()
         return nodes.compactMap { node -> DraftReview? in
@@ -202,8 +202,8 @@ final class GitHubProvider: CodeHostProvider {
         request.httpBody = try JSONSerialization.data(withJSONObject: ["query": query, "variables": variables])
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw GitHubAuthError.invalidResponse }
-        if http.statusCode == 401 { throw GitHubAuthError.badCredentials }
+        guard let http = response as? HTTPURLResponse else { throw CodeHostAuthError.invalidResponse }
+        if http.statusCode == 401 { throw CodeHostAuthError.badCredentials }
 
         // Rate-limit detection: 429, or 403 with x-ratelimit-remaining: 0
         let isRateLimitedByHeader =
@@ -211,11 +211,11 @@ final class GitHubProvider: CodeHostProvider {
             http.value(forHTTPHeaderField: "x-ratelimit-remaining").flatMap(Int.init) == 0
         if http.statusCode == 429 || isRateLimitedByHeader {
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
-            throw GitHubAuthError.rateLimited(retryAfter: retryAfter)
+            throw CodeHostAuthError.rateLimited(retryAfter: retryAfter)
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            throw GitHubAuthError.github("GitHub returned HTTP \(http.statusCode).")
+            throw CodeHostAuthError.providerMessage("GitHub returned HTTP \(http.statusCode).")
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -229,9 +229,9 @@ final class GitHubProvider: CodeHostProvider {
         if
             let errors = json["errors"] as? [[String: Any]],
             let message = errors.first?["message"] as? String {
-            throw GitHubAuthError.github(message)
+            throw CodeHostAuthError.providerMessage(message)
         }
-        throw GitHubAuthError.invalidResponse
+        throw CodeHostAuthError.invalidResponse
     }
 
     // MARK: - Queries

@@ -56,19 +56,16 @@ final class GitLabAuthServiceTests: XCTestCase {
         do {
             _ = try await service.fetchAuthenticatedUser(accessToken: "bad")
             XCTFail("expected badCredentials")
-        } catch GitHubAuthError.badCredentials {
+        } catch CodeHostAuthError.badCredentials {
             // expected
         } catch {
             XCTFail("wrong error: \(error)")
         }
     }
 
-    func testDeviceFlowAndRefreshAreUnsupported() async {
+    func testRefreshIsUnsupported() async {
         let service = GitLabAuthService(session: makeSession())
-        do { _ = try await service.startDeviceFlow()
-            XCTFail("expected unsupported device flow")
-        } catch { /* expected */ }
-        let token = GitHubStoredToken(
+        let token = StoredToken(
             accessToken: "x",
             accessTokenExpiresAt: nil,
             refreshToken: nil,
@@ -78,7 +75,7 @@ final class GitLabAuthServiceTests: XCTestCase {
         )
         do { _ = try await service.refresh(token)
             XCTFail("expected missing refresh token")
-        } catch GitHubAuthError.missingRefreshToken {
+        } catch CodeHostAuthError.missingRefreshToken {
             // expected
         } catch { XCTFail("wrong error: \(error)") }
     }

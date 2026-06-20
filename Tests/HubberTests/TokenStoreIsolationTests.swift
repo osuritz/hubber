@@ -7,8 +7,8 @@ final class TokenStoreIsolationTests: XCTestCase {
         let personal = ConnectionID.gitHubDotCom(login: "personal")
         let work = ConnectionID.gitHubDotCom(login: "work")
 
-        let personalStore = GitHubKeychainTokenStore(account: personal.slug)
-        let workStore = GitHubKeychainTokenStore(account: work.slug)
+        let personalStore = KeychainTokenStore(account: personal.slug)
+        let workStore = KeychainTokenStore(account: work.slug)
 
         XCTAssertEqual(keychainAccount(from: personalStore), personal.slug)
         XCTAssertEqual(keychainAccount(from: workStore), work.slug)
@@ -20,7 +20,7 @@ final class TokenStoreIsolationTests: XCTestCase {
         let work = ConnectionID.gitHubDotCom(login: "work")
         let stores = SpyTokenStores()
 
-        let makeStore: (ConnectionID) -> any GitHubTokenStoring = { connectionID in
+        let makeStore: (ConnectionID) -> any TokenStoring = { connectionID in
             stores.store(for: connectionID.slug)
         }
 
@@ -41,22 +41,22 @@ final class TokenStoreIsolationTests: XCTestCase {
         let personal = ConnectionID.gitHubDotCom(login: "personal")
         let work = ConnectionID.gitHubDotCom(login: "work")
 
-        let personalStore = GitHubTokenStore.makeStore(for: personal)
-        let workStore = GitHubTokenStore.makeStore(for: work)
+        let personalStore = TokenStore.makeStore(for: personal)
+        let workStore = TokenStore.makeStore(for: work)
 
         #if DEBUG
-            let personalFileStore = personalStore as? GitHubDevelopmentFileTokenStore
-            let workFileStore = workStore as? GitHubDevelopmentFileTokenStore
+            let personalFileStore = personalStore as? DevelopmentFileTokenStore
+            let workFileStore = workStore as? DevelopmentFileTokenStore
 
             XCTAssertEqual(
                 personalFileStore.flatMap(devTokenURL),
-                GitHubDevelopmentFileTokenStore.devTokenURL(for: personal)
+                DevelopmentFileTokenStore.devTokenURL(for: personal)
             )
-            XCTAssertEqual(workFileStore.flatMap(devTokenURL), GitHubDevelopmentFileTokenStore.devTokenURL(for: work))
+            XCTAssertEqual(workFileStore.flatMap(devTokenURL), DevelopmentFileTokenStore.devTokenURL(for: work))
             XCTAssertNotEqual(personalFileStore.flatMap(devTokenURL), workFileStore.flatMap(devTokenURL))
         #else
-            let personalKeychainStore = personalStore as? GitHubKeychainTokenStore
-            let workKeychainStore = workStore as? GitHubKeychainTokenStore
+            let personalKeychainStore = personalStore as? KeychainTokenStore
+            let workKeychainStore = workStore as? KeychainTokenStore
 
             XCTAssertEqual(personalKeychainStore.flatMap(keychainAccount), personal.slug)
             XCTAssertEqual(workKeychainStore.flatMap(keychainAccount), work.slug)
@@ -68,14 +68,14 @@ final class TokenStoreIsolationTests: XCTestCase {
     }
 
     func testDevelopmentFileTokenURLsAreUniqueAndDoNotUseLegacyPath() {
-        let personalURL = GitHubDevelopmentFileTokenStore.devTokenURL(
+        let personalURL = DevelopmentFileTokenStore.devTokenURL(
             for: ConnectionID.gitHubDotCom(login: "personal")
         )
-        let workURL = GitHubDevelopmentFileTokenStore.devTokenURL(for: ConnectionID.gitHubDotCom(login: "work"))
+        let workURL = DevelopmentFileTokenStore.devTokenURL(for: ConnectionID.gitHubDotCom(login: "work"))
 
         XCTAssertNotEqual(personalURL, workURL)
-        XCTAssertNotEqual(personalURL, GitHubDevelopmentFileTokenStore.legacyTokenURL)
-        XCTAssertNotEqual(workURL, GitHubDevelopmentFileTokenStore.legacyTokenURL)
+        XCTAssertNotEqual(personalURL, DevelopmentFileTokenStore.legacyTokenURL)
+        XCTAssertNotEqual(workURL, DevelopmentFileTokenStore.legacyTokenURL)
         XCTAssertEqual(personalURL.lastPathComponent, "github-auth-dev-github_github.com_personal.json")
     }
 
@@ -112,15 +112,15 @@ private final class SpyTokenStores: @unchecked Sendable {
     }
 }
 
-private final class IsolationSpyTokenStore: GitHubTokenStoring, @unchecked Sendable {
+private final class IsolationSpyTokenStore: TokenStoring, @unchecked Sendable {
     let identity: String
 
     private let lock = NSLock()
-    private var storedToken: GitHubStoredToken?
+    private var storedToken: StoredToken?
     private var _deleteCallCount = 0
     private var _loadCallCount = 0
     private var _saveCallCount = 0
-    private var _savedTokens: [GitHubStoredToken] = []
+    private var _savedTokens: [StoredToken] = []
 
     var deleteCallCount: Int {
         lock.withLock { _deleteCallCount }
@@ -134,23 +134,23 @@ private final class IsolationSpyTokenStore: GitHubTokenStoring, @unchecked Senda
         lock.withLock { _saveCallCount }
     }
 
-    var savedTokens: [GitHubStoredToken] {
+    var savedTokens: [StoredToken] {
         lock.withLock { _savedTokens }
     }
 
-    init(identity: String, token: GitHubStoredToken?) {
+    init(identity: String, token: StoredToken?) {
         self.identity = identity
         storedToken = token
     }
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         lock.withLock {
             _loadCallCount += 1
             return storedToken
         }
     }
 
-    func save(_ token: GitHubStoredToken) throws {
+    func save(_ token: StoredToken) throws {
         lock.withLock {
             _saveCallCount += 1
             _savedTokens.append(token)
@@ -166,8 +166,8 @@ private final class IsolationSpyTokenStore: GitHubTokenStoring, @unchecked Senda
     }
 }
 
-private func makeToken(login: String?, accessToken: String = "access-token") -> GitHubStoredToken {
-    GitHubStoredToken(
+private func makeToken(login: String?, accessToken: String = "access-token") -> StoredToken {
+    StoredToken(
         accessToken: accessToken,
         accessTokenExpiresAt: nil,
         refreshToken: nil,
@@ -177,10 +177,10 @@ private func makeToken(login: String?, accessToken: String = "access-token") -> 
     )
 }
 
-private func keychainAccount(from store: GitHubKeychainTokenStore) -> String? {
+private func keychainAccount(from store: KeychainTokenStore) -> String? {
     Mirror(reflecting: store).descendant("account") as? String
 }
 
-private func devTokenURL(from store: GitHubDevelopmentFileTokenStore) -> URL? {
+private func devTokenURL(from store: DevelopmentFileTokenStore) -> URL? {
     Mirror(reflecting: store).descendant("tokenURL") as? URL
 }

@@ -26,14 +26,14 @@ private struct AdoptStubProvider: CodeHostProvider {
 
 private struct AdoptIdleProvider: MachineIdleProviding { let isIdle = false }
 
-private final class AdoptTokenStore: GitHubTokenStoring, @unchecked Sendable {
-    private var token: GitHubStoredToken?
+private final class AdoptTokenStore: TokenStoring, @unchecked Sendable {
+    private var token: StoredToken?
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         token
     }
 
-    func save(_ token: GitHubStoredToken) throws {
+    func save(_ token: StoredToken) throws {
         self.token = token
     }
 
@@ -43,20 +43,20 @@ private final class AdoptTokenStore: GitHubTokenStoring, @unchecked Sendable {
 }
 
 private final class AdoptAuthService: GitHubDeviceFlowServicing, @unchecked Sendable {
-    func fetchAuthenticatedUser(accessToken _: String) async throws -> GitHubAuthenticatedUser {
-        GitHubAuthenticatedUser(login: "x", name: nil, avatarUrl: nil)
+    func fetchAuthenticatedUser(accessToken _: String) async throws -> AuthenticatedUser {
+        AuthenticatedUser(login: "x", name: nil, avatarUrl: nil)
     }
 
-    func refresh(_: GitHubStoredToken) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.missingRefreshToken
+    func refresh(_: StoredToken) async throws -> StoredToken {
+        throw CodeHostAuthError.missingRefreshToken
     }
 
     func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
-        throw GitHubAuthError.invalidResponse
+        throw CodeHostAuthError.invalidResponse
     }
 
-    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.invalidResponse
+    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> StoredToken {
+        throw CodeHostAuthError.invalidResponse
     }
 }
 
@@ -64,7 +64,7 @@ private final class AdoptAuthService: GitHubDeviceFlowServicing, @unchecked Send
 final class ConnectionAdoptTests: XCTestCase {
     private func makeConnection(
         id: ConnectionID,
-        store: any GitHubTokenStoring,
+        store: any TokenStoring,
         settings: SettingsStore
     ) -> Connection {
         Connection(
@@ -92,7 +92,7 @@ final class ConnectionAdoptTests: XCTestCase {
             settings: settings
         )
 
-        let token = GitHubStoredToken(
+        let token = StoredToken(
             accessToken: "gho_x",
             accessTokenExpiresAt: nil,
             refreshToken: "ghr_refresh",
@@ -102,7 +102,7 @@ final class ConnectionAdoptTests: XCTestCase {
         )
         await conn.adopt(
             token: token,
-            user: GitHubAuthenticatedUser(login: "osuritz", name: "O", avatarUrl: nil)
+            user: AuthenticatedUser(login: "osuritz", name: "O", avatarUrl: nil)
         )
 
         XCTAssertEqual(conn.authState, .signedIn(login: "osuritz"))

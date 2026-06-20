@@ -87,17 +87,17 @@ private final class MCNBlockingFirstPostDispatcher: NotificationDispatching, @un
     }
 }
 
-private final class MCNTokenStore: GitHubTokenStoring, @unchecked Sendable {
-    private var token: GitHubStoredToken?
-    init(_ t: GitHubStoredToken?) {
+private final class MCNTokenStore: TokenStoring, @unchecked Sendable {
+    private var token: StoredToken?
+    init(_ t: StoredToken?) {
         token = t
     }
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         token
     }
 
-    func save(_ t: GitHubStoredToken) throws {
+    func save(_ t: StoredToken) throws {
         token = t
     }
 
@@ -113,19 +113,19 @@ private actor MCNAuthService: GitHubDeviceFlowServicing {
     }
 
     func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
-        throw GitHubAuthError.invalidResponse
+        throw CodeHostAuthError.invalidResponse
     }
 
-    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.invalidResponse
+    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> StoredToken {
+        throw CodeHostAuthError.invalidResponse
     }
 
-    func refresh(_ token: GitHubStoredToken) async throws -> GitHubStoredToken {
+    func refresh(_ token: StoredToken) async throws -> StoredToken {
         token
     }
 
-    func fetchAuthenticatedUser(accessToken _: String) async throws -> GitHubAuthenticatedUser {
-        GitHubAuthenticatedUser(login: login, name: nil, avatarUrl: nil)
+    func fetchAuthenticatedUser(accessToken _: String) async throws -> AuthenticatedUser {
+        AuthenticatedUser(login: login, name: nil, avatarUrl: nil)
     }
 }
 
@@ -172,8 +172,8 @@ private func tmpURL(_ name: String) -> URL {
         .appendingPathComponent("mcnotif-\(name)-\(UUID()).json")
 }
 
-private func storedToken(login: String) -> GitHubStoredToken {
-    GitHubStoredToken(
+private func storedToken(login: String) -> StoredToken {
+    StoredToken(
         accessToken: "tok-\(login)",
         accessTokenExpiresAt: nil,
         refreshToken: nil,
@@ -378,7 +378,7 @@ final class MultiConnectionNotificationTests: XCTestCase {
         fixture.store.settings.notifyReviewApproved = true
 
         let aliceApproved = Reviewer(
-            user: GitHubUser(login: "alice", initials: "AL", color: .red),
+            user: CodeHostUser(login: "alice", initials: "AL", color: .red),
             state: .approved
         )
         let prX1WithAliceApproved = outgoingReview(id: "pr-X1", reviewers: [aliceApproved])

@@ -32,12 +32,12 @@ struct TokenResponse: Decodable {
     let errorDescription: String?
     let interval: Int?
 
-    func storedToken() -> GitHubStoredToken? {
+    func storedToken() -> StoredToken? {
         guard let accessToken else {
             return nil
         }
 
-        return GitHubStoredToken(
+        return StoredToken(
             accessToken: accessToken,
             accessTokenExpiresAt: expiresIn.map { Date().addingTimeInterval(TimeInterval($0)) },
             refreshToken: refreshToken,

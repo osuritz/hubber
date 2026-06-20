@@ -4,9 +4,9 @@ import XCTest
 
 // MARK: - Fixtures
 
-private extension GitHubUser {
-    static let alice = GitHubUser(login: "alice", initials: "AL", color: .red)
-    static let bob = GitHubUser(login: "bob", initials: "BO", color: .blue)
+private extension CodeHostUser {
+    static let alice = CodeHostUser(login: "alice", initials: "AL", color: .red)
+    static let bob = CodeHostUser(login: "bob", initials: "BO", color: .blue)
 }
 
 private func makeIncoming(
@@ -57,7 +57,7 @@ private func makeOutgoing(
     )
 }
 
-private func reviewer(_ user: GitHubUser, state: ReviewerState) -> Reviewer {
+private func reviewer(_ user: CodeHostUser, state: ReviewerState) -> Reviewer {
     Reviewer(user: user, state: state)
 }
 

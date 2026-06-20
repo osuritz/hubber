@@ -14,7 +14,7 @@ enum ConnectionFactory {
         provider: String,
         host: String,
         session: URLSession = .shared
-    ) -> any GitHubDeviceFlowServicing {
+    ) -> any CodeHostAuthServicing {
         let url = URL(string: "https://\(host)") ?? URL(string: "https://github.com")!
         switch provider.lowercased() {
         case "gitlab":
@@ -27,7 +27,7 @@ enum ConnectionFactory {
     static func providerAndAuth(
         for id: ConnectionID,
         session: URLSession = .shared
-    ) -> (provider: any CodeHostProvider, authService: any GitHubDeviceFlowServicing) {
+    ) -> (provider: any CodeHostProvider, authService: any CodeHostAuthServicing) {
         let url = baseURL(for: id)
         switch id.provider {
         case "gitlab":

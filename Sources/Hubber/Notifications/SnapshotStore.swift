@@ -3,7 +3,7 @@ import Foundation
 // MARK: - SnapshotStore
 
 /// Persists and loads `ReviewSnapshot` as JSON in Application Support/Hubber/.
-/// Mirror of `GitHubDevelopmentFileTokenStore` for path resolution.
+/// Mirror of `DevelopmentFileTokenStore` for path resolution.
 final class SnapshotStore: Sendable {
     private let snapshotURL: URL
 
