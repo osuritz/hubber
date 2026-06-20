@@ -41,8 +41,8 @@ final class GitHubProviderDraftTests: XCTestCase {
 
         do {
             _ = try await service.fetchDraftPullRequests(accessToken: "test-token")
-            XCTFail("Expected GitHubAuthError.github")
-        } catch let GitHubAuthError.github(message) {
+            XCTFail("Expected CodeHostAuthError.providerMessage")
+        } catch let CodeHostAuthError.providerMessage(message) {
             XCTAssertEqual(message, "Resource not accessible by integration")
         }
     }
@@ -56,8 +56,8 @@ final class GitHubProviderDraftTests: XCTestCase {
 
         do {
             _ = try await service.fetchDraftPullRequests(accessToken: "expired-token")
-            XCTFail("Expected GitHubAuthError.badCredentials")
-        } catch GitHubAuthError.badCredentials {
+            XCTFail("Expected CodeHostAuthError.badCredentials")
+        } catch CodeHostAuthError.badCredentials {
             // Expected.
         }
     }
@@ -71,8 +71,8 @@ final class GitHubProviderDraftTests: XCTestCase {
 
         do {
             _ = try await service.fetchDraftPullRequests(accessToken: "test-token")
-            XCTFail("Expected GitHubAuthError.github")
-        } catch let GitHubAuthError.github(message) {
+            XCTFail("Expected CodeHostAuthError.providerMessage")
+        } catch let CodeHostAuthError.providerMessage(message) {
             XCTAssertEqual(message, "GitHub returned HTTP 503.")
         }
     }
@@ -177,13 +177,13 @@ final class GitHubProviderDraftTests: XCTestCase {
     """.utf8)
 }
 
-final class GitHubDevelopmentFileTokenStoreTests: XCTestCase {
+final class DevelopmentFileTokenStoreTests: XCTestCase {
     func testTokenRoundTripAndDelete() throws {
         let tokenURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("github-auth-dev.json")
-        let store = GitHubDevelopmentFileTokenStore(tokenURL: tokenURL)
-        let token = GitHubStoredToken(
+        let store = DevelopmentFileTokenStore(tokenURL: tokenURL)
+        let token = StoredToken(
             accessToken: "access",
             accessTokenExpiresAt: Date(timeIntervalSince1970: 1_800_000_000),
             refreshToken: "refresh",

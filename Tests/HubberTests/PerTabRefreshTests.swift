@@ -62,7 +62,7 @@ private enum TestError: Error, LocalizedError {
 /// (already in the test target).
 @MainActor
 private func makeSignedInStore(provider: some CodeHostProvider) -> HubberStore {
-    let token = GitHubStoredToken(
+    let token = StoredToken(
         accessToken: "test-token",
         accessTokenExpiresAt: nil,
         refreshToken: nil,
@@ -207,7 +207,7 @@ final class PerTabRefreshTests: XCTestCase {
         let retryAfter: TimeInterval = 5 * 60
         let provider = StubCodeHostProvider(
             incoming: .success(sampleIncoming), // success — non-empty
-            outgoing: .failure(GitHubAuthError.rateLimited(retryAfter: retryAfter)), // global error
+            outgoing: .failure(CodeHostAuthError.rateLimited(retryAfter: retryAfter)), // global error
             drafts: .success(sampleDrafts) // success — non-empty
         )
 

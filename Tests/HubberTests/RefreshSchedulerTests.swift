@@ -16,15 +16,21 @@ private actor ControlledSleeper {
     /// Waiters that want to know when we next park.
     private var parkWaiters: [CheckedContinuation<Void, Never>] = []
 
-    /// The in-flight sleep continuation (nil when not sleeping).
-    private var sleeping: CheckedContinuation<Void, Error>?
+    /// In-flight sleeps keyed by a unique token. Keying by token (rather than a single shared
+    /// slot) means cancellation resumes exactly the continuation it belongs to, and the new
+    /// sleep() that reset() kicks off right after cancelling can never overwrite — and thereby
+    /// leak — an older continuation whose cancellation hasn't propagated yet.
+    private var sleeping: [UInt64: CheckedContinuation<Void, Error>] = [:]
+    private var nextToken: UInt64 = 0
 
     /// Called by the scheduler loop instead of Task.sleep.
     func sleep(for interval: TimeInterval) async throws {
         requestedIntervals.append(interval)
+        let token = nextToken
+        nextToken &+= 1
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                sleeping = cont
+                sleeping[token] = cont
                 // Wake all test waiters that are blocked in awaitParked().
                 for waiter in parkWaiters {
                     waiter.resume()
@@ -32,31 +38,32 @@ private actor ControlledSleeper {
                 parkWaiters.removeAll()
             }
         } onCancel: {
-            Task { await self.cancelSleep() }
+            Task { await self.cancelSleep(token) }
         }
     }
 
     /// Suspends the caller until the scheduler next calls sleep().
     func awaitParked() async {
         await withCheckedContinuation { cont in
-            if sleeping != nil {
+            if sleeping.isEmpty {
+                parkWaiters.append(cont)
+            } else {
                 // Already parked right now — resume immediately.
                 cont.resume()
-            } else {
-                parkWaiters.append(cont)
             }
         }
     }
 
-    /// Resumes the parked sleep so the scheduler can continue (used in stop tests).
+    /// Resumes a parked sleep so the scheduler can continue (used in stop tests).
     func resumeSleep() {
-        sleeping?.resume()
-        sleeping = nil
+        guard let (token, cont) = sleeping.first else { return }
+        sleeping.removeValue(forKey: token)
+        cont.resume()
     }
 
-    private func cancelSleep() {
-        sleeping?.resume(throwing: CancellationError())
-        sleeping = nil
+    private func cancelSleep(_ token: UInt64) {
+        guard let cont = sleeping.removeValue(forKey: token) else { return }
+        cont.resume(throwing: CancellationError())
     }
 }
 

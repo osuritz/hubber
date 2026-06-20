@@ -3,8 +3,8 @@ import XCTest
 @testable import Hubber
 
 private final class FakeAuthService: GitHubDeviceFlowServicing, @unchecked Sendable {
-    var userResult: Result<GitHubAuthenticatedUser, Error> = .success(
-        GitHubAuthenticatedUser(login: "osuritz", name: "O", avatarUrl: nil)
+    var userResult: Result<AuthenticatedUser, Error> = .success(
+        AuthenticatedUser(login: "osuritz", name: "O", avatarUrl: nil)
     )
     var deviceAuth = GitHubDeviceAuthorization(
         deviceCode: "d",
@@ -13,7 +13,7 @@ private final class FakeAuthService: GitHubDeviceFlowServicing, @unchecked Senda
         expiresAt: Date().addingTimeInterval(900),
         interval: 1
     )
-    var pollToken = GitHubStoredToken(
+    var pollToken = StoredToken(
         accessToken: "gho_x",
         accessTokenExpiresAt: nil,
         refreshToken: "ghr",
@@ -23,25 +23,25 @@ private final class FakeAuthService: GitHubDeviceFlowServicing, @unchecked Senda
     )
     private(set) var fetchCount = 0
 
-    func fetchAuthenticatedUser(accessToken _: String) async throws -> GitHubAuthenticatedUser {
+    func fetchAuthenticatedUser(accessToken _: String) async throws -> AuthenticatedUser {
         fetchCount += 1
         return try userResult.get()
     }
 
-    func refresh(_: GitHubStoredToken) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.missingRefreshToken
+    func refresh(_: StoredToken) async throws -> StoredToken {
+        throw CodeHostAuthError.missingRefreshToken
     }
 
     func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
         deviceAuth
     }
 
-    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
+    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> StoredToken {
         pollToken
     }
 }
 
-private typealias AddAccountCallback = (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void
+private typealias AddAccountCallback = (ConnectionID, StoredToken, AuthenticatedUser) async throws -> Void
 
 @MainActor
 final class AddAccountControllerTests: XCTestCase {
@@ -86,7 +86,7 @@ final class AddAccountControllerTests: XCTestCase {
 
     func testBadTokenSurfacesError() async {
         let auth = FakeAuthService()
-        auth.userResult = .failure(GitHubAuthError.badCredentials)
+        auth.userResult = .failure(CodeHostAuthError.badCredentials)
         let c = make(auth: auth)
         await c.connectWithToken(provider: .gitLab, serverURL: "https://gitlab.com", token: "bad")
         guard case .failed = c.stage else { return XCTFail("expected .failed") }

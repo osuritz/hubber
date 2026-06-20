@@ -69,7 +69,7 @@ final class ConnectionVisibilityTests: XCTestCase {
             number: 1,
             title: "t",
             url: nil,
-            author: GitHubUser(login: "a", initials: "A", color: .gray),
+            author: CodeHostUser(login: "a", initials: "A", color: .gray),
             sloClockStart: Date(timeIntervalSince1970: 0),
             additions: 0,
             deletions: 0,

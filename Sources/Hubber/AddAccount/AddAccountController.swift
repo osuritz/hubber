@@ -55,9 +55,9 @@ final class AddAccountController: ObservableObject {
     @Published var selectedProvider: AddAccountProvider = .gitHubDotCom
 
     private let policy: ProviderAccessPolicy
-    private let authServiceFactory: (_ provider: String, _ host: String) -> any GitHubDeviceFlowServicing
+    private let authServiceFactory: (_ provider: String, _ host: String) -> any CodeHostAuthServicing
     private let isDuplicate: (ConnectionID) -> Bool
-    private let addAccount: (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void
+    private let addAccount: (ConnectionID, StoredToken, AuthenticatedUser) async throws -> Void
 
     private var currentAuthorization: GitHubDeviceAuthorization?
 
@@ -66,19 +66,19 @@ final class AddAccountController: ObservableObject {
     /// re-render and tear down the dialog mid-animation. `finalize()` materializes it afterward.
     private struct PendingAccount {
         let id: ConnectionID
-        let token: GitHubStoredToken
-        let user: GitHubAuthenticatedUser
+        let token: StoredToken
+        let user: AuthenticatedUser
     }
 
     private var pending: PendingAccount?
 
     init(
         policy: ProviderAccessPolicy,
-        authServiceFactory: @escaping (String, String) -> any GitHubDeviceFlowServicing = {
+        authServiceFactory: @escaping (String, String) -> any CodeHostAuthServicing = {
             ConnectionFactory.authService(provider: $0, host: $1)
         },
         isDuplicate: @escaping (ConnectionID) -> Bool = { _ in false },
-        addAccount: @escaping (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void
+        addAccount: @escaping (ConnectionID, StoredToken, AuthenticatedUser) async throws -> Void
     ) {
         self.policy = policy
         self.authServiceFactory = authServiceFactory
@@ -121,7 +121,7 @@ final class AddAccountController: ObservableObject {
                 stage = .failed("This account is already added.")
                 return
             }
-            let stored = GitHubStoredToken(
+            let stored = StoredToken(
                 accessToken: token,
                 accessTokenExpiresAt: nil,
                 refreshToken: nil,
@@ -131,7 +131,7 @@ final class AddAccountController: ObservableObject {
             )
             pending = PendingAccount(id: id, token: stored, user: user)
             stage = .added(id)
-        } catch GitHubAuthError.badCredentials {
+        } catch CodeHostAuthError.badCredentials {
             stage = .failed("That token was rejected. Check the token and its scopes.")
         } catch {
             stage = .failed(error.localizedDescription)
@@ -147,12 +147,16 @@ final class AddAccountController: ObservableObject {
             return
         }
         let auth = authServiceFactory("github", host)
+        guard let deviceFlow = auth as? GitHubDeviceFlowServicing else {
+            stage = .failed("Device sign-in isn't available for this provider.")
+            return
+        }
         do {
-            let authorization = try await auth.startDeviceFlow()
+            let authorization = try await deviceFlow.startDeviceFlow()
             currentAuthorization = authorization
             stage = .deviceCode(authorization)
-            var token = try await auth.pollForToken(deviceAuthorization: authorization)
-            let user = try await auth.fetchAuthenticatedUser(accessToken: token.accessToken)
+            var token = try await deviceFlow.pollForToken(deviceAuthorization: authorization)
+            let user = try await deviceFlow.fetchAuthenticatedUser(accessToken: token.accessToken)
             token.login = user.login
             let id = ConnectionID.gitHubDotCom(login: user.login)
             guard !isDuplicate(id) else {

@@ -20,7 +20,7 @@ extension GitHubProvider {
             let viewer = payload["viewer"] as? [String: Any],
             let prs = viewer["pullRequests"] as? [String: Any],
             let nodes = prs["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap { Self.parseOutgoingPR($0, unresolvedMode: unresolvedMode) }
     }
@@ -128,7 +128,7 @@ extension GitHubProvider {
             }
 
             let avatarURL = (author["avatarUrl"] as? String).flatMap(URL.init(string:))
-            let user = GitHubUser(
+            let user = CodeHostUser(
                 login: login,
                 initials: String(login.prefix(2)).uppercased(),
                 color: colorForLogin(login),

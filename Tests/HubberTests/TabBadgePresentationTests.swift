@@ -90,7 +90,7 @@ final class TabBadgePresentationTests: XCTestCase {
             number: 1,
             title: "Needs review",
             url: nil,
-            author: GitHubUser(login: "a", initials: "A", color: .gray, avatarURL: nil),
+            author: CodeHostUser(login: "a", initials: "A", color: .gray, avatarURL: nil),
             sloClockStart: baseDate,
             additions: 10,
             deletions: 2,

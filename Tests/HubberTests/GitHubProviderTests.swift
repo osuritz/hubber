@@ -90,7 +90,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "bad", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected badCredentials")
-        } catch GitHubAuthError.badCredentials {}
+        } catch CodeHostAuthError.badCredentials {}
     }
 
     // MARK: - Helpers (reused across task tests — keep in sync)
@@ -397,7 +397,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertEqual(retryAfter, 30)
         }
     }
@@ -417,7 +417,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertEqual(retryAfter, 60)
         }
     }
@@ -429,8 +429,8 @@ final class GitHubProviderTests: XCTestCase {
 
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
-            XCTFail("Expected github error")
-        } catch GitHubAuthError.github {
+            XCTFail("Expected providerMessage error")
+        } catch CodeHostAuthError.providerMessage {
             // expected
         }
     }
@@ -443,7 +443,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertNil(retryAfter)
         }
     }
@@ -456,7 +456,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertNil(retryAfter, "Non-numeric Retry-After must yield nil retryAfter")
         }
     }

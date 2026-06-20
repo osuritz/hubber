@@ -141,7 +141,7 @@ final class NotificationDispatcherTests: XCTestCase {
             number: number,
             title: title,
             url: URL(string: "https://github.com/acme/web/pull/\(number)"),
-            author: GitHubUser(login: "alice", initials: "AL", color: .red),
+            author: CodeHostUser(login: "alice", initials: "AL", color: .red),
             sloClockStart: Date(),
             additions: 5,
             deletions: 1,

@@ -1,18 +1,18 @@
 import Foundation
 
-extension GitHubTokenStore {
-    static func makeStore(for connectionID: ConnectionID) -> any GitHubTokenStoring {
+extension TokenStore {
+    static func makeStore(for connectionID: ConnectionID) -> any TokenStoring {
         #if DEBUG
-            return GitHubDevelopmentFileTokenStore(connectionID: connectionID)
+            return DevelopmentFileTokenStore(connectionID: connectionID)
         #else
-            return GitHubKeychainTokenStore(account: connectionID.slug)
+            return KeychainTokenStore(account: connectionID.slug)
         #endif
     }
 }
 
-extension GitHubDevelopmentFileTokenStore {
+extension DevelopmentFileTokenStore {
     convenience init(connectionID: ConnectionID) {
-        self.init(tokenURL: GitHubDevelopmentFileTokenStore.devTokenURL(for: connectionID))
+        self.init(tokenURL: DevelopmentFileTokenStore.devTokenURL(for: connectionID))
     }
 
     static var defaultTokenURL: URL {
