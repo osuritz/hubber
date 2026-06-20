@@ -107,7 +107,7 @@ enum HubberDesign {
     )
 
     static let sloRed = SLOTokenGroup(
-        fg: Color(light: "#CE0014", dark: "#FF6E66"), // a11y: light #D70015→#CE0014 (4.27→4.58:1); dark #FF6961→#FF6E66 (4.37→4.50:1)
+        fg: Color(light: "#CE0014", dark: "#FF7067"), // a11y: light #D70015→#CE0014 (4.27→4.58:1); dark #FF6E66→#FF7067 (4.50→4.55:1)
         bg: Color(light: "rgba(255,59,48,0.12)", dark: "rgba(255,69,58,0.18)"),
         border: Color(light: "rgba(255,59,48,0.30)", dark: "rgba(255,69,58,0.36)")
     )
