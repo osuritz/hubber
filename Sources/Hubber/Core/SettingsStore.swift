@@ -45,6 +45,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(badgeMode.rawValue, forKey: "badgeMode") }
     }
 
+    // MARK: - Tab badges
+
+    @Published var tabBadgeMode: TabBadgeMode {
+        didSet { defaults.set(tabBadgeMode.rawValue, forKey: "tabBadgeMode") }
+    }
+
     // MARK: - Appearance
 
     @Published var rowDensity: RowDensity {
@@ -160,6 +166,7 @@ final class SettingsStore: ObservableObject {
         unresolvedMode = Self.resolveUnresolvedMode(defaults: defaults, managed: managed)
         rowDensity = Self.resolveRowDensity(defaults: defaults, managed: managed)
         badgeMode = Self.resolveBadgeMode(defaults: defaults, managed: managed)
+        tabBadgeMode = Self.resolveTabBadgeMode(defaults: defaults, managed: managed)
         analyticsEnabled = Self.bool(
             managedKey: ManagedKey.analyticsEnabled,
             defaultsKey: ManagedKey.analyticsEnabled,
@@ -313,6 +320,16 @@ final class SettingsStore: ObservableObject {
             managed: managed,
             fallback: BadgeMode.attentionNeeded.rawValue
         )) ?? .attentionNeeded
+    }
+
+    private static func resolveTabBadgeMode(defaults: UserDefaults, managed: any ManagedPreferences) -> TabBadgeMode {
+        TabBadgeMode(rawValue: string(
+            managedKey: ManagedKey.tabBadgeMode,
+            defaultsKey: ManagedKey.tabBadgeMode,
+            defaults: defaults,
+            managed: managed,
+            fallback: TabBadgeMode.needsAttention.rawValue
+        )) ?? .needsAttention
     }
 
     private static func resolveLaunchAtLogin(defaults: UserDefaults, managed: any ManagedPreferences) -> Bool {

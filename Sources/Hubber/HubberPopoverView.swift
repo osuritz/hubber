@@ -195,11 +195,10 @@ struct HubberPopoverView: View {
             HubberTabBar(
                 selectedTab: $selectedTab,
                 showSettings: $showSettings,
-                counts: [
-                    .incoming: store.data.incoming.count,
-                    .outgoing: store.data.outgoing.count(where: { $0.ci == .failing || $0.unresolved > 0 }),
-                    .drafts: store.data.drafts.count,
-                ]
+                counts: TabBadgePresentation.counts(
+                    data: store.data,
+                    mode: store.settings.tabBadgeMode
+                )
             )
         }
         .padding(.horizontal, 14)

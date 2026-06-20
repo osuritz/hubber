@@ -109,6 +109,24 @@ enum BadgeMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Controls what the in-popover per-tab count badges represent. Independent of the
+/// menubar `BadgeMode`, which governs the single status-item badge.
+enum TabBadgeMode: String, CaseIterable, Identifiable {
+    case needsAttention
+    case totalCount
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .needsAttention: "Attention"
+        case .totalCount: "Total"
+        }
+    }
+}
+
 enum UnresolvedThreadMode: String, CaseIterable, Identifiable {
     case allOpen
     case reviewOnly

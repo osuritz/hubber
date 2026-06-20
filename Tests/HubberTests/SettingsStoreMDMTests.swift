@@ -57,6 +57,14 @@ final class SettingsStoreMDMTests: XCTestCase {
         XCTAssertEqual(store.badgeMode, .incomingCount)
     }
 
+    // tabBadgeMode: MDM forced value beats a conflicting UserDefaults value
+    func testForcedTabBadgeModeWinsOverUserDefaults() {
+        defaults.set(TabBadgeMode.totalCount.rawValue, forKey: "tabBadgeMode") // UserDefaults says total
+        let managed = InMemoryManagedPreferences([ManagedKey.tabBadgeMode: TabBadgeMode.needsAttention.rawValue])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.tabBadgeMode, .needsAttention)
+    }
+
     // incomingMode: MDM forced value beats a conflicting UserDefaults value
     func testForcedIncomingModeWinsOverUserDefaults() {
         defaults.set(IncomingReviewMode.team.rawValue, forKey: "incomingMode") // UserDefaults says team
