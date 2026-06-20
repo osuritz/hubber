@@ -439,7 +439,6 @@ private struct HubberTabBar: View {
     @Binding var selectedTab: WorkTab
     @Binding var showSettings: Bool
     let counts: [WorkTab: Int]
-    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         HStack(spacing: 2) {
