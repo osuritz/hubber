@@ -363,7 +363,7 @@ struct OnboardingConnectStep: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
                 .foregroundStyle(HubberDesign.text2)
-                .accessibilityHint("Opens the device-code flow")
+                .accessibilityHint("Opens the add-account form")
                 .padding(.top, 12)
         }
     }
