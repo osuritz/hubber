@@ -251,7 +251,7 @@ struct OnboardingConsentStep: View {
                 .padding(.top, 14)
             }
         }
-        .onAppear { primaryFocused = true }
+        .onAppear { if !isManaged { primaryFocused = true } }
     }
 
     private var choiceButtons: some View {
@@ -305,7 +305,7 @@ struct OnboardingConnectStep: View {
                 coordinator.skipConnectIfAlreadyConnected(true)
             }
             // Only set default focus when showing the connect prompt, not the device-code screen.
-            if case .waitingForUser = store.authState { } else { primaryFocused = true }
+            guard case .waitingForUser = store.authState else { primaryFocused = true; return }
         }
         .onChange(of: store.authState) { _, newState in
             guard coordinator.currentStep == .connect else { return }
@@ -576,6 +576,6 @@ struct OnboardingLaunchAtLoginStep: View {
                 }
             }
         }
-        .onAppear { primaryFocused = true }
+        .onAppear { if !isManaged { primaryFocused = true } }
     }
 }
