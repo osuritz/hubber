@@ -31,6 +31,8 @@ struct AvatarView: View {
     let size: CGFloat
     /// Optional reviewer state dot overlay (bottom-right).
     var reviewerState: ReviewerState?
+    /// Optional role descriptor for accessibility (e.g. "author"). Nil = omitted from label.
+    var accessibilityRole: String? = nil
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -40,6 +42,11 @@ struct AvatarView: View {
             }
         }
         .frame(width: size, height: size)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            [user.login, accessibilityRole, reviewerState.map(AccessibilityText.reviewerPhrase)]
+                .compactMap { $0 }.joined(separator: ", ")
+        )
         .task(id: user.avatarURL) {
             guard let url = user.avatarURL else { return }
             // withTaskCancellationHandler ensures that when the .task is cancelled
