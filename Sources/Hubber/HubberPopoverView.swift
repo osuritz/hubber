@@ -177,6 +177,7 @@ struct HubberPopoverView: View {
                 .contentShape(Rectangle())
                 .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
                 .help("Refresh pull requests (⌘R)")
+                .accessibilityLabel("Refresh")
 
                 Button {
                     showSettings.toggle()
@@ -190,6 +191,7 @@ struct HubberPopoverView: View {
                 .contentShape(Rectangle())
                 .help("Settings (⌘,)")
                 .keyboardShortcut(",", modifiers: .command)
+                .accessibilityLabel("Settings")
             }
 
             HubberTabBar(
@@ -413,6 +415,8 @@ private struct ClickableRow<Content: View>: View {
             }
             .buttonStyle(.plain)
             .help("Open pull request")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens the pull request")
         } else {
             content()
         }
@@ -453,6 +457,9 @@ private struct HubberTabBar: View {
                             .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
                     }
                 }
+                .accessibilityLabel(tab.title)
+                .accessibilityValue(AccessibilityText.tabValue(count: counts[tab, default: 0]))
+                .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(2)
