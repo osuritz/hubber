@@ -46,7 +46,7 @@ actor SpyProvider: CodeHostProvider {
                 number: 1,
                 title: "Incoming PR",
                 url: nil,
-                author: GitHubUser(login: "alice", initials: "AL", color: .white),
+                author: CodeHostUser(login: "alice", initials: "AL", color: .white),
                 sloClockStart: Date(),
                 additions: 0,
                 deletions: 0,
@@ -199,7 +199,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         )
 
         // First call: inject error
-        await spy.setNextError(GitHubAuthError.invalidResponse)
+        await spy.setNextError(CodeHostAuthError.invalidResponse)
         do {
             _ = try await sut.fetchIncomingReviews(
                 accessToken: "tok",

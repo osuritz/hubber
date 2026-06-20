@@ -9,7 +9,7 @@ final class HubberAuthStateTests: XCTestCase {
 
     func testBadCredentialsWithLoginReturnsSessionExpired() {
         let result = HubberStore.authState(
-            afterRefreshError: GitHubAuthError.badCredentials,
+            afterRefreshError: CodeHostAuthError.badCredentials,
             signedInLogin: "osuritz"
         )
         XCTAssertEqual(result, .sessionExpired(login: "osuritz"))
@@ -17,7 +17,7 @@ final class HubberAuthStateTests: XCTestCase {
 
     func testMissingRefreshTokenWithLoginReturnsSessionExpired() {
         let result = HubberStore.authState(
-            afterRefreshError: GitHubAuthError.missingRefreshToken,
+            afterRefreshError: CodeHostAuthError.missingRefreshToken,
             signedInLogin: "osuritz"
         )
         XCTAssertEqual(result, .sessionExpired(login: "osuritz"))
@@ -25,7 +25,7 @@ final class HubberAuthStateTests: XCTestCase {
 
     func testBadCredentialsWithNilLoginReturnsSignedOut() {
         let result = HubberStore.authState(
-            afterRefreshError: GitHubAuthError.badCredentials,
+            afterRefreshError: CodeHostAuthError.badCredentials,
             signedInLogin: nil
         )
         XCTAssertEqual(result, .signedOut)
@@ -41,7 +41,7 @@ final class HubberAuthStateTests: XCTestCase {
 
     func testGenericGitHubErrorReturnsNil() {
         let result = HubberStore.authState(
-            afterRefreshError: GitHubAuthError.github("x"),
+            afterRefreshError: CodeHostAuthError.providerMessage("x"),
             signedInLogin: "osuritz"
         )
         XCTAssertNil(result)

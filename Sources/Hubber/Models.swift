@@ -145,7 +145,7 @@ enum UnresolvedThreadMode: String, CaseIterable, Identifiable {
     }
 }
 
-struct GitHubUser: Identifiable, Hashable {
+struct CodeHostUser: Identifiable, Hashable {
     let login: String
     let initials: String
     let color: Color
@@ -169,7 +169,7 @@ struct IncomingReview: Identifiable {
     let number: Int
     let title: String
     let url: URL?
-    let author: GitHubUser
+    let author: CodeHostUser
     let sloClockStart: Date // max(reviewRequestedAt, readyForReviewAt)
     let additions: Int
     let deletions: Int
@@ -213,7 +213,7 @@ struct DraftReview: Identifiable {
 }
 
 struct Reviewer: Identifiable {
-    let user: GitHubUser
+    let user: CodeHostUser
     let state: ReviewerState
 
     var id: String {
@@ -257,14 +257,16 @@ extension Date {
     }
 }
 
-extension GitHubUser {
-    static let marisol = GitHubUser(login: "marisol", initials: "MR", color: Color(red: 0.49, green: 0.36, blue: 1.00))
-    static let tobi = GitHubUser(login: "tobi-l", initials: "TL", color: Color(red: 0.12, green: 0.62, blue: 0.33))
-    static let kenji = GitHubUser(login: "kenji", initials: "KS", color: Color(red: 0.84, green: 0.20, blue: 0.42))
-    static let priyanka = GitHubUser(
+extension CodeHostUser {
+    static let marisol = CodeHostUser(
+        login: "marisol", initials: "MR", color: Color(red: 0.49, green: 0.36, blue: 1.00)
+    )
+    static let tobi = CodeHostUser(login: "tobi-l", initials: "TL", color: Color(red: 0.12, green: 0.62, blue: 0.33))
+    static let kenji = CodeHostUser(login: "kenji", initials: "KS", color: Color(red: 0.84, green: 0.20, blue: 0.42))
+    static let priyanka = CodeHostUser(
         login: "priyanka", initials: "PV", color: Color(red: 0.06, green: 0.44, blue: 1.00)
     )
-    static let ines = GitHubUser(login: "ines", initials: "IF", color: Color(red: 0.90, green: 0.47, blue: 0.00))
+    static let ines = CodeHostUser(login: "ines", initials: "IF", color: Color(red: 0.90, green: 0.47, blue: 0.00))
 }
 
 // MARK: - Auth state

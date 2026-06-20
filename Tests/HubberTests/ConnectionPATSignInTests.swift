@@ -29,39 +29,39 @@ private struct PATStubProvider: CodeHostProvider {
 private struct PATIdleProvider: MachineIdleProviding { let isIdle = false }
 
 private final class PATAuthService: GitHubDeviceFlowServicing, @unchecked Sendable {
-    let user: GitHubAuthenticatedUser
+    let user: AuthenticatedUser
     private(set) var fetchUserCallCount = 0
 
-    init(user: GitHubAuthenticatedUser) {
+    init(user: AuthenticatedUser) {
         self.user = user
     }
 
-    func fetchAuthenticatedUser(accessToken _: String) async throws -> GitHubAuthenticatedUser {
+    func fetchAuthenticatedUser(accessToken _: String) async throws -> AuthenticatedUser {
         fetchUserCallCount += 1
         return user
     }
 
-    func refresh(_: GitHubStoredToken) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.missingRefreshToken
+    func refresh(_: StoredToken) async throws -> StoredToken {
+        throw CodeHostAuthError.missingRefreshToken
     }
 
     func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
-        throw GitHubAuthError.invalidResponse
+        throw CodeHostAuthError.invalidResponse
     }
 
-    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.invalidResponse
+    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> StoredToken {
+        throw CodeHostAuthError.invalidResponse
     }
 }
 
-private final class PATTokenStore: GitHubTokenStoring, @unchecked Sendable {
-    private var token: GitHubStoredToken?
+private final class PATTokenStore: TokenStoring, @unchecked Sendable {
+    private var token: StoredToken?
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         token
     }
 
-    func save(_ token: GitHubStoredToken) throws {
+    func save(_ token: StoredToken) throws {
         self.token = token
     }
 
@@ -75,7 +75,7 @@ final class ConnectionPATSignInTests: XCTestCase {
     private func makeConnection(
         id: ConnectionID,
         authService: any GitHubDeviceFlowServicing,
-        tokenStore: any GitHubTokenStoring,
+        tokenStore: any TokenStoring,
         settings: SettingsStore
     ) -> Connection {
         Connection(
@@ -94,7 +94,7 @@ final class ConnectionPATSignInTests: XCTestCase {
     func testPATSignInResolvesLoginAndStoresNonRefreshableToken() async throws {
         let id = ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz")
         let store = PATTokenStore()
-        let auth = PATAuthService(user: GitHubAuthenticatedUser(login: "osuritz", name: "O", avatarUrl: nil))
+        let auth = PATAuthService(user: AuthenticatedUser(login: "osuritz", name: "O", avatarUrl: nil))
         let suite = "PAT-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -118,7 +118,7 @@ final class ConnectionPATSignInTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let managed = InMemoryManagedPreferences([ManagedKey.providerAllowlist: ["github.com"]])
         let settings = SettingsStore(defaults: defaults, managed: managed) // gitlab.com NOT allowed
-        let auth = PATAuthService(user: GitHubAuthenticatedUser(login: "osuritz", name: nil, avatarUrl: nil))
+        let auth = PATAuthService(user: AuthenticatedUser(login: "osuritz", name: nil, avatarUrl: nil))
         let conn = makeConnection(id: id, authService: auth, tokenStore: PATTokenStore(), settings: settings)
 
         await conn.signIn(withToken: "glpat-secret")

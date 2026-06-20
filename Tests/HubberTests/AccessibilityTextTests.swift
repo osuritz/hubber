@@ -3,8 +3,8 @@ import Testing
 
 @Suite("AccessibilityText composed labels")
 struct AccessibilityTextComposedTests {
-    private func user(_ login: String) -> GitHubUser {
-        GitHubUser(login: login, initials: "XX", color: .gray)
+    private func user(_ login: String) -> CodeHostUser {
+        CodeHostUser(login: login, initials: "XX", color: .gray)
     }
 
     @Test("reviewers summary groups by state in canonical order")

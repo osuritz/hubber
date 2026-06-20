@@ -143,7 +143,7 @@ struct GitHubAuthSettingsView: View {
     private func signedInView(login: String) -> some View {
         HStack(spacing: 10) {
             AvatarView(
-                user: GitHubUser(
+                user: CodeHostUser(
                     login: login,
                     initials: initials(for: store.viewerName ?? login),
                     color: avatarColor(for: login),

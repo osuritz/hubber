@@ -8,8 +8,8 @@ final class SnapshotStoreTests: XCTestCase {
     private var snapshotURL: URL!
     private var sut: SnapshotStore!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("SnapshotStoreTests-\(UUID())", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -17,9 +17,9 @@ final class SnapshotStoreTests: XCTestCase {
         sut = SnapshotStore(snapshotURL: snapshotURL)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: tempDir)
-        try super.tearDownWithError()
+        try await super.tearDown()
     }
 
     // MARK: - load when absent → nil
@@ -148,7 +148,7 @@ final class SnapshotStoreTests: XCTestCase {
             number: 1,
             title: "Fix bug",
             url: URL(string: "https://github.com/acme/web/pull/1"),
-            author: GitHubUser(login: "alice", initials: "AL", color: .red),
+            author: CodeHostUser(login: "alice", initials: "AL", color: .red),
             sloClockStart: Date(),
             additions: 5,
             deletions: 1,
@@ -168,7 +168,7 @@ final class SnapshotStoreTests: XCTestCase {
             unresolved: 0,
             approvals: 1,
             requiredApprovals: 1,
-            reviewers: [Reviewer(user: GitHubUser(login: "bob", initials: "BO", color: .blue), state: .approved)],
+            reviewers: [Reviewer(user: CodeHostUser(login: "bob", initials: "BO", color: .blue), state: .approved)],
             updatedAgoHours: 2,
             mergeable: true
         )

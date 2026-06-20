@@ -26,14 +26,14 @@ private struct AddResolvedStubProvider: CodeHostProvider {
 
 private struct AddResolvedIdleProvider: MachineIdleProviding { let isIdle = false }
 
-private final class AddResolvedTokenStore: GitHubTokenStoring, @unchecked Sendable {
-    private var token: GitHubStoredToken?
+private final class AddResolvedTokenStore: TokenStoring, @unchecked Sendable {
+    private var token: StoredToken?
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         token
     }
 
-    func save(_ token: GitHubStoredToken) throws {
+    func save(_ token: StoredToken) throws {
         self.token = token
     }
 
@@ -73,7 +73,7 @@ final class AddResolvedAccountTests: XCTestCase {
         let store = makeStore(defaults)
 
         let id = ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz")
-        let token = GitHubStoredToken(
+        let token = StoredToken(
             accessToken: "glpat",
             accessTokenExpiresAt: nil,
             refreshToken: nil,
@@ -84,7 +84,7 @@ final class AddResolvedAccountTests: XCTestCase {
         let conn = try await store.addResolvedAccount(
             id: id,
             token: token,
-            user: GitHubAuthenticatedUser(login: "osuritz", name: nil, avatarUrl: nil)
+            user: AuthenticatedUser(login: "osuritz", name: nil, avatarUrl: nil)
         )
 
         XCTAssertEqual(conn.authState, .signedIn(login: "osuritz"))
@@ -98,7 +98,7 @@ final class AddResolvedAccountTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = makeStore(defaults)
         let id = ConnectionID(provider: "gitlab", host: "gitlab.com", login: "osuritz")
-        let token = GitHubStoredToken(
+        let token = StoredToken(
             accessToken: "glpat",
             accessTokenExpiresAt: nil,
             refreshToken: nil,
@@ -106,7 +106,7 @@ final class AddResolvedAccountTests: XCTestCase {
             tokenType: "bearer",
             login: "osuritz"
         )
-        let user = GitHubAuthenticatedUser(login: "osuritz", name: nil, avatarUrl: nil)
+        let user = AuthenticatedUser(login: "osuritz", name: nil, avatarUrl: nil)
         _ = try await store.addResolvedAccount(id: id, token: token, user: user)
 
         do {

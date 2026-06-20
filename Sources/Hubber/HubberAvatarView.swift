@@ -26,7 +26,7 @@ struct AvatarView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var image: NSImage?
 
-    let user: GitHubUser
+    let user: CodeHostUser
     /// Point size for the avatar circle. Use AvatarSize.xxx.rawValue or pass any CGFloat.
     let size: CGFloat
     /// Optional reviewer state dot overlay (bottom-right).

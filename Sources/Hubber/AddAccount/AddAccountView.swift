@@ -16,7 +16,7 @@ struct AddAccountView: View {
     init(
         policy: ProviderAccessPolicy,
         isDuplicate: @escaping (ConnectionID) -> Bool,
-        addAccount: @escaping (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void,
+        addAccount: @escaping (ConnectionID, StoredToken, AuthenticatedUser) async throws -> Void,
         onActiveChange: @escaping (Bool) -> Void,
         onDone: @escaping () -> Void
     ) {

@@ -60,7 +60,7 @@ struct AccountsSettingsSection: View {
         SettingsRow(isStack: true, isLast: isLast) {
             HStack(spacing: 10) {
                 AvatarView(
-                    user: GitHubUser(
+                    user: CodeHostUser(
                         login: connection.id.login,
                         initials: initials(for: connection.viewerName ?? connection.id.login),
                         color: avatarColor(for: connection.id.login),

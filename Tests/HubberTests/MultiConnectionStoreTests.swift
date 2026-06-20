@@ -7,14 +7,14 @@ import XCTest
 private final class MultiConnectionAuthService: GitHubDeviceFlowServicing, @unchecked Sendable {
     private let lock = NSLock()
     private let login: String
-    private let fetchUserResult: Result<GitHubAuthenticatedUser, Error>?
+    private let fetchUserResult: Result<AuthenticatedUser, Error>?
     private var _startDeviceFlowCallCount = 0
 
     var startDeviceFlowCallCount: Int {
         lock.withLock { _startDeviceFlowCallCount }
     }
 
-    init(login: String, fetchUserResult: Result<GitHubAuthenticatedUser, Error>? = nil) {
+    init(login: String, fetchUserResult: Result<AuthenticatedUser, Error>? = nil) {
         self.login = login
         self.fetchUserResult = fetchUserResult
     }
@@ -22,7 +22,7 @@ private final class MultiConnectionAuthService: GitHubDeviceFlowServicing, @unch
     func startDeviceFlow() async throws -> GitHubDeviceAuthorization {
         lock.withLock { _startDeviceFlowCallCount += 1 }
         guard let verificationURI = URL(string: "https://github.com/login/device") else {
-            throw GitHubAuthError.invalidResponse
+            throw CodeHostAuthError.invalidResponse
         }
         return GitHubDeviceAuthorization(
             deviceCode: "device-\(login)",
@@ -33,8 +33,8 @@ private final class MultiConnectionAuthService: GitHubDeviceFlowServicing, @unch
         )
     }
 
-    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
-        GitHubStoredToken(
+    func pollForToken(deviceAuthorization _: GitHubDeviceAuthorization) async throws -> StoredToken {
+        StoredToken(
             accessToken: "access-\(login)",
             accessTokenExpiresAt: nil,
             refreshToken: nil,
@@ -44,33 +44,33 @@ private final class MultiConnectionAuthService: GitHubDeviceFlowServicing, @unch
         )
     }
 
-    func refresh(_ token: GitHubStoredToken) async throws -> GitHubStoredToken {
+    func refresh(_ token: StoredToken) async throws -> StoredToken {
         token
     }
 
-    func fetchAuthenticatedUser(accessToken _: String) async throws -> GitHubAuthenticatedUser {
+    func fetchAuthenticatedUser(accessToken _: String) async throws -> AuthenticatedUser {
         if let fetchUserResult {
             return try fetchUserResult.get()
         }
-        return GitHubAuthenticatedUser(login: login, name: nil, avatarUrl: nil)
+        return AuthenticatedUser(login: login, name: nil, avatarUrl: nil)
     }
 }
 
-private final class MutableTokenStore: GitHubTokenStoring, @unchecked Sendable {
+private final class MutableTokenStore: TokenStoring, @unchecked Sendable {
     private let lock = NSLock()
-    private var token: GitHubStoredToken?
+    private var token: StoredToken?
     private let deleteError: Error?
 
-    init(token: GitHubStoredToken?, deleteError: Error? = nil) {
+    init(token: StoredToken?, deleteError: Error? = nil) {
         self.token = token
         self.deleteError = deleteError
     }
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         lock.withLock { token }
     }
 
-    func save(_ token: GitHubStoredToken) throws {
+    func save(_ token: StoredToken) throws {
         lock.withLock { self.token = token }
     }
 
@@ -269,7 +269,7 @@ final class MultiConnectionStoreTests: XCTestCase {
         let sleeperB = MultiConnectionSleeper()
         let connectionA = try makeConnection(
             login: "limited",
-            provider: MultiConnectionProvider(outgoing: .failure(GitHubAuthError.rateLimited(retryAfter: 120))),
+            provider: MultiConnectionProvider(outgoing: .failure(CodeHostAuthError.rateLimited(retryAfter: 120))),
             sleeper: sleeperA
         )
         let connectionB = try makeConnection(login: "healthy", sleeper: sleeperB)
@@ -293,7 +293,7 @@ final class MultiConnectionStoreTests: XCTestCase {
     func testRateLimitedUntilIsSetOnlyOnFailingConnection() async throws {
         let connectionA = try makeConnection(
             login: "limited",
-            provider: MultiConnectionProvider(outgoing: .failure(GitHubAuthError.rateLimited(retryAfter: 120)))
+            provider: MultiConnectionProvider(outgoing: .failure(CodeHostAuthError.rateLimited(retryAfter: 120)))
         )
         let connectionB = try makeConnection(login: "healthy")
         connectionA.authState = .signedIn(login: "limited")
@@ -330,7 +330,7 @@ final class MultiConnectionStoreTests: XCTestCase {
                     login: "expired",
                     authService: MultiConnectionAuthService(
                         login: "expired",
-                        fetchUserResult: .failure(GitHubAuthError.badCredentials)
+                        fetchUserResult: .failure(CodeHostAuthError.badCredentials)
                     )
                 )
             }
@@ -594,7 +594,7 @@ final class MultiConnectionStoreTests: XCTestCase {
         login: String,
         authService: MultiConnectionAuthService? = nil,
         provider: MultiConnectionProvider = MultiConnectionProvider(),
-        tokenStore: (any GitHubTokenStoring)? = nil,
+        tokenStore: (any TokenStoring)? = nil,
         sleeper: MultiConnectionSleeper? = nil
     ) throws -> Connection {
         let sleeper = sleeper ?? MultiConnectionSleeper()
@@ -637,8 +637,8 @@ final class MultiConnectionStoreTests: XCTestCase {
         try XCTUnwrap(UserDefaults(suiteName: "MultiConnection-\(UUID())"))
     }
 
-    private func storedToken(login: String) -> GitHubStoredToken {
-        GitHubStoredToken(
+    private func storedToken(login: String) -> StoredToken {
+        StoredToken(
             accessToken: "token-\(login)",
             accessTokenExpiresAt: nil,
             refreshToken: nil,

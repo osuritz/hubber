@@ -10,17 +10,17 @@ import XCTest
 @MainActor
 final class HubberStoreSettingsForwardingTests: XCTestCase {
     private var defaults: UserDefaults!
-    private nonisolated(unsafe) var suiteName: String!
+    private var suiteName: String!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "HubberStoreSettingsForwardingTests-\(UUID())"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testStoreEmitsObjectWillChangeWhenSettingsChange() {
