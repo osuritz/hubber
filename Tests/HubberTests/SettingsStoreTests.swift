@@ -6,10 +6,10 @@ import XCTest
 final class SettingsStoreTests: XCTestCase {
     private var sut: SettingsStore!
     private var defaults: UserDefaults!
-    private nonisolated(unsafe) var suiteName: String!
+    private var suiteName: String!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "SettingsStoreTests-\(UUID())"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         sut = SettingsStore(defaults: defaults)
@@ -22,9 +22,9 @@ final class SettingsStoreTests: XCTestCase {
         SettingsStore(defaults: defaults, managed: managed)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testDefaultSLOHoursIs4() {

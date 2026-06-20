@@ -14,17 +14,17 @@ import XCTest
 @MainActor
 final class SettingsStoreMDMTests: XCTestCase {
     private var defaults: UserDefaults!
-    private nonisolated(unsafe) var suiteName: String!
+    private var suiteName: String!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "SettingsStoreMDMTests-\(UUID())"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func makeStore(managed: InMemoryManagedPreferences = InMemoryManagedPreferences()) -> SettingsStore {
