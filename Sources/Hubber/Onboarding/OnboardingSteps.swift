@@ -39,6 +39,7 @@ struct OnboardingScaffold<Content: View>: View {
 struct OnboardingWelcomeStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var primaryFocused: Bool
 
     var body: some View {
         OnboardingScaffold(stepIndex: 0, stepCount: OnboardingCoordinator.Step.allCases.count) {
@@ -67,8 +68,10 @@ struct OnboardingWelcomeStep: View {
                 }
                 .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
                 .frame(maxWidth: 264)
+                .focused($primaryFocused)
             }
         }
+        .onAppear { primaryFocused = true }
     }
 
     /// The app's own icon — the canonical "Welcome to <App>" mark. Falls back to the brand
@@ -191,6 +194,7 @@ struct OnboardingConsentStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var primaryFocused: Bool
 
     /// When MDM forces analyticsEnabled, the choice is not the user's to make — show the
     /// managed state and let them continue (the gate already reflects the forced value).
@@ -247,6 +251,7 @@ struct OnboardingConsentStep: View {
                 .padding(.top, 14)
             }
         }
+        .onAppear { primaryFocused = true }
     }
 
     private var choiceButtons: some View {
@@ -263,6 +268,7 @@ struct OnboardingConsentStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
 
             OnboardingSecondaryButton(title: "Not now") {
                 store.settings.analyticsEnabled = false
@@ -280,6 +286,7 @@ struct OnboardingConnectStep: View {
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var showingAdd = false
+    @FocusState private var primaryFocused: Bool
 
     private var isRestricted: Bool {
         !store.settings.providerAccessPolicy.canConnectGitHubDotCom
@@ -297,6 +304,8 @@ struct OnboardingConnectStep: View {
             if case .signedIn = store.authState {
                 coordinator.skipConnectIfAlreadyConnected(true)
             }
+            // Only set default focus when showing the connect prompt, not the device-code screen.
+            if case .waitingForUser = store.authState { } else { primaryFocused = true }
         }
         .onChange(of: store.authState) { _, newState in
             guard coordinator.currentStep == .connect else { return }
@@ -372,6 +381,7 @@ struct OnboardingConnectStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
             .disabled(isRestricted)
             .opacity(isRestricted ? 0.45 : 1)
 
@@ -408,6 +418,7 @@ struct OnboardingNotificationsStep: View {
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var requesting = false
+    @FocusState private var primaryFocused: Bool
 
     var body: some View {
         OnboardingScaffold(stepIndex: 3, stepCount: OnboardingCoordinator.Step.allCases.count) {
@@ -441,6 +452,7 @@ struct OnboardingNotificationsStep: View {
                 }
             }
         }
+        .onAppear { primaryFocused = true }
     }
 
     private var choiceButtons: some View {
@@ -461,6 +473,7 @@ struct OnboardingNotificationsStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
             .disabled(requesting)
 
             OnboardingSecondaryButton(title: "Not now") {
@@ -488,6 +501,7 @@ struct OnboardingNotificationsStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
         }
     }
 }
@@ -498,6 +512,7 @@ struct OnboardingLaunchAtLoginStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var primaryFocused: Bool
 
     /// When MDM forces launchAtLogin, the user can't change it — show the managed state and
     /// let them continue (reconcileLaunchAtLogin already applied the forced value at launch).
@@ -552,6 +567,7 @@ struct OnboardingLaunchAtLoginStep: View {
                         }
                         .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
                         .frame(maxWidth: 264)
+                        .focused($primaryFocused)
 
                         OnboardingSecondaryButton(title: "Not now") {
                             coordinator.advance()
@@ -560,5 +576,6 @@ struct OnboardingLaunchAtLoginStep: View {
                 }
             }
         }
+        .onAppear { primaryFocused = true }
     }
 }

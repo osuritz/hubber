@@ -11,6 +11,8 @@ struct HubberPopoverView: View {
     @State private var showSignInSuccess = false
     @State private var showingAdd = false
     @StateObject private var onboarding = OnboardingCoordinator()
+    /// Default focus target when the popover opens: lands keyboard users on the tab bar.
+    @FocusState private var tabBarFocused: Bool
 
     var body: some View {
         ZStack {
@@ -87,10 +89,12 @@ struct HubberPopoverView: View {
             } else {
                 normalChrome
                     .transition(.opacity)
+                    .onAppear { tabBarFocused = true }
             }
 
         case .sessionExpired:
             normalChrome
+                .onAppear { tabBarFocused = true }
         }
     }
 
@@ -202,6 +206,7 @@ struct HubberPopoverView: View {
                     mode: store.settings.tabBadgeMode
                 )
             )
+            .focused($tabBarFocused)
         }
         .padding(.horizontal, 14)
         .padding(.top, 13)
