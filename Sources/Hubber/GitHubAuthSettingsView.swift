@@ -155,14 +155,14 @@ struct GitHubAuthSettingsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 if let name = store.viewerName, !name.isEmpty {
                     Text(name)
-                        .font(HubberType.title)
+                        .hubberFont(.title)
                         .foregroundStyle(HubberDesign.text)
                     Text("@\(login)")
-                        .font(HubberType.secondary)
+                        .hubberFont(.secondary)
                         .foregroundStyle(HubberDesign.text2)
                 } else {
                     Text("@\(login)")
-                        .font(HubberType.title)
+                        .hubberFont(.title)
                         .foregroundStyle(HubberDesign.text)
                 }
             }

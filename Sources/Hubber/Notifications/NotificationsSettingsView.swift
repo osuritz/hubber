@@ -12,7 +12,7 @@ struct NotificationsSettingsView: View {
             // Master toggle — always interactive so the user can re-enable notifications
             SettingsRow(isLast: false) {
                 Text("Enable notifications")
-                    .font(HubberType.settingsLabel)
+                    .hubberFont(.settingsLabel)
                     .foregroundStyle(HubberDesign.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Toggle("", isOn: $settings.notificationsEnabled)
@@ -75,7 +75,7 @@ struct NotificationsSettingsView: View {
     ) -> some View {
         SettingsRow(isLast: isLast) {
             Text(label)
-                .font(HubberType.settingsLabel)
+                .hubberFont(.settingsLabel)
                 .foregroundStyle(HubberDesign.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Toggle("", isOn: binding)
@@ -89,14 +89,14 @@ struct NotificationsSettingsView: View {
     private var systemSettingsLink: some View {
         SettingsRow(isLast: true) {
             Text("Enable in System Settings")
-                .font(HubberType.settingsLabel)
+                .hubberFont(.settingsLabel)
                 .foregroundStyle(HubberDesign.text)
             Spacer()
             Button("Open") {
                 let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!
                 NSWorkspace.shared.open(url)
             }
-            .font(HubberType.settingsLabel)
+            .hubberFont(.settingsLabel)
         }
     }
 }

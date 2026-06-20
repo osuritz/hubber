@@ -95,12 +95,12 @@ struct PRTitleLine: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("#\(number)")
-                .font(HubberType.prNumber)
+                .hubberFont(.prNumber)
                 .foregroundStyle(HubberDesign.text3)
                 .fixedSize()
 
             Text(title)
-                .font(HubberType.title)
+                .hubberFont(.title)
                 .foregroundStyle(HubberDesign.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -119,7 +119,7 @@ struct SecondaryLine<Content: View>: View {
         HStack(spacing: 5) {
             content()
         }
-        .font(HubberType.secondary)
+        .hubberFont(.secondary)
         .foregroundStyle(HubberDesign.text2)
         .lineLimit(1)
     }
@@ -324,7 +324,8 @@ struct SLOPillView: View {
                 .accessibilityHidden(true)
 
             Text(text)
-                .font(HubberType.sloPill)
+                .hubberFont(.sloPill)
+                .monospacedDigit()
                 .foregroundStyle(tokens.fg)
         }
         .padding(.leading, 7)

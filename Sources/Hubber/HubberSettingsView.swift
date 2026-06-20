@@ -27,10 +27,10 @@ struct SettingsView: View {
                     SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ReviewSLOPresentation.title)
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text(ReviewSLOPresentation.subtitle)
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -44,7 +44,7 @@ struct SettingsView: View {
                     // Review window slider
                     SettingsRow(isLast: false) {
                         Text(ReviewSLOPresentation.windowLabel)
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(settings.sloEnabled ? HubberDesign.text : HubberDesign.text3)
 
                         Slider(value: $settings.sloHours, in: 1...24, step: 1)
@@ -63,7 +63,7 @@ struct SettingsView: View {
                     // SLO display mode
                     SettingsRow(isStack: true, isLast: false) {
                         Text("Show SLO as")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(settings.sloEnabled ? HubberDesign.text : HubberDesign.text3)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
@@ -79,7 +79,7 @@ struct SettingsView: View {
                     // Incoming mode
                     SettingsRow(isStack: true, isLast: true) {
                         Text("Incoming requests")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
@@ -99,10 +99,10 @@ struct SettingsView: View {
                     SettingsRow(isStack: true, isLast: true) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Unresolved threads")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text("Which threads count as unresolved")
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,7 +122,7 @@ struct SettingsView: View {
                 SettingsGroup {
                     SettingsRow(isStack: true, isLast: true) {
                         Text("Row density")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
@@ -142,10 +142,10 @@ struct SettingsView: View {
                     SettingsRow(isLast: true) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Open at login")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text("Start Hubber automatically when you log in.")
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                         }
                         Toggle("", isOn: Binding(
@@ -165,7 +165,7 @@ struct SettingsView: View {
                 SettingsGroup {
                     SettingsRow(isStack: true, isLast: true) {
                         Text("Badge shows")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
@@ -184,7 +184,7 @@ struct SettingsView: View {
                 SettingsGroup {
                     SettingsRow(isStack: true, isLast: true) {
                         Text("Badges show")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
@@ -212,10 +212,10 @@ struct SettingsView: View {
                     SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Share anonymous usage analytics")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text("Helps improve Hubber. No personal data is shared.")
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -231,13 +231,13 @@ struct SettingsView: View {
                     SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Diagnostic logging")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text(
                                 "Crash, hang, and performance diagnostics are written to your "
                                     + "Mac's local log only — never sent anywhere."
                             )
-                            .font(HubberType.settingsSub)
+                            .hubberFont(.settingsSub)
                             .foregroundStyle(HubberDesign.text2)
                             .fixedSize(horizontal: false, vertical: true)
                         }
@@ -251,12 +251,12 @@ struct SettingsView: View {
                     // Privacy policy link (#104)
                     SettingsRow(isLast: true) {
                         Text("Privacy Policy")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                         Spacer()
                         Button("Read") { NSWorkspace.shared.open(PrivacyLinks.privacyPolicy) }
                             .buttonStyle(.plain)
-                            .font(HubberType.settingsSub)
+                            .hubberFont(.settingsSub)
                             .foregroundStyle(HubberDesign.accent)
                     }
                 }

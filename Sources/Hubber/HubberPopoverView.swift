@@ -383,7 +383,7 @@ struct HubberPopoverView: View {
             .disabled(store.isRefreshingPullRequests)
             .keyboardShortcut("r", modifiers: .command)
         }
-        .font(HubberType.footer)
+        .hubberFont(.footer)
         .foregroundStyle(HubberDesign.text2)
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
@@ -489,7 +489,8 @@ private struct CountBadge: View {
 
     var body: some View {
         Text("\(count)")
-            .font(HubberType.badge)
+            .hubberFont(.badge)
+            .monospacedDigit()
             .foregroundStyle(isActive ? HubberDesign.text : HubberDesign.text2)
             .frame(minWidth: 16)
             .padding(.horizontal, 5)

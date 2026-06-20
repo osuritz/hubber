@@ -24,7 +24,7 @@ struct ReauthPromptRow: View {
                 .foregroundStyle(HubberDesign.text)
 
             Text("Your GitHub session has expired. Sign in again to refresh pull requests.")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.text2)
                 .multilineTextAlignment(.center)
 

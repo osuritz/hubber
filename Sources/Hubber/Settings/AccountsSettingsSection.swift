@@ -28,10 +28,10 @@ struct AccountsSettingsSection: View {
             SettingsRow(isLast: true) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Notify for hidden accounts")
-                        .font(HubberType.settingsLabel)
+                        .hubberFont(.settingsLabel)
                         .foregroundStyle(HubberDesign.text)
                     Text("Hidden accounts still alert on new activity.")
-                        .font(HubberType.settingsSub)
+                        .hubberFont(.settingsSub)
                         .foregroundStyle(HubberDesign.text2)
                 }
 
@@ -72,7 +72,7 @@ struct AccountsSettingsSection: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("\(connection.id.providerDisplayName) · @\(connection.id.login)")
-                        .font(HubberType.title)
+                        .hubberFont(.title)
                         .foregroundStyle(HubberDesign.text)
 
                     accountStatus(connection)
@@ -97,30 +97,30 @@ struct AccountsSettingsSection: View {
         case .error:
             // "⚠" glyph is always present — satisfies Differentiate Without Color.
             Text("⚠ Needs attention")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.sloAmber.fg)
         case .sessionExpired:
             // Color-only under normal prefs; add a glyph when Differentiate Without Color is on.
             HStack(spacing: 3) {
                 if diffWithoutColor {
                     Image(systemName: "exclamationmark.circle")
-                        .font(HubberType.secondary)
+                        .hubberFont(.secondary)
                 }
                 Text("Session expired")
-                    .font(HubberType.secondary)
+                    .hubberFont(.secondary)
             }
             .foregroundStyle(HubberDesign.sloAmber.fg)
         case .waitingForUser:
             Text("Waiting for device authorization")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.text2)
         case .restoring:
             Text("Checking sign-in")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.text2)
         case .signedOut:
             Text("Signed out")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.text2)
         case .signedIn:
             EmptyView()
