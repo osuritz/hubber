@@ -18,9 +18,9 @@ struct ContrastRatioMathTests {
     }
 
     @Test("compositing 50% black over white yields mid-gray")
-    func composite() {
+    func composite() throws {
         let half = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.5)
-        let out = ContrastRatio.composite(half, over: .white).usingColorSpace(.sRGB)!
+        let out = try #require(ContrastRatio.composite(half, over: .white).usingColorSpace(.sRGB))
         #expect(abs(out.redComponent - 0.5) < 0.02)
     }
 }
@@ -39,8 +39,8 @@ struct ContrastTests {
     private struct Pair {
         let name: String
         let fg: Color
-        let bg: Color        // opaque or translucent; composited over base
-        let min: Double      // 4.5 text, 3.0 UI/large
+        let bg: Color // opaque or translucent; composited over base
+        let min: Double // 4.5 text, 3.0 UI/large
     }
 
     /// Representative opaque base each surface sits on (popover material).
@@ -64,7 +64,8 @@ struct ContrastTests {
     @Test("all token pairs meet AA in light and dark")
     func tokenPairs() {
         guard let light = NSAppearance(named: .aqua), let dark = NSAppearance(named: .darkAqua) else {
-            Issue.record("appearances unavailable"); return
+            Issue.record("appearances unavailable")
+            return
         }
         for appearance in [light, dark] {
             let label = appearance.name == .darkAqua ? "dark" : "light"

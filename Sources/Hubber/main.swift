@@ -210,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if state.isRefreshing && AccessibilityGates.pulseEnabled(reduceMotion: reduceMotion) {
+        if state.isRefreshing, AccessibilityGates.pulseEnabled(reduceMotion: reduceMotion) {
             startPulse(on: button)
         } else {
             stopPulse(on: button)

@@ -305,7 +305,9 @@ struct OnboardingConnectStep: View {
                 coordinator.skipConnectIfAlreadyConnected(true)
             }
             // Only set default focus when showing the connect prompt, not the device-code screen.
-            guard case .waitingForUser = store.authState else { primaryFocused = true; return }
+            guard case .waitingForUser = store.authState else { primaryFocused = true
+                return
+            }
         }
         .onChange(of: store.authState) { _, newState in
             guard coordinator.currentStep == .connect else { return }

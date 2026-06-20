@@ -84,7 +84,7 @@ struct NativeSegmentedPicker<T: CaseIterable & Identifiable & Equatable>: View
     @Binding var selection: T
     var isEnabled = true
     /// Optional group label announced by VoiceOver (e.g. "Row density"). Nil = no label.
-    var accessibilityLabel: String? = nil
+    var accessibilityLabel: String?
 
     private var titleForCase: (T) -> String
 

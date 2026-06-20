@@ -175,7 +175,10 @@ enum HubberDesign {
     // MARK: Text
 
     static let text = Color(light: "rgba(0,0,0,0.85)", dark: "rgba(255,255,255,0.92)")
-    static let text2 = Color(light: "rgba(60,60,67,0.72)", dark: "rgba(235,235,245,0.58)") // a11y: light alpha 0.56→0.72 (3.03→4.56:1 on materialSolid)
+    static let text2 = Color(
+        light: "rgba(60,60,67,0.72)",
+        dark: "rgba(235,235,245,0.58)"
+    ) // a11y: light alpha 0.56→0.72 (3.03→4.56:1 on materialSolid)
     static let text3 = Color(light: "rgba(60,60,67,0.32)", dark: "rgba(235,235,245,0.32)")
 
     // MARK: Lines + Fills

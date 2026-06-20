@@ -37,7 +37,7 @@ extension AccessibilityText {
     static func reviewersSummary(_ reviewers: [Reviewer]) -> String {
         guard !reviewers.isEmpty else { return "no reviewers" }
         let groups = reviewerOrder.compactMap { state -> String? in
-            let n = reviewers.filter { $0.state == state }.count
+            let n = reviewers.count(where: { $0.state == state })
             return n > 0 ? "\(n) \(reviewerPhrase(state))" : nil
         }
         let noun = reviewers.count == 1 ? "reviewer" : "reviewers"
