@@ -81,6 +81,31 @@ enum HubberFont {
     static func scaledSize(base: CGFloat, factor: CGFloat) -> CGFloat {
         base * factor
     }
+
+    // MARK: weight(for:bold:)
+
+    /// Resolves the effective `Font.Weight` for a role, optionally stepping one
+    /// level heavier when the system Bold Text accessibility setting is active.
+    ///
+    /// **Invariant**: when `bold == false` the return value is identical to
+    /// `role.weight` — a visual no-op that preserves today's exact appearance.
+    ///
+    /// Bold step-up table:
+    /// - regular    → semibold
+    /// - medium     → semibold
+    /// - semibold   → bold
+    /// - bold       → heavy
+    /// - (anything else stays unchanged)
+    static func weight(for role: Role, bold: Bool) -> Font.Weight {
+        guard bold else { return role.weight }
+        switch role.weight {
+        case .regular: return .semibold
+        case .medium: return .semibold
+        case .semibold: return .bold
+        case .bold: return .heavy
+        default: return role.weight
+        }
+    }
 }
 
 // MARK: - HubberFontModifier
@@ -88,6 +113,7 @@ enum HubberFont {
 private struct HubberFontModifier: ViewModifier {
     let role: HubberFont.Role
     @ScaledMetric private var scaled: CGFloat
+    @Environment(\.legibilityWeight) private var legibilityWeight
 
     init(role: HubberFont.Role) {
         self.role = role
@@ -95,7 +121,9 @@ private struct HubberFontModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content.font(.system(size: scaled, weight: role.weight, design: role.design))
+        let isBold = legibilityWeight == .bold
+        let resolvedWeight = HubberFont.weight(for: role, bold: isBold)
+        return content.font(.system(size: scaled, weight: resolvedWeight, design: role.design))
     }
 }
 

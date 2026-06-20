@@ -132,4 +132,70 @@ struct HubberFontTests {
     func roleTitleDesign() {
         #expect(HubberFont.Role.title.design == Font.Design.default)
     }
+
+    // MARK: - weight(for:bold:) — Bold Text OFF is a visual no-op
+
+    @Test("weight(for:bold:false) equals role.weight for every role")
+    func boldFalseIsNoOp() {
+        let allRoles: [HubberFont.Role] = [
+            .title, .secondary, .sloPill, .ciDetail, .log, .section,
+            .footer, .prNumber, .headerTitle, .settingsLabel, .settingsSub, .badge,
+        ]
+        for role in allRoles {
+            #expect(
+                HubberFont.weight(for: role, bold: false) == role.weight,
+                "role \(role): bold=false must return role.weight unchanged"
+            )
+        }
+    }
+
+    // MARK: - weight(for:bold:) — Bold Text ON steps heavier
+
+    /// Deterministic ordering for Font.Weight so we can assert "heavier than".
+    /// Only the weights used by HubberFont roles need to be covered.
+    private static let weightOrder: [Font.Weight] = [
+        .ultraLight, .thin, .light, .regular, .medium,
+        .semibold, .bold, .heavy, .black,
+    ]
+
+    private func weightIndex(_ w: Font.Weight) -> Int {
+        Self.weightOrder.firstIndex(of: w) ?? -1
+    }
+
+    @Test("weight(for:bold:true) for .title (medium) → semibold")
+    func boldTrueTitle() {
+        #expect(HubberFont.weight(for: .title, bold: true) == .semibold)
+    }
+
+    @Test("weight(for:bold:true) for .secondary (regular) → semibold")
+    func boldTrueSecondary() {
+        #expect(HubberFont.weight(for: .secondary, bold: true) == .semibold)
+    }
+
+    @Test("weight(for:bold:true) for .section (semibold) → bold")
+    func boldTrueSection() {
+        #expect(HubberFont.weight(for: .section, bold: true) == .bold)
+    }
+
+    @Test("weight(for:bold:true) for .headerTitle (semibold) → bold")
+    func boldTrueHeaderTitle() {
+        #expect(HubberFont.weight(for: .headerTitle, bold: true) == .bold)
+    }
+
+    @Test("weight(for:bold:true) for .badge (semibold) → bold")
+    func boldTrueBadge() {
+        #expect(HubberFont.weight(for: .badge, bold: true) == .bold)
+    }
+
+    @Test("weight(for:bold:true) is strictly heavier for title and secondary")
+    func boldTrueIsHeavierForRepresentativeRoles() {
+        for role in [HubberFont.Role.title, .secondary] {
+            let normal = HubberFont.weight(for: role, bold: false)
+            let bold = HubberFont.weight(for: role, bold: true)
+            #expect(
+                weightIndex(bold) > weightIndex(normal),
+                "role \(role): bold weight must be heavier than normal weight"
+            )
+        }
+    }
 }
