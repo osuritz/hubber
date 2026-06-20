@@ -37,6 +37,7 @@ struct SettingsView: View {
                         Toggle("", isOn: $settings.sloEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .accessibilityLabel(ReviewSLOPresentation.title)
                             .disabled(settings.isLocked("reviewSLOEnabled"))
                     }
 
@@ -48,6 +49,8 @@ struct SettingsView: View {
 
                         Slider(value: $settings.sloHours, in: 1...24, step: 1)
                             .frame(maxWidth: 190)
+                            .accessibilityLabel("Review SLO")
+                            .accessibilityValue("\(Int(settings.sloHours)) hours")
 
                         Text("\(Int(settings.sloHours))h")
                             .font(.system(size: 12, weight: .semibold).monospacedDigit())
@@ -67,7 +70,8 @@ struct SettingsView: View {
                             SLODisplay.self,
                             selection: $settings.sloDisplay,
                             isEnabled: settings.sloEnabled && !settings.isLocked("sloDisplay"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Show SLO as"
                         )
                         .opacity(settings.sloEnabled ? 1 : 0.45)
                     }
@@ -82,7 +86,8 @@ struct SettingsView: View {
                             IncomingReviewMode.self,
                             selection: $settings.incomingMode,
                             isEnabled: !settings.isLocked("incomingMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Incoming requests"
                         )
                     }
                 }
@@ -105,7 +110,8 @@ struct SettingsView: View {
                             UnresolvedThreadMode.self,
                             selection: $settings.unresolvedMode,
                             isEnabled: !settings.isLocked("unresolvedThreadMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Unresolved threads"
                         )
                     }
                 }
@@ -123,7 +129,8 @@ struct SettingsView: View {
                             RowDensity.self,
                             selection: $settings.rowDensity,
                             isEnabled: !settings.isLocked("rowDensity"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Row density"
                         )
                     }
                 }
@@ -147,6 +154,7 @@ struct SettingsView: View {
                         ))
                         .toggleStyle(.switch)
                         .labelsHidden()
+                        .accessibilityLabel("Open at login")
                         .disabled(settings.isLocked(ManagedKey.launchAtLogin))
                     }
                 }
@@ -164,7 +172,8 @@ struct SettingsView: View {
                             BadgeMode.self,
                             selection: $settings.badgeMode,
                             isEnabled: !settings.isLocked("badgeMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Menubar badge"
                         )
                     }
                 }
@@ -182,7 +191,8 @@ struct SettingsView: View {
                             TabBadgeMode.self,
                             selection: $settings.tabBadgeMode,
                             isEnabled: !settings.isLocked("tabBadgeMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Tab badges"
                         )
                     }
                 }
@@ -212,6 +222,7 @@ struct SettingsView: View {
                         Toggle("", isOn: $settings.analyticsEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .accessibilityLabel("Share anonymous usage analytics")
                             .disabled(settings.isLocked(ManagedKey.analyticsEnabled))
                     }
 
@@ -233,6 +244,7 @@ struct SettingsView: View {
                         Toggle("", isOn: $settings.crashReportingEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .accessibilityLabel("Diagnostic logging")
                             .disabled(settings.isLocked(ManagedKey.crashReportingEnabled))
                     }
 

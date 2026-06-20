@@ -18,6 +18,7 @@ struct NotificationsSettingsView: View {
                 Toggle("", isOn: $settings.notificationsEnabled)
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .accessibilityLabel("Enable notifications")
                     .disabled(settings.isLocked("notificationsEnabled"))
             }
 
@@ -80,6 +81,7 @@ struct NotificationsSettingsView: View {
             Toggle("", isOn: binding)
                 .toggleStyle(.switch)
                 .labelsHidden()
+                .accessibilityLabel(label)
                 .disabled(settings.isLocked(key))
         }
     }

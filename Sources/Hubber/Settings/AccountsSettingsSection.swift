@@ -39,6 +39,7 @@ struct AccountsSettingsSection: View {
                 Toggle("", isOn: $settings.notifyHiddenAccounts)
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .accessibilityLabel("Notify for hidden accounts")
             }
         }
         .sheet(isPresented: $showingAdd) {
@@ -64,7 +65,8 @@ struct AccountsSettingsSection: View {
                         color: avatarColor(for: connection.id.login),
                         avatarURL: connection.viewerAvatarURL
                     ),
-                    size: AvatarSize.row.rawValue
+                    size: AvatarSize.row.rawValue,
+                    accessibilityRole: "account"
                 )
 
                 VStack(alignment: .leading, spacing: 1) {
@@ -77,6 +79,7 @@ struct AccountsSettingsSection: View {
 
                 Spacer()
             }
+            .accessibilityElement(children: .combine)
 
             switch connection.authState {
             case let .waitingForUser(authorization):
