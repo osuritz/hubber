@@ -3,6 +3,8 @@ import SwiftUI
 
 struct HubberPopoverView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
 
     @ObservedObject var store: HubberStore
 
@@ -16,8 +18,13 @@ struct HubberPopoverView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .popover)
-                .ignoresSafeArea()
+            if reduceTransparency {
+                HubberDesign.materialSolid
+                    .ignoresSafeArea()
+            } else {
+                VisualEffectView(material: .popover)
+                    .ignoresSafeArea()
+            }
 
             HubberAppearance.panelFill(for: colorScheme)
                 .ignoresSafeArea()
@@ -212,7 +219,7 @@ struct HubberPopoverView: View {
         .padding(.top, 13)
         .padding(.bottom, 10)
         .overlay(alignment: .bottom) {
-            HubberDesign.sep.frame(height: 0.5)
+            (contrast == .increased ? HubberDesign.sepStrong : HubberDesign.sep).frame(height: 0.5)
         }
     }
 
@@ -381,7 +388,7 @@ struct HubberPopoverView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
         .overlay(alignment: .top) {
-            HubberDesign.sep.frame(height: 0.5)
+            (contrast == .increased ? HubberDesign.sepStrong : HubberDesign.sep).frame(height: 0.5)
         }
     }
 
@@ -432,6 +439,7 @@ private struct HubberTabBar: View {
     @Binding var selectedTab: WorkTab
     @Binding var showSettings: Bool
     let counts: [WorkTab: Int]
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         HStack(spacing: 2) {

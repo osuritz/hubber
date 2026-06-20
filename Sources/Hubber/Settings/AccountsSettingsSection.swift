@@ -4,6 +4,7 @@ import SwiftUI
 struct AccountsSettingsSection: View {
     @ObservedObject var store: HubberStore
     @ObservedObject var settings: SettingsStore
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var diffWithoutColor
 
     @State private var showingAdd = false
     @State private var reauthToken: [ConnectionID: String] = [:]
@@ -94,13 +95,21 @@ struct AccountsSettingsSection: View {
     private func accountStatus(_ connection: Connection) -> some View {
         switch connection.authState {
         case .error:
+            // "⚠" glyph is always present — satisfies Differentiate Without Color.
             Text("⚠ Needs attention")
                 .font(HubberType.secondary)
                 .foregroundStyle(HubberDesign.sloAmber.fg)
         case .sessionExpired:
-            Text("Session expired")
-                .font(HubberType.secondary)
-                .foregroundStyle(HubberDesign.sloAmber.fg)
+            // Color-only under normal prefs; add a glyph when Differentiate Without Color is on.
+            HStack(spacing: 3) {
+                if diffWithoutColor {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(HubberType.secondary)
+                }
+                Text("Session expired")
+                    .font(HubberType.secondary)
+            }
+            .foregroundStyle(HubberDesign.sloAmber.fg)
         case .waitingForUser:
             Text("Waiting for device authorization")
                 .font(HubberType.secondary)
