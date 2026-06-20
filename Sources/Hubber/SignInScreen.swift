@@ -203,6 +203,7 @@ struct DeviceCodeScreen: View {
                     }
                     .buttonStyle(.plain)
                     .help("Copy code")
+                    .accessibilityLabel("Copy code")
                 }
                 .padding(.bottom, 24)
 

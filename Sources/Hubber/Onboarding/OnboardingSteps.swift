@@ -29,6 +29,7 @@ struct OnboardingScaffold<Content: View>: View {
                     .frame(width: i == stepIndex ? 18 : 6, height: 6)
             }
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Step \(stepIndex + 1) of \(stepCount)")
     }
 }
@@ -47,6 +48,7 @@ struct OnboardingWelcomeStep: View {
                     .font(.system(size: 19, weight: .semibold))
                     .tracking(-0.4)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
                 Text("Keep an eye on your PR reviews, CI, and drafts — right from the menu bar. Let's get you set up.")
                     .font(.system(size: 12.5))
@@ -208,6 +210,7 @@ struct OnboardingConsentStep: View {
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
 
                 Text(
@@ -323,6 +326,7 @@ struct OnboardingConnectStep: View {
                 .font(.system(size: 17, weight: .semibold))
                 .tracking(-0.3)
                 .foregroundStyle(HubberDesign.text)
+                .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, 8)
             Text("Sign in with GitHub to start seeing the PRs waiting on you. Hubber only requests read-only access.")
                 .font(.system(size: 12.5))
@@ -348,6 +352,7 @@ struct OnboardingConnectStep: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
                 .foregroundStyle(HubberDesign.text2)
+                .accessibilityHint("Opens the device-code flow")
                 .padding(.top, 12)
         }
     }
@@ -415,6 +420,7 @@ struct OnboardingNotificationsStep: View {
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
                 Text(
                     "Get a heads-up the moment a review is requested from you. "
@@ -510,6 +516,7 @@ struct OnboardingLaunchAtLoginStep: View {
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
                 Text(
                     "Hubber works best running quietly in your menu bar. Open it automatically "
