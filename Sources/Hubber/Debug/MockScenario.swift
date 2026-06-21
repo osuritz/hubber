@@ -6,6 +6,7 @@
         case empty
         case small
         case large
+        case xlarge
         case error
         case loading
         case multiConnection
@@ -20,6 +21,7 @@
             case .empty: "Empty"
             case .small: "Small"
             case .large: "Large"
+            case .xlarge: "Extra large"
             case .error: "Error"
             case .loading: "Loading"
             case .multiConnection: "Multi-connection"
@@ -40,6 +42,7 @@
             case "empty": self = .empty
             case "small": self = .small
             case "large": self = .large
+            case "xlarge", "extra-large", "extralarge", "xl": self = .xlarge
             case "error": self = .error
             case "loading": self = .loading
             case "multi", "multi-connection", "multiconnection": self = .multiConnection
@@ -58,6 +61,8 @@
                 [Self.plan(login: "hubber-mock-small", behavior: .data(Self.smallData))]
             case .large:
                 [Self.plan(login: "hubber-mock-large", behavior: .data(Self.largeData))]
+            case .xlarge:
+                [Self.plan(login: "hubber-mock-xlarge", behavior: .data(Self.xlargeData))]
             case .error:
                 [Self.plan(login: "hubber-mock-error", behavior: .error)]
             case .loading:
@@ -92,6 +97,13 @@
             incoming: incoming(count: 25, prefix: "large"),
             outgoing: outgoing(count: 25, prefix: "large"),
             drafts: drafts(count: 12, prefix: "large")
+        )
+
+        /// Deliberately oversized to find the scrolling/render ceiling (≫ a realistic queue).
+        private static let xlargeData = HubberData(
+            incoming: incoming(count: 150, prefix: "xlarge"),
+            outgoing: outgoing(count: 150, prefix: "xlarge"),
+            drafts: drafts(count: 60, prefix: "xlarge")
         )
 
         private static let multiConnectionGitHubData = HubberData(

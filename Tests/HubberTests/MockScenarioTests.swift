@@ -14,6 +14,7 @@
             #expect(MockScenario(env: "empty") == .empty)
             #expect(MockScenario(env: "small") == .small)
             #expect(MockScenario(env: "large") == .large)
+            #expect(MockScenario(env: "xlarge") == .xlarge)
             #expect(MockScenario(env: "error") == .error)
             #expect(MockScenario(env: "loading") == .loading)
             #expect(MockScenario(env: "multiConnection") == .multiConnection)
@@ -26,6 +27,7 @@
             #expect(MockScenario.empty.connectionPlan.count == 1)
             #expect(MockScenario.small.connectionPlan.count == 1)
             #expect(MockScenario.large.connectionPlan.count == 1)
+            #expect(MockScenario.xlarge.connectionPlan.count == 1)
             #expect(MockScenario.error.connectionPlan.count == 1)
             #expect(MockScenario.loading.connectionPlan.count == 1)
             #expect(MockScenario.multiConnection.connectionPlan.count == 2)
@@ -47,6 +49,11 @@
             #expect(large.incoming.count >= 20)
             #expect(large.outgoing.count >= 20)
             #expect(large.drafts.count >= 10)
+
+            let xlarge = try data(for: .xlarge)
+            #expect(xlarge.incoming.count >= 100)
+            #expect(xlarge.outgoing.count >= 100)
+            #expect(xlarge.drafts.count >= 40)
         }
 
         @Test("Multi-connection scenario has one overlapping PR id")

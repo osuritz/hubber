@@ -36,7 +36,7 @@ Three small units under `Sources/Hubber/Debug/`, all `#if DEBUG`:
 
 ### 3a. `MockScenario`
 ```
-enum MockScenario: String, CaseIterable { case off, empty, small, large, error, loading, multiConnection }
+enum MockScenario: String, CaseIterable { case off, empty, small, large, xlarge, error, loading, multiConnection }
 ```
 - `init?(env:)` maps the `HUBBER_MOCK` string → scenario (unknown/empty → `off`).
 - Each scenario produces a **connection plan**: an ordered list of fake connections, each
@@ -51,6 +51,8 @@ enum MockScenario: String, CaseIterable { case off, empty, small, large, error, 
   - `large` → one connection, `.data` with **~25 incoming, ~25 outgoing, ~12 drafts**,
     deterministically varied by index across CI states, reviewer states, SLO colors, and a
     few long / unicode / emoji titles (so scrolling exercises real visual variety).
+  - `xlarge` → one connection, **~150/150/60** — deliberately oversized (≫ a realistic
+    queue) to find the scrolling/render ceiling and decide whether `LazyVStack` is needed.
   - `error` → one connection, `.error`.
   - `loading` → one connection, `.loading`.
   - `multiConnection` → **two** connections — a fake `github.com` account and a fake
