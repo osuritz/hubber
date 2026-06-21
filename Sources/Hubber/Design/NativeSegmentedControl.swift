@@ -83,6 +83,8 @@ struct NativeSegmentedPicker<T: CaseIterable & Identifiable & Equatable>: View
     let cases: T.AllCases
     @Binding var selection: T
     var isEnabled = true
+    /// Optional group label announced by VoiceOver (e.g. "Row density"). Nil = no label.
+    var accessibilityLabel: String?
 
     private var titleForCase: (T) -> String
 
@@ -90,12 +92,14 @@ struct NativeSegmentedPicker<T: CaseIterable & Identifiable & Equatable>: View
         _ type: T.Type = T.self,
         selection: Binding<T>,
         isEnabled: Bool = true,
-        title: @escaping (T) -> String
+        title: @escaping (T) -> String,
+        accessibilityLabel: String? = nil
     ) {
         cases = T.allCases
         _selection = selection
         self.isEnabled = isEnabled
         titleForCase = title
+        self.accessibilityLabel = accessibilityLabel
     }
 
     private var selectedIndex: Int {
@@ -115,5 +119,7 @@ struct NativeSegmentedPicker<T: CaseIterable & Identifiable & Equatable>: View
             isEnabled: isEnabled
         )
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityLabel ?? "")
     }
 }

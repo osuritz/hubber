@@ -3,6 +3,8 @@ import SwiftUI
 
 struct HubberPopoverView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
 
     @ObservedObject var store: HubberStore
 
@@ -11,11 +13,18 @@ struct HubberPopoverView: View {
     @State private var showSignInSuccess = false
     @State private var showingAdd = false
     @StateObject private var onboarding = OnboardingCoordinator()
+    /// Default focus target when the popover opens: lands keyboard users on the tab bar.
+    @FocusState private var tabBarFocused: Bool
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .popover)
-                .ignoresSafeArea()
+            if reduceTransparency {
+                HubberDesign.materialSolid
+                    .ignoresSafeArea()
+            } else {
+                VisualEffectView(material: .popover)
+                    .ignoresSafeArea()
+            }
 
             HubberAppearance.panelFill(for: colorScheme)
                 .ignoresSafeArea()
@@ -87,10 +96,12 @@ struct HubberPopoverView: View {
             } else {
                 normalChrome
                     .transition(.opacity)
+                    .onAppear { tabBarFocused = true }
             }
 
         case .sessionExpired:
             normalChrome
+                .onAppear { tabBarFocused = true }
         }
     }
 
@@ -177,6 +188,7 @@ struct HubberPopoverView: View {
                 .contentShape(Rectangle())
                 .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
                 .help("Refresh pull requests (⌘R)")
+                .accessibilityLabel("Refresh")
 
                 Button {
                     showSettings.toggle()
@@ -190,6 +202,7 @@ struct HubberPopoverView: View {
                 .contentShape(Rectangle())
                 .help("Settings (⌘,)")
                 .keyboardShortcut(",", modifiers: .command)
+                .accessibilityLabel("Settings")
             }
 
             HubberTabBar(
@@ -200,12 +213,13 @@ struct HubberPopoverView: View {
                     mode: store.settings.tabBadgeMode
                 )
             )
+            .focused($tabBarFocused)
         }
         .padding(.horizontal, 14)
         .padding(.top, 13)
         .padding(.bottom, 10)
         .overlay(alignment: .bottom) {
-            HubberDesign.sep.frame(height: 0.5)
+            (contrast == .increased ? HubberDesign.sepStrong : HubberDesign.sep).frame(height: 0.5)
         }
     }
 
@@ -369,12 +383,12 @@ struct HubberPopoverView: View {
             .disabled(store.isRefreshingPullRequests)
             .keyboardShortcut("r", modifiers: .command)
         }
-        .font(HubberType.footer)
+        .hubberFont(.footer)
         .foregroundStyle(HubberDesign.text2)
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
         .overlay(alignment: .top) {
-            HubberDesign.sep.frame(height: 0.5)
+            (contrast == .increased ? HubberDesign.sepStrong : HubberDesign.sep).frame(height: 0.5)
         }
     }
 
@@ -413,6 +427,8 @@ private struct ClickableRow<Content: View>: View {
             }
             .buttonStyle(.plain)
             .help("Open pull request")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens the pull request")
         } else {
             content()
         }
@@ -453,6 +469,9 @@ private struct HubberTabBar: View {
                             .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
                     }
                 }
+                .accessibilityLabel(tab.title)
+                .accessibilityValue(AccessibilityText.tabValue(count: counts[tab, default: 0]))
+                .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(2)
@@ -470,7 +489,8 @@ private struct CountBadge: View {
 
     var body: some View {
         Text("\(count)")
-            .font(HubberType.badge)
+            .hubberFont(.badge)
+            .monospacedDigit()
             .foregroundStyle(isActive ? HubberDesign.text : HubberDesign.text2)
             .frame(minWidth: 16)
             .padding(.horizontal, 5)

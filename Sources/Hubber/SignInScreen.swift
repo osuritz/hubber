@@ -116,6 +116,7 @@ struct SignInScreen: View {
 
 struct SignInButtonStyle: ButtonStyle {
     let colorScheme: ColorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -132,7 +133,10 @@ struct SignInButtonStyle: ButtonStyle {
             )
             .shadow(color: .black.opacity(0.20), radius: 1.5, y: 1)
             .opacity(configuration.isPressed ? 0.82 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(
+                AccessibilityGates.animation(.easeOut(duration: 0.12), reduceMotion: reduceMotion),
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -203,6 +207,7 @@ struct DeviceCodeScreen: View {
                     }
                     .buttonStyle(.plain)
                     .help("Copy code")
+                    .accessibilityLabel("Copy code")
                 }
                 .padding(.bottom, 24)
 
@@ -269,6 +274,7 @@ struct SignInSuccessScreen: View {
 
     // MARK: Animation state
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var circleScale: CGFloat = 0.4
     @State private var circleOpacity: Double = 0
     @State private var checkProgress: CGFloat = 0
@@ -326,6 +332,16 @@ struct SignInSuccessScreen: View {
     }
 
     private func startAnimation() {
+        // Under Reduce Motion: present the final state immediately with no animation.
+        if reduceMotion {
+            circleScale = 1.0
+            circleOpacity = 1.0
+            checkProgress = 1.0
+            labelOpacity = 1.0
+            labelOffset = 0
+            return
+        }
+
         // Step 1: Circle springs in (t=0)
         withAnimation(.spring(response: 0.5, dampingFraction: 0.62)) {
             circleScale = 1.0

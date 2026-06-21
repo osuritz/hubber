@@ -45,7 +45,7 @@ struct AccountMenuView: View {
                     .foregroundStyle(HubberDesign.accent)
 
                 Text(AccountHeaderLabel.text(ids: ids, hidden: hidden))
-                    .font(HubberType.headerTitle)
+                    .hubberFont(.headerTitle)
                     .foregroundStyle(HubberDesign.text)
 
                 if store.connections.contains(where: { needsAttention($0.authState) }) {
