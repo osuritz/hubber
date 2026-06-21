@@ -104,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         updateStatusItem()
         subscribeToStore()
-        store.restoreAllConnections()
+        configureInitialConnections()
         store.reconcileLaunchAtLogin()
 
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -153,6 +153,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.updateStatusItem()
             }
         }
+    }
+
+    private func configureInitialConnections() {
+        #if DEBUG
+            if MockMode.shared.isActive {
+                MockMode.shared.apply(MockMode.shared.scenario, to: store)
+            } else {
+                store.restoreAllConnections()
+            }
+        #else
+            store.restoreAllConnections()
+        #endif
     }
 
     // MARK: - Telemetry / crash reporting
