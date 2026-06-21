@@ -95,7 +95,7 @@ enum HubberDesign {
     // MARK: SLO Tokens
 
     static let sloGreen = SLOTokenGroup(
-        fg: Color(light: "#248A3D", dark: "#30D158"),
+        fg: Color(light: "#1F7935", dark: "#30D158"), // a11y: light #248A3D→#1F7935 (3.69→4.59:1 on green bg)
         bg: Color(light: "rgba(52,199,89,0.13)", dark: "rgba(48,209,88,0.16)"),
         border: Color(light: "rgba(52,199,89,0.30)", dark: "rgba(48,209,88,0.34)")
     )
@@ -107,7 +107,10 @@ enum HubberDesign {
     )
 
     static let sloRed = SLOTokenGroup(
-        fg: Color(light: "#D70015", dark: "#FF6961"),
+        fg: Color(
+            light: "#CE0014",
+            dark: "#FF7067"
+        ), // a11y: light #D70015→#CE0014 (4.27→4.58:1); dark #FF6961→#FF7067 (4.37→4.55:1 on materialSolid)
         bg: Color(light: "rgba(255,59,48,0.12)", dark: "rgba(255,69,58,0.18)"),
         border: Color(light: "rgba(255,59,48,0.30)", dark: "rgba(255,69,58,0.36)")
     )
@@ -175,7 +178,10 @@ enum HubberDesign {
     // MARK: Text
 
     static let text = Color(light: "rgba(0,0,0,0.85)", dark: "rgba(255,255,255,0.92)")
-    static let text2 = Color(light: "rgba(60,60,67,0.56)", dark: "rgba(235,235,245,0.58)")
+    static let text2 = Color(
+        light: "rgba(60,60,67,0.72)",
+        dark: "rgba(235,235,245,0.58)"
+    ) // a11y: light alpha 0.56→0.72 (3.03→4.56:1 on materialSolid)
     static let text3 = Color(light: "rgba(60,60,67,0.32)", dark: "rgba(235,235,245,0.32)")
 
     // MARK: Lines + Fills

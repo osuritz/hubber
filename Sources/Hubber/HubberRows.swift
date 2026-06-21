@@ -95,12 +95,12 @@ struct PRTitleLine: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("#\(number)")
-                .font(HubberType.prNumber)
+                .hubberFont(.prNumber)
                 .foregroundStyle(HubberDesign.text3)
                 .fixedSize()
 
             Text(title)
-                .font(HubberType.title)
+                .hubberFont(.title)
                 .foregroundStyle(HubberDesign.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -119,7 +119,7 @@ struct SecondaryLine<Content: View>: View {
         HStack(spacing: 5) {
             content()
         }
-        .font(HubberType.secondary)
+        .hubberFont(.secondary)
         .foregroundStyle(HubberDesign.text2)
         .lineLimit(1)
     }
@@ -128,6 +128,7 @@ struct SecondaryLine<Content: View>: View {
 struct RowDot: View {
     var body: some View {
         Text("·").foregroundStyle(HubberDesign.text3)
+            .accessibilityHidden(true)
     }
 }
 
@@ -144,7 +145,7 @@ struct IncomingReviewRow: View {
     var body: some View {
         let cfg = density.cfg
         RowShell(density: density, isLast: isLast) {
-            AvatarView(user: review.author, size: cfg.avatar)
+            AvatarView(user: review.author, size: cfg.avatar, accessibilityRole: "author")
                 .alignmentGuide(.top) { $0[.top] }
 
             VStack(alignment: .leading, spacing: cfg.secondary ? 3 : 0) {
@@ -165,6 +166,13 @@ struct IncomingReviewRow: View {
                     .alignmentGuide(.top) { $0[.top] + 1 }
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AccessibilityText.incomingRow(
+            number: review.number, title: review.title, repo: review.repo,
+            authorLogin: review.author.login, sloEnabled: isSLOEnabled,
+            sloStatus: isSLOEnabled ? sloStatus : nil,
+            sloText: isSLOEnabled ? sloText : nil
+        ))
     }
 
     private var sloStatus: SLOStatus {
@@ -252,6 +260,11 @@ struct OutgoingReviewRow: View {
                 maxAvatars: cfg.secondary ? 3 : 2
             )
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AccessibilityText.outgoingRow(
+            number: review.number, title: review.title, repo: review.repo,
+            ci: review.ci, unresolved: review.unresolved, reviewers: review.reviewers
+        ))
     }
 }
 
@@ -286,6 +299,11 @@ struct DraftPRRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AccessibilityText.draftRow(
+            number: draft.number, title: draft.title, repo: draft.repo,
+            ci: draft.ci, commits: draft.commits
+        ))
     }
 }
 
@@ -303,9 +321,11 @@ struct SLOPillView: View {
             Circle()
                 .fill(tokens.fg)
                 .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
 
             Text(text)
-                .font(HubberType.sloPill)
+                .hubberFont(.sloPill)
+                .monospacedDigit()
                 .foregroundStyle(tokens.fg)
         }
         .padding(.leading, 7)
@@ -317,6 +337,7 @@ struct SLOPillView: View {
                 .stroke(tokens.border, lineWidth: 0.5)
         }
         .help(helpText ?? text)
+        .accessibilityLabel("Review \(AccessibilityText.sloPhrase(status)), \(text)")
     }
 }
 
@@ -358,6 +379,7 @@ struct CIBadgeView: View {
             }
         }
         .frame(width: size, height: size)
+        .accessibilityLabel(AccessibilityText.ciPhrase(ci))
     }
 }
 

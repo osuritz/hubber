@@ -142,14 +142,14 @@ struct AddAccountView: View {
         VStack(alignment: .leading, spacing: 10) {
             if provider != .gitHubDotCom {
                 Text("Server URL")
-                    .font(HubberType.settingsSub)
+                    .hubberFont(.settingsSub)
                     .foregroundStyle(HubberDesign.text2)
                 TextField("https://...", text: $serverURL)
                     .textFieldStyle(.roundedBorder)
             }
 
             Text("Personal access token")
-                .font(HubberType.settingsSub)
+                .hubberFont(.settingsSub)
                 .foregroundStyle(HubberDesign.text2)
             SecureField("Paste your token", text: $token)
                 .textFieldStyle(.roundedBorder)

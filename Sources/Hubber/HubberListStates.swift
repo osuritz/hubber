@@ -62,7 +62,7 @@ struct ErrorState: View {
 
                 if let lastUpdated {
                     Text(lastUpdated)
-                        .font(HubberType.secondary)
+                        .hubberFont(.secondary)
                         .foregroundStyle(HubberDesign.text2)
                 }
             }

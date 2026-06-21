@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let metricSubscriber = MetricSubscriber()
     private var appActivationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    private var a11yDisplayObserver: NSObjectProtocol?
     private var eventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
     private var pulseTimer: Timer?
@@ -98,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
             button.action = #selector(togglePanel(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            button.setAccessibilityLabel("Hubber")
         }
 
         updateStatusItem()
@@ -139,6 +141,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.store.refreshPullRequests()
+            }
+        }
+
+        a11yDisplayObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateStatusItem()
             }
         }
     }
@@ -209,7 +221,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
 
-        if state.isRefreshing {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if state.isRefreshing, AccessibilityGates.pulseEnabled(reduceMotion: reduceMotion) {
             startPulse(on: button)
         } else {
             stopPulse(on: button)
@@ -418,6 +431,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
+        if let a11yDisplayObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(a11yDisplayObserver)
         }
     }
 }
