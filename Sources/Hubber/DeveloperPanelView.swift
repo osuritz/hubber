@@ -3,6 +3,9 @@ import SwiftUI
 struct DeveloperPanelView: View {
     @ObservedObject var store: HubberStore
     @State private var onboardingReset = false
+    #if DEBUG
+        @ObservedObject private var mockMode = MockMode.shared
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -61,6 +64,18 @@ struct DeveloperPanelView: View {
 
                 Spacer()
             }
+
+            #if DEBUG
+                Picker("Mock mode", selection: $mockMode.scenario) {
+                    ForEach(MockScenario.allCases) { scenario in
+                        Text(scenario.title).tag(scenario)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: mockMode.scenario) { _, newValue in
+                    mockMode.apply(newValue, to: store)
+                }
+            #endif
         }
         .controlSize(.small)
     }
