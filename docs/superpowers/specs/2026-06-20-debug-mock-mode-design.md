@@ -103,9 +103,15 @@ enum MockScenario: String, CaseIterable { case off, empty, small, large, error, 
 
 ## 5. Toggle
 
-- `HUBBER_MOCK=large open Hubber.app` (or scheme env) → deterministic startup scenario —
-  for screenshots, the 20+ test, future CI.
-- Developer panel picker → live switch during manual QA.
+Mock mode requires a **DEBUG build** — `make app-dev` (NOT `make app`, which is release and
+compiles all of this out). Then:
+
+- `open -n --env HUBBER_MOCK=large Hubber.app` → deterministic startup scenario (for
+  screenshots, the 20+ test, future CI). Note: a bare `HUBBER_MOCK=large open Hubber.app`
+  does **not** work — `open` launches via LaunchServices and the shell-prefixed var isn't
+  inherited; pass it with `open`'s `--env` flag (or run the binary directly:
+  `HUBBER_MOCK=large .build/debug/Hubber`). `-n` forces a fresh instance if one is running.
+- Developer panel picker → live switch during manual QA (works regardless of launch method).
 - Unset / `off` → normal app, real providers.
 
 ## 6. Testing

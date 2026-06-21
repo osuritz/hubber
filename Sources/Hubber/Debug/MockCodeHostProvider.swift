@@ -49,6 +49,9 @@
             case .error:
                 throw MockError.requestedFailure
             case .loading:
+                // Hold the loading state until the scenario changes (which cancels this task,
+                // so Task.sleep throws). The 1-hour cap is just a safety bound; on natural wake
+                // we surface a cancellation so the tab never flips to a stale "success".
                 try await Task.sleep(for: .seconds(60 * 60))
                 throw CancellationError()
             }

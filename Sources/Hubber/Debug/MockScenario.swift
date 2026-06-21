@@ -26,7 +26,9 @@
             }
         }
 
-        init?(env value: String?) {
+        /// Maps the `HUBBER_MOCK` value to a scenario. Unknown / empty / nil → `.off`,
+        /// so it never fails — callers always get a concrete scenario.
+        init(env value: String?) {
             let normalized = value?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
@@ -53,7 +55,7 @@
             case .empty:
                 [Self.plan(login: "hubber-mock-empty", behavior: .data(Self.emptyData))]
             case .small:
-                [Self.plan(login: "hubber-mock-small", behavior: .data(Self.smallData(prefix: "small")))]
+                [Self.plan(login: "hubber-mock-small", behavior: .data(Self.smallData))]
             case .large:
                 [Self.plan(login: "hubber-mock-large", behavior: .data(Self.largeData))]
             case .error:
@@ -114,13 +116,11 @@
 
         static let overlappingPullRequestID = "mock-overlap-pr-1042"
 
-        private static func smallData(prefix: String) -> HubberData {
-            HubberData(
-                incoming: incoming(count: 3, prefix: prefix),
-                outgoing: outgoing(count: 2, prefix: prefix),
-                drafts: drafts(count: 1, prefix: prefix)
-            )
-        }
+        private static let smallData = HubberData(
+            incoming: incoming(count: 3, prefix: "small"),
+            outgoing: outgoing(count: 2, prefix: "small"),
+            drafts: drafts(count: 1, prefix: "small")
+        )
 
         private static func incoming(count: Int, prefix: String) -> [IncomingReview] {
             (0..<count).map { index in

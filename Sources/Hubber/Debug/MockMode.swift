@@ -16,7 +16,7 @@
         private var applyTask: Task<Void, Never>?
 
         private init(environment: [String: String] = ProcessInfo.processInfo.environment) {
-            scenario = MockScenario(env: environment["HUBBER_MOCK"]) ?? .off
+            scenario = MockScenario(env: environment["HUBBER_MOCK"])
         }
 
         func apply(_ scenario: MockScenario, to store: HubberStore) {
