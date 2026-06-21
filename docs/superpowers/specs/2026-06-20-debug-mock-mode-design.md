@@ -136,9 +136,11 @@ compiles all of this out). Then:
 
 ## 7. Out of scope / follow-ups
 
-- **`LazyVStack` list hardening** — switching the three tab lists from eager `VStack` to
-  `LazyVStack`. This harness is the tool that decides whether it's needed; it ships as a
-  **separate PR after this one lands** (explicitly agreed).
+- **`LazyVStack` list hardening — evaluated, NOT needed.** This harness existed to decide
+  whether the eager `VStack` tab lists should become `LazyVStack`. Verdict (2026-06-20,
+  on-device): both `HUBBER_MOCK=large` (25 rows) and `HUBBER_MOCK=xlarge` (150 rows — ~6× a
+  realistic queue) render and scroll smoothly. The eager `VStack` is fine; `LazyVStack` is
+  **not** being added (it would be premature complexity). Leave the lists as-is.
 - Network-level (true MSW) fixtures, and any mock surface beyond the popover.
 
 ## 8. Risks
