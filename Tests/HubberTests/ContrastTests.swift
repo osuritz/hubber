@@ -58,6 +58,9 @@ struct ContrastTests {
             Pair(name: "CI passing on base", fg: HubberDesign.ciPassing, bg: HubberDesign.materialSolid, min: 3.0),
             Pair(name: "CI failing on base", fg: HubberDesign.ciFailing, bg: HubberDesign.materialSolid, min: 3.0),
             Pair(name: "accent on base", fg: HubberDesign.accent, bg: HubberDesign.materialSolid, min: 3.0),
+            // PR-size indicator is 11pt text directly on the panel → normal-text AA (4.5:1).
+            Pair(name: "diff added on base", fg: HubberDesign.diffAdded, bg: HubberDesign.materialSolid, min: 4.5),
+            Pair(name: "diff removed on base", fg: HubberDesign.diffRemoved, bg: HubberDesign.materialSolid, min: 4.5),
         ]
     }
 
