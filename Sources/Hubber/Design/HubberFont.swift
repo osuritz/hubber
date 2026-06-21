@@ -31,6 +31,7 @@ enum HubberFont {
         case settingsLabel
         case settingsSub
         case badge
+        case prSize
 
         /// Base point size — must stay pixel-identical to the matching
         /// HubberType constant so migration is a visual no-op.

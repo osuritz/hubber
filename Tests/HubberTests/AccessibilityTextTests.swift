@@ -63,6 +63,57 @@ struct AccessibilityTextComposedTests {
         #expect(AccessibilityText.tabValue(count: 1) == "1 item")
         #expect(AccessibilityText.tabValue(count: 5) == "5 items")
     }
+
+    @Test("incoming row label appends PR size when present")
+    func incomingWithSize() {
+        let label = AccessibilityText.incomingRow(
+            number: 7, title: "Tweak", repo: "acme/app",
+            authorLogin: "bob", sloEnabled: false, sloStatus: nil, sloText: nil,
+            additions: 120, deletions: 45
+        )
+        #expect(label == "Pull request 7, Tweak, in acme/app, by bob, 120 lines added, 45 removed")
+    }
+
+    @Test("outgoing row label appends PR size when present")
+    func outgoingWithSize() {
+        let label = AccessibilityText.outgoingRow(
+            number: 42, title: "Add cache", repo: "acme/app", ci: .passing,
+            unresolved: 0, reviewers: [], additions: 1240, deletions: 0
+        )
+        #expect(label == "Pull request 42, Add cache, in acme/app, checks passing, no reviewers, 1240 lines added")
+    }
+
+    @Test("draft row label omits PR size when zero")
+    func draftNoSize() {
+        let label = AccessibilityText.draftRow(
+            number: 9, title: "Spike", repo: "acme/app", ci: .running, commits: 6,
+            additions: 0, deletions: 0
+        )
+        #expect(label == "Draft pull request 9, Spike, in acme/app, checks running, 6 commits")
+    }
+}
+
+@Suite("AccessibilityText size phrase")
+struct AccessibilityTextSizeTests {
+    @Test("both additions and deletions")
+    func both() {
+        #expect(AccessibilityText.sizePhrase(additions: 120, deletions: 45) == "120 lines added, 45 removed")
+    }
+
+    @Test("additions only")
+    func additionsOnly() {
+        #expect(AccessibilityText.sizePhrase(additions: 120, deletions: 0) == "120 lines added")
+    }
+
+    @Test("deletions only")
+    func deletionsOnly() {
+        #expect(AccessibilityText.sizePhrase(additions: 0, deletions: 45) == "45 lines removed")
+    }
+
+    @Test("both zero is nil")
+    func bothZero() {
+        #expect(AccessibilityText.sizePhrase(additions: 0, deletions: 0) == nil)
+    }
 }
 
 @Suite("AccessibilityText atomic phrases")

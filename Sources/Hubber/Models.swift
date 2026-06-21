@@ -194,6 +194,47 @@ struct OutgoingReview: Identifiable {
     let reviewers: [Reviewer]
     let updatedAgoHours: Double
     let mergeable: Bool
+    let additions: Int
+    let deletions: Int
+    let files: Int
+
+    /// `additions`/`deletions`/`files` default to 0 ("size unknown") so call sites
+    /// that don't carry diff stats stay terse; providers fill in real values.
+    init(
+        id: String,
+        repo: String,
+        number: Int,
+        title: String,
+        url: URL?,
+        ci: PullRequestCI,
+        ciDetail: String,
+        unresolved: Int,
+        approvals: Int,
+        requiredApprovals: Int,
+        reviewers: [Reviewer],
+        updatedAgoHours: Double,
+        mergeable: Bool,
+        additions: Int = 0,
+        deletions: Int = 0,
+        files: Int = 0
+    ) {
+        self.id = id
+        self.repo = repo
+        self.number = number
+        self.title = title
+        self.url = url
+        self.ci = ci
+        self.ciDetail = ciDetail
+        self.unresolved = unresolved
+        self.approvals = approvals
+        self.requiredApprovals = requiredApprovals
+        self.reviewers = reviewers
+        self.updatedAgoHours = updatedAgoHours
+        self.mergeable = mergeable
+        self.additions = additions
+        self.deletions = deletions
+        self.files = files
+    }
 }
 
 struct DraftReview: Identifiable {
@@ -206,9 +247,42 @@ struct DraftReview: Identifiable {
     let ciDetail: String
     let commits: Int
     let updatedAt: Date
+    let additions: Int
+    let deletions: Int
+    let files: Int
 
     var updatedAgoHours: Double {
         max(0, Date().timeIntervalSince(updatedAt) / 3600)
+    }
+
+    /// `additions`/`deletions`/`files` default to 0 ("size unknown") so call sites
+    /// that don't carry diff stats stay terse; providers fill in real values.
+    init(
+        id: String,
+        repo: String,
+        number: Int,
+        title: String,
+        url: URL?,
+        ci: PullRequestCI,
+        ciDetail: String,
+        commits: Int,
+        updatedAt: Date,
+        additions: Int = 0,
+        deletions: Int = 0,
+        files: Int = 0
+    ) {
+        self.id = id
+        self.repo = repo
+        self.number = number
+        self.title = title
+        self.url = url
+        self.ci = ci
+        self.ciDetail = ciDetail
+        self.commits = commits
+        self.updatedAt = updatedAt
+        self.additions = additions
+        self.deletions = deletions
+        self.files = files
     }
 }
 

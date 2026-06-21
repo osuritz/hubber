@@ -207,6 +207,26 @@ final class GitHubProviderTests: XCTestCase {
         XCTAssertEqual(prs[0].requiredApprovals, 1)
         XCTAssertEqual(prs[0].reviewers.count, 1)
         XCTAssertEqual(prs[0].reviewers[0].state, .approved)
+        XCTAssertEqual(prs[0].additions, 1240)
+        XCTAssertEqual(prs[0].deletions, 88)
+        XCTAssertEqual(prs[0].files, 12)
+    }
+
+    func testFetchDraftPullRequestsMapsDiffStats() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.draftPullRequestsResponse)
+        }
+
+        let drafts = try await provider.fetchDraftPullRequests(accessToken: "tok", limit: 100)
+
+        XCTAssertEqual(drafts.count, 1)
+        XCTAssertEqual(drafts[0].number, 9840)
+        XCTAssertEqual(drafts[0].title, "Ledger rewrite spike")
+        XCTAssertEqual(drafts[0].repo, "acme/api")
+        XCTAssertEqual(drafts[0].commits, 6)
+        XCTAssertEqual(drafts[0].additions, 2480)
+        XCTAssertEqual(drafts[0].deletions, 1903)
+        XCTAssertEqual(drafts[0].files, 37)
     }
 
     func testFetchOutgoingPullRequestsCountsUnresolvedThreadsForAllOpenMode() async throws {
@@ -297,6 +317,9 @@ final class GitHubProviderTests: XCTestCase {
               "isDraft": false,
               "updatedAt": "2026-06-15T09:00:00Z",
               "mergeable": "MERGEABLE",
+              "additions": 1240,
+              "deletions": 88,
+              "changedFiles": 12,
               "repository": { "nameWithOwner": "acme/api" },
               "commits": {
                 "nodes": [{
@@ -318,6 +341,30 @@ final class GitHubProviderTests: XCTestCase {
                   "state": "APPROVED"
                 }]
               }
+            }]
+          }
+        }
+      }
+    }
+    """.utf8)
+
+    static let draftPullRequestsResponse = Data("""
+    {
+      "data": {
+        "viewer": {
+          "pullRequests": {
+            "nodes": [{
+              "id": "PR_9840",
+              "number": 9840,
+              "title": "Ledger rewrite spike",
+              "isDraft": true,
+              "url": "https://github.com/acme/api/pull/9840",
+              "updatedAt": "2026-06-15T09:00:00Z",
+              "additions": 2480,
+              "deletions": 1903,
+              "changedFiles": 37,
+              "repository": { "nameWithOwner": "acme/api" },
+              "commits": { "totalCount": 6 }
             }]
           }
         }

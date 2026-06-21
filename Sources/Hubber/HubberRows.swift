@@ -132,6 +132,27 @@ struct RowDot: View {
     }
 }
 
+/// PR size indicator: "+<added>" in green, "-<removed>" in red, counts
+/// abbreviated at ≥1000. The +/- signs carry the meaning so it reads without
+/// relying on color. VoiceOver announces size via the row's composed label, so
+/// this view is hidden from the accessibility tree.
+struct PRSizeView: View {
+    let additions: Int
+    let deletions: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("+\(abbreviatedLineCount(additions))")
+                .foregroundStyle(HubberDesign.diffAdded)
+            Text("-\(abbreviatedLineCount(deletions))")
+                .foregroundStyle(HubberDesign.diffRemoved)
+        }
+        .hubberFont(.prSize)
+        .monospacedDigit()
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - IncomingReviewRow
 
 struct IncomingReviewRow: View {
@@ -156,6 +177,10 @@ struct IncomingReviewRow: View {
                         Text(review.repo).lineLimit(1)
                         RowDot()
                         Text(review.author.login)
+                        if review.additions > 0 || review.deletions > 0 {
+                            RowDot()
+                            PRSizeView(additions: review.additions, deletions: review.deletions)
+                        }
                     }
                 }
             }
@@ -171,7 +196,8 @@ struct IncomingReviewRow: View {
             number: review.number, title: review.title, repo: review.repo,
             authorLogin: review.author.login, sloEnabled: isSLOEnabled,
             sloStatus: isSLOEnabled ? sloStatus : nil,
-            sloText: isSLOEnabled ? sloText : nil
+            sloText: isSLOEnabled ? sloText : nil,
+            additions: review.additions, deletions: review.deletions
         ))
     }
 
@@ -249,6 +275,11 @@ struct OutgoingReviewRow: View {
                             )
                             .labelStyle(.titleAndIcon)
                         }
+
+                        if review.additions > 0 || review.deletions > 0 {
+                            RowDot()
+                            PRSizeView(additions: review.additions, deletions: review.deletions)
+                        }
                     }
                 }
             }
@@ -263,7 +294,8 @@ struct OutgoingReviewRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AccessibilityText.outgoingRow(
             number: review.number, title: review.title, repo: review.repo,
-            ci: review.ci, unresolved: review.unresolved, reviewers: review.reviewers
+            ci: review.ci, unresolved: review.unresolved, reviewers: review.reviewers,
+            additions: review.additions, deletions: review.deletions
         ))
     }
 }
@@ -294,6 +326,10 @@ struct DraftPRRow: View {
                         Text("\(draft.commits) commits")
                         RowDot()
                         Text("updated \(elapsedText(hours: draft.updatedAgoHours))")
+                        if draft.additions > 0 || draft.deletions > 0 {
+                            RowDot()
+                            PRSizeView(additions: draft.additions, deletions: draft.deletions)
+                        }
                     }
                 }
             }
@@ -302,7 +338,8 @@ struct DraftPRRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AccessibilityText.draftRow(
             number: draft.number, title: draft.title, repo: draft.repo,
-            ci: draft.ci, commits: draft.commits
+            ci: draft.ci, commits: draft.commits,
+            additions: draft.additions, deletions: draft.deletions
         ))
     }
 }

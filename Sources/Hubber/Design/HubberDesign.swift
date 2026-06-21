@@ -160,6 +160,13 @@ enum HubberDesign {
         }
     }
 
+    // MARK: Diff Size (PR additions / deletions)
+
+    /// Lines added — same vetted green as the passing/approved tokens.
+    static let diffAdded = Color(light: "#248A3D", dark: "#30D158")
+    /// Lines removed — same vetted red as the SLO-breach token.
+    static let diffRemoved = Color(light: "#D70015", dark: "#FF6961")
+
     // MARK: System Accent / Error
 
     static let accent = Color(light: "#007AFF", dark: "#0A84FF")

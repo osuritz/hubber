@@ -44,34 +44,52 @@ extension AccessibilityText {
         return "\(reviewers.count) \(noun): " + groups.joined(separator: ", ")
     }
 
+    /// Spoken PR-size summary, or nil when there are no changed lines to announce.
+    static func sizePhrase(additions: Int, deletions: Int) -> String? {
+        switch (additions > 0, deletions > 0) {
+        case (true, true): "\(additions) lines added, \(deletions) removed"
+        case (true, false): "\(additions) lines added"
+        case (false, true): "\(deletions) lines removed"
+        case (false, false): nil
+        }
+    }
+
     static func incomingRow(
         number: Int, title: String, repo: String, authorLogin: String,
-        sloEnabled: Bool, sloStatus: SLOStatus?, sloText: String?
+        sloEnabled: Bool, sloStatus: SLOStatus?, sloText: String?,
+        additions: Int = 0, deletions: Int = 0
     ) -> String {
         var parts = ["Pull request \(number)", title, "in \(repo)", "by \(authorLogin)"]
         if sloEnabled, let sloStatus {
             parts.append("review \(sloPhrase(sloStatus))")
             if let sloText, !sloText.isEmpty { parts.append(sloText) }
         }
+        if let size = sizePhrase(additions: additions, deletions: deletions) { parts.append(size) }
         return parts.joined(separator: ", ")
     }
 
     static func outgoingRow(
         number: Int, title: String, repo: String, ci: PullRequestCI,
-        unresolved: Int, reviewers: [Reviewer]
+        unresolved: Int, reviewers: [Reviewer],
+        additions: Int = 0, deletions: Int = 0
     ) -> String {
         var parts = ["Pull request \(number)", title, "in \(repo)", ciPhrase(ci)]
         if unresolved > 0 {
             parts.append("\(unresolved) unresolved \(unresolved == 1 ? "thread" : "threads")")
         }
         parts.append(reviewersSummary(reviewers))
+        if let size = sizePhrase(additions: additions, deletions: deletions) { parts.append(size) }
         return parts.joined(separator: ", ")
     }
 
-    static func draftRow(number: Int, title: String, repo: String, ci: PullRequestCI, commits: Int) -> String {
+    static func draftRow(
+        number: Int, title: String, repo: String, ci: PullRequestCI, commits: Int,
+        additions: Int = 0, deletions: Int = 0
+    ) -> String {
         let commitText = "\(commits) \(commits == 1 ? "commit" : "commits")"
-        return ["Draft pull request \(number)", title, "in \(repo)", ciPhrase(ci), commitText]
-            .joined(separator: ", ")
+        var parts = ["Draft pull request \(number)", title, "in \(repo)", ciPhrase(ci), commitText]
+        if let size = sizePhrase(additions: additions, deletions: deletions) { parts.append(size) }
+        return parts.joined(separator: ", ")
     }
 
     static func tabValue(count: Int) -> String {

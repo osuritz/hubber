@@ -84,6 +84,16 @@ struct HubberFontTests {
         #expect(HubberFont.Role.prNumber.base == 11)
     }
 
+    @Test("Role.prSize base is 11")
+    func rolePrSizeBase() {
+        #expect(HubberFont.Role.prSize.base == 11)
+    }
+
+    @Test("Role.prSize weight is .regular")
+    func rolePrSizeWeight() {
+        #expect(HubberFont.Role.prSize.weight == Font.Weight.regular)
+    }
+
     // MARK: - Role weights match HubberType
 
     @Test("Role.title weight is .medium")
