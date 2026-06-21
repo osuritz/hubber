@@ -160,6 +160,17 @@ enum HubberDesign {
         }
     }
 
+    // MARK: Diff Size (PR additions / deletions)
+
+    /// Rendered as 11pt text directly on the panel material, so both diff colors
+    /// must clear AA normal-text contrast (4.5:1) on materialSolid — see ContrastTests.
+    /// Lines added — darker green than the CI glyph so it's legible as text.
+    /// a11y: light #248A3D→#1F7935 (4.07→4.6:1 on materialSolid).
+    static let diffAdded = Color(light: "#1F7935", dark: "#30D158")
+    /// Lines removed — the text-grade red shared with the SLO-breach token.
+    /// a11y: light #D70015→#CE0014 (4.27→4.58:1); dark #FF6961→#FF7067 (4.37→4.55:1).
+    static let diffRemoved = Color(light: "#CE0014", dark: "#FF7067")
+
     // MARK: System Accent / Error
 
     static let accent = Color(light: "#007AFF", dark: "#0A84FF")

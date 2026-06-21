@@ -176,6 +176,7 @@ final class GitLabProvider: CodeHostProvider {
         let resolvableDiscussions = intValue(node["resolvableDiscussionsCount"]) ?? 0
         let resolvedDiscussions = intValue(node["resolvedDiscussionsCount"]) ?? 0
         let mergeStatus = node["mergeStatusEnum"] as? String
+        let diffStats = node["diffStatsSummary"] as? [String: Any]
 
         return OutgoingReview(
             id: id,
@@ -190,7 +191,10 @@ final class GitLabProvider: CodeHostProvider {
             requiredApprovals: requiredApprovals,
             reviewers: parseReviewers(node),
             updatedAgoHours: max(0, Date().timeIntervalSince(updatedAt) / 3600),
-            mergeable: mergeStatus?.uppercased() == "CAN_BE_MERGED"
+            mergeable: mergeStatus?.uppercased() == "CAN_BE_MERGED",
+            additions: intValue(diffStats?["additions"]) ?? 0,
+            deletions: intValue(diffStats?["deletions"]) ?? 0,
+            files: intValue(diffStats?["fileCount"]) ?? 0
         )
     }
 
@@ -206,6 +210,7 @@ final class GitLabProvider: CodeHostProvider {
         let url = (node["webUrl"] as? String).flatMap(URL.init(string:))
         let updatedAt = (node["updatedAt"] as? String).flatMap(ISO8601DateFormatter().date(from:)) ?? Date()
         let pipelineStatus = (node["headPipeline"] as? [String: Any])?["status"] as? String
+        let diffStats = node["diffStatsSummary"] as? [String: Any]
 
         return DraftReview(
             id: id,
@@ -216,7 +221,10 @@ final class GitLabProvider: CodeHostProvider {
             ci: mapCI(pipelineStatus),
             ciDetail: pipelineStatus ?? "no pipeline",
             commits: intValue(node["commitCount"]) ?? 0,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            additions: intValue(diffStats?["additions"]) ?? 0,
+            deletions: intValue(diffStats?["deletions"]) ?? 0,
+            files: intValue(diffStats?["fileCount"]) ?? 0
         )
     }
 
@@ -288,6 +296,7 @@ final class GitLabProvider: CodeHostProvider {
             draft
             project { fullPath }
             commitCount
+            diffStatsSummary { additions deletions fileCount }
             approvalsRequired
             approvedBy {
               nodes { username }

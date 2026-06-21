@@ -186,7 +186,10 @@ final class GitHubProvider: CodeHostProvider {
                 ci: .noChecks,
                 ciDetail: "No checks",
                 commits: commits,
-                updatedAt: updatedAt
+                updatedAt: updatedAt,
+                additions: node["additions"] as? Int ?? 0,
+                deletions: node["deletions"] as? Int ?? 0,
+                files: node["changedFiles"] as? Int ?? 0
             )
         }
     }
@@ -286,6 +289,9 @@ final class GitHubProvider: CodeHostProvider {
             isDraft
             url
             updatedAt
+            additions
+            deletions
+            changedFiles
             repository { nameWithOwner }
             commits(last: 1) { totalCount }
           }

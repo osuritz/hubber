@@ -60,7 +60,10 @@ extension GitHubProvider {
             requiredApprovals: 1,
             reviewers: reviewers,
             updatedAgoHours: max(0, Date().timeIntervalSince(updatedAt) / 3600),
-            mergeable: mergeable
+            mergeable: mergeable,
+            additions: node["additions"] as? Int ?? 0,
+            deletions: node["deletions"] as? Int ?? 0,
+            files: node["changedFiles"] as? Int ?? 0
         )
     }
 
@@ -179,6 +182,9 @@ extension GitHubProvider {
             isDraft
             updatedAt
             mergeable
+            additions
+            deletions
+            changedFiles
             repository { nameWithOwner }
             commits(last: 1) {
               nodes {

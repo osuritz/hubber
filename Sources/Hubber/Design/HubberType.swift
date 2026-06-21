@@ -47,6 +47,9 @@ enum HubberType {
     /// Badge / count chip — 10 / Semibold · monospaced digits
     static let badge = Font.system(size: 10, weight: .semibold).monospacedDigit()
 
+    /// PR size +/- indicator — 11 / Regular · monospaced digits (aligns the +/- counts)
+    static let prSize = Font.system(size: 11, weight: .regular).monospacedDigit()
+
     // MARK: Size Constants
 
     /// Point sizes for each role, used in tests.

@@ -171,7 +171,10 @@
                 requiredApprovals: 2,
                 reviewers: reviewers(index: index),
                 updatedAgoHours: Double((index * 3) % 36) + 0.5,
-                mergeable: index % 4 != 0
+                mergeable: index % 4 != 0,
+                additions: 48 + (index * 53) % 1800,
+                deletions: 6 + (index * 23) % 400,
+                files: 1 + index % 22
             )
         }
 
@@ -188,7 +191,10 @@
                     ci: ci,
                     ciDetail: ciDetail(ci: ci, index: index),
                     commits: 1 + index % 9,
-                    updatedAt: .hoursAgo(Double(index + 1) * 1.75)
+                    updatedAt: .hoursAgo(Double(index + 1) * 1.75),
+                    additions: 30 + (index * 41) % 1200,
+                    deletions: 4 + (index * 17) % 250,
+                    files: 1 + index % 15
                 )
             }
         }
