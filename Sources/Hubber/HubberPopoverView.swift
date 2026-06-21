@@ -18,16 +18,23 @@ struct HubberPopoverView: View {
 
     var body: some View {
         ZStack {
+            // Panel-background precedence (mirrors applyPanelBacking() on the AppKit side):
+            //  1. Reduce Transparency (accessibility) → opaque solid, on every OS. The AppKit
+            //     layer also skips the glass in this case, so nothing translucent shows through.
+            //  2. macOS 26+ → transparent root so the system Liquid Glass (NSGlassEffectView,
+            //     applied at the AppKit layer) shows through.
+            //  3. Pre-Tahoe → legacy vibrancy material + a light contrast frost.
             if reduceTransparency {
                 HubberDesign.materialSolid
                     .ignoresSafeArea()
+            } else if #available(macOS 26, *) {
+                Color.clear
             } else {
                 VisualEffectView(material: .popover)
                     .ignoresSafeArea()
+                HubberAppearance.panelFill(for: colorScheme)
+                    .ignoresSafeArea()
             }
-
-            HubberAppearance.panelFill(for: colorScheme)
-                .ignoresSafeArea()
 
             if !onboarding.isCompleted {
                 OnboardingFlow(coordinator: onboarding, store: store)

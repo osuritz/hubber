@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let panelGap = 6.0
 
     private var statusItem: NSStatusItem?
+    /// The SwiftUI host for the popover content, retained so the panel's backing can be re-wrapped
+    /// (glass vs. plain) when Reduce Transparency toggles at runtime — see applyPanelBacking().
+    private var panelHostingView: NSView?
     private let panel = HubberMenuPanel(
         contentRect: NSRect(origin: .zero, size: panelSize),
         styleMask: [.borderless, .nonactivatingPanel],
@@ -150,7 +153,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                // Reduce Transparency changes which panel backing we use (glass vs. plain); the
+                // status-item glyph can also depend on Increased Contrast.
                 self?.updateStatusItem()
+                self?.applyPanelBacking()
             }
         }
     }
@@ -255,12 +261,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configurePanel(with contentView: some View) {
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.frame = NSRect(origin: .zero, size: Self.panelSize)
-        hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = Self.panelCornerRadius
-        hostingView.layer?.cornerCurve = .continuous
-        hostingView.layer?.masksToBounds = true
+        panelHostingView = hostingView
+        applyPanelBacking()
 
-        panel.contentView = hostingView
         panel.delegate = self
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.fullScreenAuxiliary, .transient]
@@ -271,6 +274,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isOpaque = false
         panel.isReleasedWhenClosed = false
         panel.level = .popUpMenu
+    }
+
+    /// Installs the panel's content backing; safe to call repeatedly. On macOS 26+ the panel is
+    /// backed by the system Liquid Glass material (NSGlassEffectView, Regular) so it matches the
+    /// Wi-Fi/Bluetooth/Control Center menus — UNLESS Reduce Transparency is on, in which case we
+    /// skip the glass entirely (rather than hide it under an opaque fill) so no glass rim or
+    /// lensing leaks for that accessibility setting. Older systems use the plain clipped host with
+    /// the in-SwiftUI vibrancy material. Re-invoked from the accessibility-display observer so a
+    /// runtime Reduce Transparency toggle takes effect immediately.
+    private func applyPanelBacking() {
+        guard let hostingView = panelHostingView else { return }
+        let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+
+        if #available(macOS 26, *), !reduceTransparency {
+            let glass = NSGlassEffectView()
+            glass.frame = NSRect(origin: .zero, size: Self.panelSize)
+            glass.style = .regular
+            glass.cornerRadius = Self.panelCornerRadius
+            glass.contentView = hostingView
+            panel.contentView = glass
+        } else {
+            hostingView.wantsLayer = true
+            hostingView.layer?.cornerRadius = Self.panelCornerRadius
+            hostingView.layer?.cornerCurve = .continuous
+            hostingView.layer?.masksToBounds = true
+            panel.contentView = hostingView
+        }
     }
 
     private func configureStatusMenu() {

@@ -9,14 +9,21 @@ struct AllClearState: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            // Green check circle (non-color cue: checkmark icon + green fill)
+            // Green check circle (non-color cue: checkmark icon + green fill).
+            // Fill/border are strengthened past the shared sloGreen tokens and the disc carries a
+            // soft shadow: as a large hero element on the Tahoe Liquid Glass background it needs
+            // more presence than the inline SLO pills do, or it washes out against the light glass.
             ZStack {
                 Circle()
-                    .fill(HubberDesign.sloGreen.bg)
+                    .fill(Color(light: "rgba(52,199,89,0.22)", dark: "rgba(48,209,88,0.20)"))
                     .overlay {
-                        Circle().stroke(HubberDesign.sloGreen.border, lineWidth: 0.5)
+                        Circle().stroke(
+                            Color(light: "rgba(52,199,89,0.55)", dark: "rgba(48,209,88,0.50)"),
+                            lineWidth: 1
+                        )
                     }
                     .frame(width: 54, height: 54)
+                    .shadow(color: .black.opacity(0.10), radius: 5, y: 1)
 
                 Image(systemName: "checkmark")
                     .font(.system(size: 22, weight: .bold))
