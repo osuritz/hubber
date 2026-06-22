@@ -4,11 +4,49 @@
 surfaces one PR list — Incoming (Reviews), Outgoing, or Drafts — on the desktop and in
 Notification Center, echoing the app's row design. Each instance is configured independently
 (list × connection × attention-filter × sort). Rows open the PR in the browser; the header
-opens Hubber. **Delivery:** phased; a de-risking spike gates the build approach. **Build:**
-hand-assembled `.appex` staying pure-SPM (Approach A), falling back to a thin XcodeGen target
-for just the appex (Approach C) if the spike fails. **Distribution:** developed/tested locally
-with self-signed entitlements; ships to users only once the app is signed (Apple account /
-M4b) — the same Apple Developer account gate that the currently-unsigned v1 has not yet met.
+opens Hubber. **Delivery:** phased. **Build:** a thin XcodeGen/`xcodebuild` target for the
+`.appex` (**Approach C**) — Phase 0 **ruled out** the pure-SPM Approach A (see Phase 0 Outcome
+below). **Distribution:** developed/tested locally with a **free Apple ID Personal Team** cert;
+ships to users only once the app is signed/notarized (Apple Developer account / M4b).
+
+## Phase 0 — Outcome (RESOLVED 2026-06-22)
+
+The de-risking spike (§8) is complete. Findings, verified on this machine under a **free Apple
+ID "Personal Team"** `Apple Development` certificate (Team ID present):
+
+- **Build approach = C (Xcode-built appex).** Approach A (pure-SPM hand-assembled `.appex`) is
+  **ruled out**: a `swift build`-linked widget binary lacks the `NSExtensionMain` entry point real
+  app-extensions have, so PlugInKit (`pkd`) never registers it — confirmed by *even a trivial
+  static widget* failing discovery regardless of signing/metadata/entitlements. Xcode's
+  app-extension build produces the correct binary; an Xcode-built widget **is** discovered.
+- **Free signing is sufficient for local dev** (no paid account). One-time fix: the cert chain was
+  broken (`errSecInternalComponent`, "unable to build chain to self-signed root") until the **Apple
+  WWDR G3** intermediate was installed (`security import AppleWWDRCAG3.cer`). After that, `codesign`
+  embeds a real `TeamIdentifier` and the bundle passes `--verify --deep --strict`.
+- **The widget extension MUST carry `com.apple.security.app-sandbox = YES`** (alongside
+  `application-groups`). Without `app-sandbox`, `lsregister` registers the bundle but `pluginkit`
+  **silently ignores it** — a non-obvious requirement that compounded the Approach-A failure.
+- **App Groups provision under the free Personal Team** via Xcode automatic signing
+  (`DEVELOPMENT_TEAM=<id> CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates`) — no "Personal teams
+  don't support App Groups" error. Both host and sandboxed widget receive the signed
+  `application-groups` entitlement.
+- **Verified end-to-end (free team):** Xcode-built widget is **discovered** (`pluginkit -m`),
+  appears in the gallery, **renders** on the desktop, and the **sandboxed widget resolves the App
+  Group container** (`containerURL` non-nil).
+
+**Still to confirm in the real build (not a blocker):** the file **round-trip** — a non-sandboxed
+(but entitled) host writing the snapshot, then the sandboxed widget reading it. The spike could not
+confirm this cleanly: the throwaway host had an AppKit delegate-wiring bug that prevented a reliable
+*entitled* write, and an *unentitled* `printf` write was (correctly) sandbox-denied — not
+representative of the real host. This is the standard non-sandboxed-app + sandboxed-widget sharing
+pattern, so it's **expected to work**; it will be validated in Phase 1b/2 with the real, properly
+signed host. **Fallback if raw container files prove finicky across the sandbox boundary:**
+`UserDefaults(suiteName: "group.com.osuritz.hubber")` or `NSFileCoordinator` (both route through
+`cfprefsd`/file coordination, which handle cross-process/cross-sandbox sharing). This supersedes
+§4's "single JSON file" decision if needed.
+
+Detailed gate-by-gate evidence: `docs/superpowers/SPIKE-RESULTS.md` (Approach A) and
+`docs/superpowers/SPIKE-C-RESULTS.md` (Approach C).
 
 ## 1. Goal & motivation
 
@@ -170,6 +208,9 @@ reuses the same tokens.)
 
 ## 8. Phase 0 — de-risking spike (the real go/no-go)
 
+> **RESOLVED 2026-06-22 → Approach C.** See the "Phase 0 — Outcome" section above for what the
+> spike actually found. The original plan below is retained for context.
+
 The spike is **not** "can a static widget render?" — that would pass while the actual design still
 fails. It must prove the **exact** signing + configurable-AppIntents + App-Group model works under
 the planned local signing. Build a throwaway but **representative** widget:
@@ -213,6 +254,12 @@ Then verify the four gates **in this order** — each is independently decisive:
 Everything in §3–§7 and §10 is identical under A or C; only the appex's build/sign mechanics differ.
 
 ## 9. Build / CI integration
+
+> **RESOLVED 2026-06-22 → Approach C.** The widget `.appex` is built by **XcodeGen + `xcodebuild`**
+> (the Approach-A hand-assembly bullets below are obsolete and kept only for context). The widget
+> extension entitlements MUST include **both** `application-groups` **and**
+> `com.apple.security.app-sandbox`. `make-app.sh` will `xcodebuild` the appex (consuming `HubberKit`)
+> and embed + inside-out-sign it into `Contents/PlugIns/`. Working reference: `spike-c/project.yml`.
 
 - **Targets:** new `HubberKit` library; `Hubber` executable depends on it; the widget target depends
   on it. The widget target is built only by `make app` (Approach A) or the XcodeGen step (Approach
