@@ -57,6 +57,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rowDensity.rawValue, forKey: "rowDensity") }
     }
 
+    /// Leading status indicator for Outgoing/Drafts rows — slim CI rail (default) or the
+    /// classic CI badge. Persisted by rawValue; MDM-lockable via `statusIndicatorStyle`.
+    @Published var statusIndicatorStyle: StatusIndicatorStyle {
+        didSet { defaults.set(statusIndicatorStyle.rawValue, forKey: "statusIndicatorStyle") }
+    }
+
     // MARK: - Privacy / Telemetry kill-switches (#53, #102)
 
     //
@@ -165,6 +171,7 @@ final class SettingsStore: ObservableObject {
         incomingMode = Self.resolveIncomingMode(defaults: defaults, managed: managed)
         unresolvedMode = Self.resolveUnresolvedMode(defaults: defaults, managed: managed)
         rowDensity = Self.resolveRowDensity(defaults: defaults, managed: managed)
+        statusIndicatorStyle = Self.resolveStatusIndicatorStyle(defaults: defaults, managed: managed)
         badgeMode = Self.resolveBadgeMode(defaults: defaults, managed: managed)
         tabBadgeMode = Self.resolveTabBadgeMode(defaults: defaults, managed: managed)
         analyticsEnabled = Self.bool(
@@ -417,6 +424,22 @@ final class SettingsStore: ObservableObject {
             ? defaults.integer(forKey: ManagedKey.rowDensity)
             : RowDensity.normal.rawValue
         return RowDensity(rawValue: raw) ?? .normal
+    }
+
+    /// Resolves `statusIndicatorStyle` from the managed seam (String label) before falling
+    /// back to UserDefaults and the hardcoded default (`.rail`). Mirrors the String-label
+    /// half of `resolveRowDensity` so IT can write `statusIndicatorStyle = "badge"`.
+    private static func resolveStatusIndicatorStyle(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> StatusIndicatorStyle {
+        StatusIndicatorStyle(rawValue: string(
+            managedKey: ManagedKey.statusIndicatorStyle,
+            defaultsKey: ManagedKey.statusIndicatorStyle,
+            defaults: defaults,
+            managed: managed,
+            fallback: StatusIndicatorStyle.rail.rawValue
+        )) ?? .rail
     }
 
     /// Resolves per-type notification flags.
