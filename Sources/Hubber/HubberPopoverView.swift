@@ -314,7 +314,8 @@ struct HubberPopoverView: View {
                         OutgoingReviewRow(
                             review: review,
                             density: store.settings.rowDensity,
-                            isLast: index == store.data.outgoing.count - 1
+                            isLast: index == store.data.outgoing.count - 1,
+                            indicatorStyle: store.settings.statusIndicatorStyle
                         )
                     }
                 )
@@ -351,7 +352,8 @@ struct HubberPopoverView: View {
                         DraftPRRow(
                             draft: draft,
                             density: store.settings.rowDensity,
-                            isLast: index == store.data.drafts.count - 1
+                            isLast: index == store.data.drafts.count - 1,
+                            indicatorStyle: store.settings.statusIndicatorStyle
                         )
                     }
                 )

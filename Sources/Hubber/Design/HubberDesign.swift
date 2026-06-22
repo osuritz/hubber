@@ -123,6 +123,24 @@ enum HubberDesign {
         }
     }
 
+    // MARK: Review Verdict Pill Tokens
+
+    /// Neutral chip — for the "awaiting review" verdict (no reviewer activity yet). Uses the
+    /// secondary-text colour on the standard fill so it reads as a calm, non-signal state.
+    static let neutralChip = SLOTokenGroup(fg: text2, bg: fill, border: sep)
+
+    /// Pill token group for the review-status pill. Reuses the contrast-vetted SLO colour
+    /// groups (green/amber/red) plus the neutral chip, so the review axis shares the panel's
+    /// established, AA-tuned palette rather than introducing new colours.
+    static func reviewVerdictTokens(for verdict: ReviewVerdict) -> SLOTokenGroup {
+        switch verdict {
+        case .approved: sloGreen
+        case .changesRequested: sloRed
+        case .inReview: sloAmber
+        case .awaitingReview: neutralChip
+        }
+    }
+
     // MARK: CI State Colors
 
     static let ciPassing = Color(light: "#248A3D", dark: "#30D158")
