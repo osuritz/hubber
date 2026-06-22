@@ -57,6 +57,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rowDensity.rawValue, forKey: "rowDensity") }
     }
 
+    /// Menu-bar panel width preset (Narrow/Normal/Wide). User-adjustable (Appearance picker)
+    /// and MDM-lockable. The panel height is automatic, so width is the only user-set dimension.
+    @Published var panelWidth: PanelWidth {
+        didSet { defaults.set(panelWidth.rawValue, forKey: "panelWidth") }
+    }
+
     /// Leading status indicator for Outgoing/Drafts rows — slim CI rail (default) or the
     /// classic CI badge. Persisted by rawValue; MDM-lockable via `statusIndicatorStyle`.
     @Published var statusIndicatorStyle: StatusIndicatorStyle {
@@ -171,6 +177,7 @@ final class SettingsStore: ObservableObject {
         incomingMode = Self.resolveIncomingMode(defaults: defaults, managed: managed)
         unresolvedMode = Self.resolveUnresolvedMode(defaults: defaults, managed: managed)
         rowDensity = Self.resolveRowDensity(defaults: defaults, managed: managed)
+        panelWidth = Self.resolvePanelWidth(defaults: defaults, managed: managed)
         statusIndicatorStyle = Self.resolveStatusIndicatorStyle(defaults: defaults, managed: managed)
         badgeMode = Self.resolveBadgeMode(defaults: defaults, managed: managed)
         tabBadgeMode = Self.resolveTabBadgeMode(defaults: defaults, managed: managed)
@@ -337,6 +344,36 @@ final class SettingsStore: ObservableObject {
             managed: managed,
             fallback: TabBadgeMode.needsAttention.rawValue
         )) ?? .needsAttention
+    }
+
+    /// Resolves the menu-bar panel width preset from the managed seam (accepts Int rawValue or
+    /// a String label) before falling back to UserDefaults and the hardcoded default (.normal).
+    ///
+    /// IT can write either `panelWidth = 3` (Int rawValue) or `panelWidth = "wide"` (String) in
+    /// a configuration profile; both are accepted so the profile is human-readable. Mirrors
+    /// `resolveRowDensity`.
+    private static func resolvePanelWidth(defaults: UserDefaults, managed: any ManagedPreferences) -> PanelWidth {
+        if managed.isForced(ManagedKey.panelWidth) {
+            // Int rawValue path
+            if
+                let intVal = managed.value(ManagedKey.panelWidth) as? Int,
+                let width = PanelWidth(rawValue: intVal) {
+                return width
+            }
+            // String label path: "narrow" | "normal" | "wide"
+            if let strVal = managed.value(ManagedKey.panelWidth) as? String {
+                switch strVal.lowercased() {
+                case "narrow": return .narrow
+                case "normal": return .normal
+                case "wide": return .wide
+                default: break
+                }
+            }
+        }
+        let raw = defaults.object(forKey: ManagedKey.panelWidth) != nil
+            ? defaults.integer(forKey: ManagedKey.panelWidth)
+            : PanelWidth.normal.rawValue
+        return PanelWidth(rawValue: raw) ?? .normal
     }
 
     private static func resolveLaunchAtLogin(defaults: UserDefaults, managed: any ManagedPreferences) -> Bool {

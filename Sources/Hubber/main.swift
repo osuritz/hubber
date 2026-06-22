@@ -6,7 +6,9 @@ import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let panelSize = NSSize(width: 420, height: 540)
+    /// Initial allocation size only. The real frame is computed on every open (and on every
+    /// width change) from the width setting + the host screen — see `panelFrame(relativeTo:)`.
+    private static let initialPanelSize = NSSize(width: PanelWidth.normal.points, height: PanelGeometry.minHeight)
     private static let panelCornerRadius = 26.0
     private static let panelGap = 6.0
 
@@ -15,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (glass vs. plain) when Reduce Transparency toggles at runtime — see applyPanelBacking().
     private var panelHostingView: NSView?
     private let panel = HubberMenuPanel(
-        contentRect: NSRect(origin: .zero, size: panelSize),
+        contentRect: NSRect(origin: .zero, size: initialPanelSize),
         styleMask: [.borderless, .nonactivatingPanel],
         backing: .buffered,
         defer: false
@@ -87,8 +89,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         installEditMenu()
 
+        // No fixed size here: the content fills its hosting view, which the panel resizes
+        // (width from the setting, height from the screen). See applyPanelWidth() / panelFrame().
         let contentView = HubberPopoverView(store: store)
-            .frame(width: Self.panelSize.width, height: Self.panelSize.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         configurePanel(with: contentView)
 
@@ -198,6 +202,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.updateStatusItem() }
             .store(in: &cancellables)
+
+        // Live-resize the panel when the width setting changes (slider drag). The async hop
+        // ensures the stored property is updated before applyPanelWidth() reads it.
+        store.settings.$panelWidth
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyPanelWidth() }
+            .store(in: &cancellables)
+    }
+
+    /// Resizes the panel to the current width setting + screen-adaptive height. When the panel
+    /// is visible this re-anchors it under the menu-bar icon. Non-animated so it tracks the
+    /// width slider smoothly.
+    private func applyPanelWidth() {
+        guard let button = statusItem?.button else { return }
+        panel.setFrame(panelFrame(relativeTo: button), display: true, animate: false)
     }
 
     private func updateStatusItem() {
@@ -260,7 +279,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configurePanel(with contentView: some View) {
         let hostingView = NSHostingView(rootView: contentView)
-        hostingView.frame = NSRect(origin: .zero, size: Self.panelSize)
+        hostingView.frame = NSRect(origin: .zero, size: Self.initialPanelSize)
+        // Reflow with the panel as it resizes (width setting / screen-adaptive height).
+        hostingView.autoresizingMask = [.width, .height]
         panelHostingView = hostingView
         applyPanelBacking()
 
@@ -289,7 +310,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if #available(macOS 26, *), !reduceTransparency {
             let glass = NSGlassEffectView()
-            glass.frame = NSRect(origin: .zero, size: Self.panelSize)
+            glass.frame = NSRect(origin: .zero, size: Self.initialPanelSize)
+            glass.autoresizingMask = [.width, .height]
             glass.style = .regular
             glass.cornerRadius = Self.panelCornerRadius
             glass.contentView = hostingView
@@ -352,7 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if panel.isVisible {
             closePanel()
         } else {
-            panel.setFrameOrigin(panelOrigin(relativeTo: sender))
+            panel.setFrame(panelFrame(relativeTo: sender), display: true)
             panel.orderFrontRegardless()
             // Don't let AppKit focus-ring the first control (the Refresh button) on open;
             // the key-view loop still engages the moment the user tabs.
@@ -404,21 +426,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         closePanel()
     }
 
-    private func panelOrigin(relativeTo sender: NSStatusBarButton) -> NSPoint {
+    /// Computes the panel's full frame for the screen hosting the menu-bar item: width from
+    /// the user setting, height adaptive to the screen (see PanelGeometry), right/left-aligned
+    /// under the button and clamped to the visible frame.
+    private func panelFrame(relativeTo sender: NSStatusBarButton) -> NSRect {
+        let width = store.settings.panelWidth.points
+
         guard let buttonFrame = screenFrame(of: sender) else {
-            return .zero
+            return NSRect(origin: .zero, size: NSSize(width: width, height: PanelGeometry.minHeight))
         }
 
         let visibleFrame = sender.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let height = PanelGeometry.height(
+            screenVisibleHeight: visibleFrame.height,
+            screenVisibleMinY: visibleFrame.minY,
+            buttonMinY: buttonFrame.minY,
+            gap: Self.panelGap
+        )
+
         let preferredLeftAlignedX = buttonFrame.minX
-        let preferredRightAlignedX = buttonFrame.maxX - Self.panelSize.width
-        let unclampedX = preferredLeftAlignedX + Self.panelSize.width <= visibleFrame.maxX
+        let preferredRightAlignedX = buttonFrame.maxX - width
+        let unclampedX = preferredLeftAlignedX + width <= visibleFrame.maxX
             ? preferredLeftAlignedX
             : preferredRightAlignedX
-        let x = min(max(unclampedX, visibleFrame.minX), visibleFrame.maxX - Self.panelSize.width)
-        let y = buttonFrame.minY - Self.panelSize.height - Self.panelGap
+        let x = min(max(unclampedX, visibleFrame.minX), visibleFrame.maxX - width)
+        let y = buttonFrame.minY - height - Self.panelGap
 
-        return NSPoint(x: x, y: y)
+        return NSRect(x: x, y: y, width: width, height: height)
     }
 
     private func screenFrame(of sender: NSStatusBarButton) -> NSRect? {

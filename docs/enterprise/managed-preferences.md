@@ -59,6 +59,7 @@ and this table share a single source of truth.
 | `incomingMode` | String | `"explicit"` | `"explicit"` \| `"team"` | Which incoming PRs Hubber monitors. |
 | `unresolvedThreadMode` | String | `"allOpen"` | `"allOpen"` \| `"reviewOnly"` \| `"changesRequested"` | How unresolved review threads are surfaced. |
 | `rowDensity` | String or Integer | `"normal"` (`2`) | `"compact"` / `1`, `"normal"` / `2`, `"spacious"` / `3` | List row density. Accepts either the human-readable string or the raw integer — use the string form in profiles for clarity. |
+| `panelWidth` | String or Integer | `"normal"` (`2`) | `"narrow"` / `1`, `"normal"` / `2`, `"wide"` / `3` | Menu-bar panel width preset (Narrow ≈ 400pt, Normal ≈ 460pt, Wide ≈ 520pt). Accepts either the human-readable string or the raw integer — use the string form in profiles for clarity. An unrecognised value falls back to Normal. Panel height is automatic (a fraction of the screen) and is not configurable. |
 | `analyticsEnabled` | Boolean | `true` | `true` / `false` | Gates TelemetryDeck anonymous usage analytics. Set `false` to disable entirely; the SDK is never initialised. |
 | `crashReportingEnabled` | Boolean | `true` | `true` / `false` | Gates MetricKit crash and hang reports. Set `false` to disable; the MetricKit subscriber is never registered. |
 | `notificationsEnabled` | Boolean | `true` | `true` / `false` | Master switch for all Hubber notifications. Forcing `false` also locks all per-event notification toggles. |
@@ -120,3 +121,4 @@ A ready-to-edit sample profile is provided at
 | Version | Change |
 |---|---|
 | M5 | Initial managed-preferences support: all 13 lockable keys, injectable seam, UI lock indicators |
+| — | Added `panelWidth` (menu-bar panel width); now 14 lockable keys |

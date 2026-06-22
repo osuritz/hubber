@@ -134,6 +134,22 @@ struct SettingsView: View {
                         )
                     }
 
+                    // Panel width preset — resizes the menu-bar panel. Height is automatic
+                    // (a fraction of the screen), so only width is user-set here.
+                    SettingsRow(isStack: true, isLast: false) {
+                        Text("Panel width")
+                            .hubberFont(.settingsLabel)
+                            .foregroundStyle(HubberDesign.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            PanelWidth.self,
+                            selection: $settings.panelWidth,
+                            isEnabled: !settings.isLocked(ManagedKey.panelWidth),
+                            title: \.title,
+                            accessibilityLabel: "Panel width"
+                        )
+                    }
+
                     SettingsRow(isStack: true, isLast: true) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Status indicator")
