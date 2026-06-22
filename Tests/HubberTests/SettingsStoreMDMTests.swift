@@ -137,6 +137,27 @@ final class SettingsStoreMDMTests: XCTestCase {
         XCTAssertEqual(store.enabledNotificationTypes, [.changesRequested, .prMerged])
     }
 
+    // panelWidth: MDM forced Int rawValue beats a conflicting UserDefaults value
+    func testForcedPanelWidthIntWinsOverUserDefaults() {
+        defaults.set(PanelWidth.narrow.rawValue, forKey: "panelWidth") // UserDefaults: narrow
+        let managed = InMemoryManagedPreferences([ManagedKey.panelWidth: PanelWidth.wide.rawValue])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.panelWidth, .wide)
+        XCTAssertTrue(store.isLocked(ManagedKey.panelWidth))
+    }
+
+    // panelWidth: MDM accepts a human-readable string label ("narrow"|"normal"|"wide")
+    func testForcedPanelWidthStringLabel() {
+        let managed = InMemoryManagedPreferences([ManagedKey.panelWidth: "wide"])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.panelWidth, .wide)
+    }
+
+    func testPanelWidthNotLockedWhenNotForced() {
+        let store = makeStore(managed: InMemoryManagedPreferences())
+        XCTAssertFalse(store.isLocked(ManagedKey.panelWidth))
+    }
+
     // MARK: - CSV-string defaultNotificationEvents (legacy branch)
 
     /// Force a plain String "newReview,ciFailed" instead of an array; verify the CSV path.
@@ -267,5 +288,6 @@ final class SettingsStoreMDMTests: XCTestCase {
         XCTAssertEqual(ManagedKey.defaultNotificationEvents, "defaultNotificationEvents")
         XCTAssertEqual(ManagedKey.providerAllowlist, "providerAllowlist")
         XCTAssertEqual(ManagedKey.allowPersonalGitHub, "allowPersonalGitHub")
+        XCTAssertEqual(ManagedKey.panelWidth, "panelWidth")
     }
 }

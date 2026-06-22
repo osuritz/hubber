@@ -120,7 +120,7 @@ struct SettingsView: View {
             // Appearance
             SettingsSection(title: "Appearance") {
                 SettingsGroup {
-                    SettingsRow(isStack: true, isLast: true) {
+                    SettingsRow(isStack: true, isLast: false) {
                         Text("Row density")
                             .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
@@ -131,6 +131,22 @@ struct SettingsView: View {
                             isEnabled: !settings.isLocked("rowDensity"),
                             title: \.title,
                             accessibilityLabel: "Row density"
+                        )
+                    }
+
+                    // Panel width preset — resizes the menu-bar panel. Height is automatic
+                    // (a fraction of the screen), so only width is user-set here.
+                    SettingsRow(isStack: true, isLast: true) {
+                        Text("Panel width")
+                            .hubberFont(.settingsLabel)
+                            .foregroundStyle(HubberDesign.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            PanelWidth.self,
+                            selection: $settings.panelWidth,
+                            isEnabled: !settings.isLocked(ManagedKey.panelWidth),
+                            title: \.title,
+                            accessibilityLabel: "Panel width"
                         )
                     }
                 }

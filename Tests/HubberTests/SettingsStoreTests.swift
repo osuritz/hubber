@@ -47,6 +47,29 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(sut.rowDensity, .normal)
     }
 
+    // MARK: - panelWidth
+
+    func testDefaultPanelWidthIsNormal() {
+        XCTAssertEqual(sut.panelWidth, .normal)
+    }
+
+    func testPanelWidthPersistedToUserDefaults() {
+        sut.panelWidth = .wide
+        XCTAssertEqual(defaults.integer(forKey: "panelWidth"), PanelWidth.wide.rawValue)
+    }
+
+    func testUserDefaultsValueOverridesPanelWidthDefault() {
+        defaults.set(PanelWidth.wide.rawValue, forKey: "panelWidth")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.panelWidth, .wide)
+    }
+
+    func testPanelWidthInvalidUserDefaultsFallsBackToNormal() {
+        defaults.set(99, forKey: "panelWidth")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.panelWidth, .normal)
+    }
+
     func testSloHoursPersistedToUserDefaults() {
         sut.sloHours = 8.0
         XCTAssertEqual(defaults.double(forKey: "sloWindowHours"), 8.0)

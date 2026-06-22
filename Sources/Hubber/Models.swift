@@ -75,6 +75,34 @@ enum RowDensity: Int, CaseIterable, Identifiable {
     }
 }
 
+/// Menu-bar panel width preset. The panel height is automatic (a fraction of the screen),
+/// so width is the only user-set dimension. `points` is the rendered width in points.
+enum PanelWidth: Int, CaseIterable, Identifiable {
+    case narrow = 1
+    case normal = 2
+    case wide = 3
+
+    var id: Int {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .narrow: "Narrow"
+        case .normal: "Normal"
+        case .wide: "Wide"
+        }
+    }
+
+    var points: Double {
+        switch self {
+        case .narrow: 400
+        case .normal: 460
+        case .wide: 520
+        }
+    }
+}
+
 enum IncomingReviewMode: String, CaseIterable, Identifiable {
     case explicit
     case team

@@ -34,23 +34,31 @@ The menu-bar panel is a fixed 420 × 540 pt (`Sources/Hubber/main.swift:9`,
 
 ### 1. Width — user setting with live preview
 
+> **Revision (after hands-on testing):** width is a discrete **Narrow / Normal / Wide**
+> picker, not a continuous slider. Presets map to **400 / 460 / 520 pt**, default **Normal
+> (460)** — roomier than today's 420, which is what prompted this. The live-preview behaviour
+> is unchanged: the picker sits inside the panel, so switching presets resizes it immediately.
+
+**`PanelWidth` enum (`Sources/Hubber/Models.swift`)**
+
+- A preset enum mirroring `RowDensity` (`Int, CaseIterable, Identifiable`) with `title`
+  and a `points` mapping: `.narrow = 400`, `.normal = 460`, `.wide = 520`.
+
 **`SettingsStore` (`Sources/Hubber/Core/SettingsStore.swift`)**
 
-- New published property, following the established pattern:
+- New published property:
 
   ```swift
-  @Published var panelWidth: Double {
-      didSet { defaults.set(panelWidth, forKey: "panelWidth") }
+  @Published var panelWidth: PanelWidth {
+      didSet { defaults.set(panelWidth.rawValue, forKey: "panelWidth") }
   }
   ```
 
-- Resolved in `init` via a new `resolvePanelWidth(defaults:managed:)` helper that uses
-  the existing `double(managedKey:defaultsKey:defaults:managed:fallback:)` chain
-  (MDM → UserDefaults → fallback), then **clamps to 400…520**. Fallback default is
-  **420** (today's value — nothing changes until the user moves the slider).
-
-  Clamping protects against a stale UserDefaults value or an out-of-range MDM push
-  producing an absurd panel.
+- Resolved in `init` via a `resolvePanelWidth(defaults:managed:)` helper that mirrors
+  `resolveRowDensity`: the managed seam accepts an Int rawValue **or** a String label
+  (`"narrow"`/`"normal"`/`"wide"`), then falls back to UserDefaults and the hardcoded
+  default `.normal`. An unrecognised value falls back to `.normal` (a discrete enum can't
+  be "out of range", so no clamping is needed).
 
 - `isLocked("panelWidth")` works through the generic `managed.isForced` path with no
   special-casing.
@@ -62,19 +70,22 @@ The menu-bar panel is a fixed 420 × 540 pt (`Sources/Hubber/main.swift:9`,
 
 **UI (`Sources/Hubber/HubberSettingsView.swift`, Appearance section)**
 
-- Add a row next to "Row density" that mirrors the existing SLO slider
-  (`HubberSettingsView.swift:44-59`):
+- Add a row next to "Row density" using the shared `NativeSegmentedPicker`, exactly like
+  the Row density control:
 
   ```swift
-  Slider(value: $settings.panelWidth, in: 400...520, step: 10)
+  NativeSegmentedPicker(
+      PanelWidth.self,
+      selection: $settings.panelWidth,
+      isEnabled: !settings.isLocked(ManagedKey.panelWidth),
+      title: \.title,
+      accessibilityLabel: "Panel width"
+  )
   ```
 
-  with a trailing `"\(Int(settings.panelWidth))pt"` readout (monospaced digits, like
-  the SLO `"\(Int)h"` label) and `.disabled(settings.isLocked("panelWidth"))`.
-
-  Range 400–520, step 10. Because `SettingsView` renders **inside** the panel
-  (`HubberPopoverView.swift:160`), dragging the slider resizes the panel in real time
-  — the settings UI itself reflows as the live preview.
+  Because `SettingsView` renders **inside** the panel (`HubberPopoverView.swift:160`),
+  choosing a preset resizes the panel in real time — the settings UI itself reflows as
+  the live preview.
 
 ### 2. Height — automatic, ~60% of screen
 
@@ -133,17 +144,18 @@ considered and rejected to avoid the panel resizing as data loads.
 
 ### 4. Tests & docs
 
-- **`SettingsStoreTests`**: `panelWidth` default is 420; round-trips through
-  UserDefaults; out-of-range persisted values clamp to 400…520.
-- **`SettingsStoreMDMTests`**: a forced `panelWidth` managed value wins over
-  UserDefaults; `isLocked("panelWidth")` reports `true` when forced; an out-of-range
-  MDM value clamps.
-- **Height geometry**: extract the height formula into a pure function (e.g.
-  `panelHeight(visibleFrame:buttonMinY:gap:fraction:minHeight:)`) and unit-test it:
+- **`PanelWidthTests`**: the preset `points` mapping (400/460/520), stable raw values,
+  and titles.
+- **`SettingsStoreTests`**: `panelWidth` default is `.normal`; round-trips its rawValue
+  through UserDefaults; an unrecognised persisted value falls back to `.normal`.
+- **`SettingsStoreMDMTests`**: a forced `panelWidth` (Int rawValue) wins over
+  UserDefaults; a forced String label (`"wide"`) resolves; `isLocked("panelWidth")`
+  reports `true` when forced.
+- **Height geometry**: extract the height formula into a pure function and unit-test it:
   laptop (~558), small laptop floored to 540, large external (~850), and a tiny screen
   where `maxFit` forces below the floor. Keeps the geometry out of AppKit-only code.
-- The live AppKit resize is verified by running the app — the live-preview slider is
-  itself the verification.
+- The live AppKit resize is verified by running the app — the in-panel picker is itself
+  the verification.
 - **Docs**: add `panelWidth` to `docs/enterprise/managed-preferences.md` so the
   managed-key catalog stays complete.
 
@@ -153,11 +165,13 @@ considered and rejected to avoid the panel resizing as data loads.
 
 | File | Change |
 |------|--------|
-| `Sources/Hubber/Core/SettingsStore.swift` | `panelWidth` property + `resolvePanelWidth` + clamp |
+| `Sources/Hubber/Models.swift` | `PanelWidth` preset enum (Narrow/Normal/Wide → points) |
+| `Sources/Hubber/Core/PanelGeometry.swift` | pure screen-adaptive height math |
+| `Sources/Hubber/Core/SettingsStore.swift` | `panelWidth` property + `resolvePanelWidth` |
 | `Sources/Hubber/Core/ManagedPreferences.swift` | `ManagedKey.panelWidth` |
-| `Sources/Hubber/HubberSettingsView.swift` | width slider row in Appearance |
+| `Sources/Hubber/HubberSettingsView.swift` | width preset picker in Appearance |
 | `Sources/Hubber/main.swift` | dynamic width/height, `panelFrame`, `applyPanelWidth`, autoresizing, drop content pin, subscription |
-| `Tests/HubberTests/SettingsStoreTests.swift` | width default/persistence/clamp |
-| `Tests/HubberTests/SettingsStoreMDMTests.swift` | width MDM force/lock/clamp |
-| `Tests/HubberTests/*` (new or existing) | height geometry unit tests |
+| `Tests/HubberTests/PanelGeometryTests.swift` | height geometry + `PanelWidth` preset tests |
+| `Tests/HubberTests/SettingsStoreTests.swift` | width default/persistence/fallback |
+| `Tests/HubberTests/SettingsStoreMDMTests.swift` | width MDM force (Int + String) / lock |
 | `docs/enterprise/managed-preferences.md` | document `panelWidth` |
