@@ -444,12 +444,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             gap: Self.panelGap
         )
 
-        let preferredLeftAlignedX = buttonFrame.minX
-        let preferredRightAlignedX = buttonFrame.maxX - width
-        let unclampedX = preferredLeftAlignedX + width <= visibleFrame.maxX
-            ? preferredLeftAlignedX
-            : preferredRightAlignedX
-        let x = min(max(unclampedX, visibleFrame.minX), visibleFrame.maxX - width)
+        let x = PanelGeometry.originX(
+            buttonMinX: buttonFrame.minX,
+            buttonMaxX: buttonFrame.maxX,
+            width: width,
+            visibleMinX: visibleFrame.minX,
+            visibleMaxX: visibleFrame.maxX
+        )
         let y = buttonFrame.minY - height - Self.panelGap
 
         return NSRect(x: x, y: y, width: width, height: height)
