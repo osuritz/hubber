@@ -39,6 +39,9 @@ enum PanelGeometry {
     ) -> Double {
         let target = fraction * screenVisibleHeight
         let maxFit = buttonMinY - gap - screenVisibleMinY
+        // Degenerate geometry (e.g. a bogus/zero button frame) can make maxFit ≤ 0. Never
+        // return a non-positive height — fall back to the floor so the panel frame stays valid.
+        guard maxFit > 0 else { return minHeight }
         return min(max(target, minHeight), maxFit)
     }
 }

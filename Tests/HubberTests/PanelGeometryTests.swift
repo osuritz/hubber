@@ -62,6 +62,19 @@ final class PanelGeometryTests: XCTestCase {
         )
         XCTAssertEqual(h, 469, accuracy: 0.5)
     }
+
+    /// Degenerate geometry (button at/below the usable bottom → maxFit ≤ 0) must never yield a
+    /// zero/negative height; fall back to the floor so an invalid frame is never constructed.
+    func testHeightFallsBackToFloorWhenGeometryIsDegenerate() {
+        // buttonMinY 100, gap 6, visibleMinY 100 → maxFit = -6 (≤ 0)
+        let h = PanelGeometry.height(
+            screenVisibleHeight: 900,
+            screenVisibleMinY: 100,
+            buttonMinY: 100,
+            gap: 6
+        )
+        XCTAssertEqual(h, PanelGeometry.minHeight, accuracy: 0.5)
+    }
 }
 
 // MARK: - PanelWidthTests
