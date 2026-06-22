@@ -75,6 +75,48 @@ final class PanelGeometryTests: XCTestCase {
         )
         XCTAssertEqual(h, PanelGeometry.minHeight, accuracy: 0.5)
     }
+
+    // MARK: - Horizontal placement (originX)
+
+    /// When the status item sits near the screen's right edge, the panel must not hug the edge —
+    /// its right edge keeps a `screenEdgeMargin` inset (like Control Center / Notification Center).
+    func testOriginXLeavesMarginWhenButtonNearRightEdge() {
+        let x = PanelGeometry.originX(
+            buttonMinX: 1400,
+            buttonMaxX: 1440,
+            width: 520,
+            visibleMinX: 0,
+            visibleMaxX: 1440
+        )
+        // right edge = x + width should be margin away from the screen's right edge
+        XCTAssertEqual(x + 520, 1440 - PanelGeometry.screenEdgeMargin, accuracy: 0.5)
+    }
+
+    /// When the status item is away from the edge, the panel still anchors its right edge to the
+    /// button (no margin clamp needed) — placement is unchanged for the common case.
+    func testOriginXAnchorsToButtonWhenAwayFromEdge() {
+        let x = PanelGeometry.originX(
+            buttonMinX: 960,
+            buttonMaxX: 1000,
+            width: 520,
+            visibleMinX: 0,
+            visibleMaxX: 1440
+        )
+        XCTAssertEqual(x + 520, 1000, accuracy: 0.5) // right edge at the button, not the screen edge
+    }
+
+    /// The margin is measured against the *host screen's* usable frame, not absolute zero —
+    /// verifies a right-edge button on a secondary display to the right of the main one.
+    func testOriginXMarginIsRelativeToHostScreen() {
+        let x = PanelGeometry.originX(
+            buttonMinX: 2840,
+            buttonMaxX: 2880,
+            width: 520,
+            visibleMinX: 1440,
+            visibleMaxX: 2880
+        )
+        XCTAssertEqual(x + 520, 2880 - PanelGeometry.screenEdgeMargin, accuracy: 0.5)
+    }
 }
 
 // MARK: - PanelWidthTests
