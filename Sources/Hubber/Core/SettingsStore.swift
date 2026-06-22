@@ -63,6 +63,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(panelWidth.rawValue, forKey: "panelWidth") }
     }
 
+    /// Leading status indicator for Outgoing/Drafts rows — slim CI rail (default) or the
+    /// classic CI badge. Persisted by rawValue; MDM-lockable via `statusIndicatorStyle`.
+    @Published var statusIndicatorStyle: StatusIndicatorStyle {
+        didSet { defaults.set(statusIndicatorStyle.rawValue, forKey: "statusIndicatorStyle") }
+    }
+
     // MARK: - Privacy / Telemetry kill-switches (#53, #102)
 
     //
@@ -172,6 +178,7 @@ final class SettingsStore: ObservableObject {
         unresolvedMode = Self.resolveUnresolvedMode(defaults: defaults, managed: managed)
         rowDensity = Self.resolveRowDensity(defaults: defaults, managed: managed)
         panelWidth = Self.resolvePanelWidth(defaults: defaults, managed: managed)
+        statusIndicatorStyle = Self.resolveStatusIndicatorStyle(defaults: defaults, managed: managed)
         badgeMode = Self.resolveBadgeMode(defaults: defaults, managed: managed)
         tabBadgeMode = Self.resolveTabBadgeMode(defaults: defaults, managed: managed)
         analyticsEnabled = Self.bool(
@@ -454,6 +461,24 @@ final class SettingsStore: ObservableObject {
             ? defaults.integer(forKey: ManagedKey.rowDensity)
             : RowDensity.normal.rawValue
         return RowDensity(rawValue: raw) ?? .normal
+    }
+
+    /// Resolves `statusIndicatorStyle` from the managed seam (String label) before falling
+    /// back to UserDefaults and the hardcoded default (`.rail`). Mirrors the String-label
+    /// half of `resolveRowDensity` so IT can write `statusIndicatorStyle = "badge"`.
+    private static func resolveStatusIndicatorStyle(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> StatusIndicatorStyle {
+        // Lowercase so a forced "Rail"/"Badge" in an MDM profile resolves (and doesn't lock the
+        // control to a value that silently falls back to the default). Matches resolveRowDensity.
+        StatusIndicatorStyle(rawValue: string(
+            managedKey: ManagedKey.statusIndicatorStyle,
+            defaultsKey: ManagedKey.statusIndicatorStyle,
+            defaults: defaults,
+            managed: managed,
+            fallback: StatusIndicatorStyle.rail.rawValue
+        ).lowercased()) ?? .rail
     }
 
     /// Resolves per-type notification flags.

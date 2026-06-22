@@ -21,6 +21,16 @@ enum AccessibilityText {
         }
     }
 
+    /// Spoken form of the aggregate review verdict shown by the trailing pill.
+    static func reviewVerdictPhrase(_ verdict: ReviewVerdict) -> String {
+        switch verdict {
+        case .approved: "review approved"
+        case .changesRequested: "changes requested"
+        case .inReview: "in review"
+        case .awaitingReview: "awaiting review"
+        }
+    }
+
     static func sloPhrase(_ status: SLOStatus) -> String {
         switch status {
         case .green: "on track"
@@ -70,14 +80,16 @@ extension AccessibilityText {
 
     static func outgoingRow(
         number: Int, title: String, repo: String, ci: PullRequestCI,
-        unresolved: Int, reviewers: [Reviewer],
+        unresolved: Int, verdict: ReviewVerdict,
         additions: Int = 0, deletions: Int = 0
     ) -> String {
         var parts = ["Pull request \(number)", title, "in \(repo)", ciPhrase(ci)]
         if unresolved > 0 {
             parts.append("\(unresolved) unresolved \(unresolved == 1 ? "thread" : "threads")")
         }
-        parts.append(reviewersSummary(reviewers))
+        // Aggregate review verdict — mirrors the visible review pill. (The per-reviewer
+        // breakdown is no longer shown visually, so the spoken label tracks the pill.)
+        parts.append(reviewVerdictPhrase(verdict))
         if let size = sizePhrase(additions: additions, deletions: deletions) { parts.append(size) }
         return parts.joined(separator: ", ")
     }

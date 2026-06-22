@@ -55,14 +55,20 @@ struct RowShell<Content: View>: View {
     let density: RowDensity
     let isLast: Bool
     var isSignal = false
+    /// Rail-indicator mode: a full-height colour rail drawn at the leading edge. Its colour
+    /// already encodes CI state, so it subsumes the signal accent (we draw one or the other,
+    /// never both); the `signalTint` background still flags attention rows in either mode.
+    var railColor: Color?
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         let cfg = density.cfg
+        // Either edge treatment occupies the leading 3pt, so pull content in to match.
+        let hasEdgeBar = railColor != nil || isSignal
         HStack(alignment: cfg.secondary ? .top : .center, spacing: cfg.gap) {
             content()
         }
-        .padding(.leading, isSignal ? cfg.padH - 3 : cfg.padH)
+        .padding(.leading, hasEdgeBar ? cfg.padH - 3 : cfg.padH)
         .padding(.trailing, cfg.padH)
         .padding(.vertical, cfg.padV)
         .background {
@@ -72,7 +78,10 @@ struct RowShell<Content: View>: View {
             }
         }
         .overlay(alignment: .leading) {
-            if isSignal {
+            if let railColor {
+                railColor
+                    .frame(width: 3)
+            } else if isSignal {
                 HubberDesign.signalAccent
                     .frame(width: 3)
             }
@@ -239,6 +248,7 @@ struct OutgoingReviewRow: View {
     let review: OutgoingReview
     let density: RowDensity
     let isLast: Bool
+    var indicatorStyle: StatusIndicatorStyle = .rail
 
     /// Action signal: failing CI or unresolved threads (running is NOT a signal per spec).
     var isSignal: Bool {
@@ -247,9 +257,17 @@ struct OutgoingReviewRow: View {
 
     var body: some View {
         let cfg = density.cfg
-        RowShell(density: density, isLast: isLast, isSignal: isSignal) {
-            CIBadgeView(ci: review.ci, size: cfg.ci)
-                .alignmentGuide(.top) { $0[.top] + 1 }
+        // Use the rail only when a non-colour CI cue exists elsewhere — the secondary line's CI
+        // detail text. Compact rows have no secondary line, so they keep the CIBadgeView (whose
+        // shape is the non-colour cue); otherwise CI would be conveyed by rail colour alone.
+        let railColor: Color? = (indicatorStyle == .rail && cfg.secondary)
+            ? HubberDesign.ciColor(for: review.ci)
+            : nil
+        RowShell(density: density, isLast: isLast, isSignal: isSignal, railColor: railColor) {
+            if railColor == nil {
+                CIBadgeView(ci: review.ci, size: cfg.ci)
+                    .alignmentGuide(.top) { $0[.top] + 1 }
+            }
 
             VStack(alignment: .leading, spacing: cfg.secondary ? 3 : 0) {
                 PRTitleLine(number: review.number, title: review.title)
@@ -285,16 +303,14 @@ struct OutgoingReviewRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            ReviewerStack(
-                reviewers: review.reviewers,
-                size: cfg.rv,
-                maxAvatars: cfg.secondary ? 3 : 2
-            )
+            // Review axis (pairs with the CI rail): the aggregate verdict as a labelled pill.
+            ReviewPillView(verdict: review.reviewVerdict)
+                .alignmentGuide(.top) { $0[.top] + 1 }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AccessibilityText.outgoingRow(
             number: review.number, title: review.title, repo: review.repo,
-            ci: review.ci, unresolved: review.unresolved, reviewers: review.reviewers,
+            ci: review.ci, unresolved: review.unresolved, verdict: review.reviewVerdict,
             additions: review.additions, deletions: review.deletions
         ))
     }
@@ -306,15 +322,24 @@ struct DraftPRRow: View {
     let draft: DraftReview
     let density: RowDensity
     let isLast: Bool
+    var indicatorStyle: StatusIndicatorStyle = .rail
 
     var body: some View {
         let cfg = density.cfg
-        RowShell(density: density, isLast: isLast) {
-            // CI badge as the leading status column — same position as OutgoingReviewRow,
-            // so the CI indicator reads consistently across tabs (a gray dash for drafts
-            // without checks; real status for drafts that do have a pipeline).
-            CIBadgeView(ci: draft.ci, size: cfg.ci)
-                .alignmentGuide(.top) { $0[.top] + 1 }
+        // Same rule as OutgoingReviewRow: rail only when the secondary line carries CI text as a
+        // non-colour cue; compact rows keep the CIBadgeView so CI is never colour-only.
+        let railColor: Color? = (indicatorStyle == .rail && cfg.secondary)
+            ? HubberDesign.ciColor(for: draft.ci)
+            : nil
+        RowShell(density: density, isLast: isLast, railColor: railColor) {
+            // CI indicator as the leading status column — same position/treatment as
+            // OutgoingReviewRow so it reads consistently across tabs. Rail mode shows a
+            // CI-coloured rail (a muted gray for drafts without checks); badge mode shows
+            // the CIBadgeView (a gray dash for no-pipeline drafts; real status otherwise).
+            if railColor == nil {
+                CIBadgeView(ci: draft.ci, size: cfg.ci)
+                    .alignmentGuide(.top) { $0[.top] + 1 }
+            }
 
             VStack(alignment: .leading, spacing: cfg.secondary ? 3 : 0) {
                 PRTitleLine(number: draft.number, title: draft.title)
@@ -322,6 +347,15 @@ struct DraftPRRow: View {
                 if cfg.secondary {
                     SecondaryLine {
                         Text(draft.repo)
+                        RowDot()
+                        // CI detail as the non-colour cue for the rail (drafts otherwise show no
+                        // CI text); red when failing, mirroring OutgoingReviewRow.
+                        Text(draft.ciDetail)
+                            .foregroundStyle(
+                                draft.ci == .failing
+                                    ? HubberDesign.ciColor(for: draft.ci)
+                                    : HubberDesign.text2
+                            )
                         RowDot()
                         Text("\(draft.commits) commits")
                         RowDot()
@@ -375,6 +409,39 @@ struct SLOPillView: View {
         }
         .help(helpText ?? text)
         .accessibilityLabel("Review \(AccessibilityText.sloPhrase(status)), \(text)")
+    }
+}
+
+// MARK: - ReviewPillView (review axis — pairs with the CI rail)
+
+/// Trailing pill summarising a PR's aggregate review state. Text-labelled (not colour-only),
+/// so the review axis stays legible in grayscale and for colour-blind users even though the
+/// leading rail is colour-only — the two channels degrade independently. See `ReviewVerdict`.
+struct ReviewPillView: View {
+    let verdict: ReviewVerdict
+
+    var body: some View {
+        let tokens = HubberDesign.reviewVerdictTokens(for: verdict)
+        HStack(spacing: 5) {
+            // Non-color cue: dot shape + the word, so it survives grayscale.
+            Circle()
+                .fill(tokens.fg)
+                .frame(width: 6, height: 6)
+
+            Text(verdict.pillLabel)
+                .hubberFont(.sloPill)
+                .foregroundStyle(tokens.fg)
+        }
+        .padding(.leading, 7)
+        .padding(.trailing, 8)
+        .padding(.vertical, 2.5)
+        .background(tokens.bg, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(tokens.border, lineWidth: 0.5)
+        }
+        // Review state is spoken via the row's composed accessibility label.
+        .accessibilityHidden(true)
     }
 }
 

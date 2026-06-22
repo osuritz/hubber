@@ -33,6 +33,30 @@ enum ReviewerState: String {
     case pending
 }
 
+/// Aggregate review decision for an outgoing PR, derived from its reviewers + approval
+/// count. Drives the trailing review-status pill — the "review axis" that pairs with the
+/// leading CI rail so a row encodes CI and review state on two independent channels.
+enum ReviewVerdict: Equatable {
+    /// Meets the required number of approvals.
+    case approved
+    /// At least one reviewer requested changes (takes priority — it's the blocker).
+    case changesRequested
+    /// Reviewers are engaged but there's no decision yet.
+    case inReview
+    /// No reviewer activity yet.
+    case awaitingReview
+
+    /// Short pill text. Kept here (not in the view) so it's unit-testable.
+    var pillLabel: String {
+        switch self {
+        case .approved: "Approved"
+        case .changesRequested: "Changes"
+        case .inReview: "In review"
+        case .awaitingReview: "Awaiting"
+        }
+    }
+}
+
 enum SLOStatus {
     case green
     case amber
@@ -99,6 +123,25 @@ enum PanelWidth: Int, CaseIterable, Identifiable {
         case .narrow: 400
         case .normal: 460
         case .wide: 520
+        }
+    }
+}
+
+/// Leading status indicator for CI-bearing rows (Outgoing, Drafts): a slim colour rail
+/// or the classic CI badge. User-toggleable in Appearance; MDM-lockable. (`rail` is the
+/// default — the badge is the opt-out.)
+enum StatusIndicatorStyle: String, CaseIterable, Identifiable {
+    case rail
+    case badge
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .rail: "Rail"
+        case .badge: "Badge"
         }
     }
 }
@@ -262,6 +305,21 @@ struct OutgoingReview: Identifiable {
         self.additions = additions
         self.deletions = deletions
         self.files = files
+    }
+}
+
+extension OutgoingReview {
+    /// Aggregate review decision shown by the trailing review pill. Pure + testable.
+    ///
+    /// Priority: a changes-requested review blocks, so it wins over everything; then a
+    /// satisfied approval count reads as approved; an empty reviewer set with no approvals
+    /// is "awaiting"; anything else means reviewers are engaged but undecided ("in review").
+    var reviewVerdict: ReviewVerdict {
+        if reviewers.contains(where: { $0.state == .changesRequested }) { return .changesRequested }
+        // requiredApprovals can be 0 when a repo has no rule; treat a single approval as enough then.
+        if approvals >= max(requiredApprovals, 1) { return .approved }
+        if reviewers.isEmpty, approvals == 0 { return .awaitingReview }
+        return .inReview
     }
 }
 

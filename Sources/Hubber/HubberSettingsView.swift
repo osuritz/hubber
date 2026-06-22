@@ -136,7 +136,7 @@ struct SettingsView: View {
 
                     // Panel width preset — resizes the menu-bar panel. Height is automatic
                     // (a fraction of the screen), so only width is user-set here.
-                    SettingsRow(isStack: true, isLast: true) {
+                    SettingsRow(isStack: true, isLast: false) {
                         Text("Panel width")
                             .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
@@ -147,6 +147,26 @@ struct SettingsView: View {
                             isEnabled: !settings.isLocked(ManagedKey.panelWidth),
                             title: \.title,
                             accessibilityLabel: "Panel width"
+                        )
+                    }
+
+                    SettingsRow(isStack: true, isLast: true) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Status indicator")
+                                .hubberFont(.settingsLabel)
+                                .foregroundStyle(HubberDesign.text)
+                            Text("Slim colour rail for roomier titles, or the classic CI badge.")
+                                .hubberFont(.settingsSub)
+                                .foregroundStyle(HubberDesign.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            StatusIndicatorStyle.self,
+                            selection: $settings.statusIndicatorStyle,
+                            isEnabled: !settings.isLocked(ManagedKey.statusIndicatorStyle),
+                            title: \.title,
+                            accessibilityLabel: "Status indicator"
                         )
                     }
                 }
