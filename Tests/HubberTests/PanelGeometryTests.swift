@@ -117,6 +117,46 @@ final class PanelGeometryTests: XCTestCase {
         )
         XCTAssertEqual(x + 520, 2880 - PanelGeometry.screenEdgeMargin, accuracy: 0.5)
     }
+
+    /// Common case: a mid-bar button where the panel fits left-aligned — the panel's left edge
+    /// sits at the button (no clamp), unchanged from before the margin was added.
+    func testOriginXLeftAlignsToButtonWhenItFits() {
+        let x = PanelGeometry.originX(
+            buttonMinX: 600,
+            buttonMaxX: 640,
+            width: 520,
+            visibleMinX: 0,
+            visibleMaxX: 1920
+        )
+        XCTAssertEqual(x, 600, accuracy: 0.5) // left edge at the button
+    }
+
+    /// A status item hard against the left edge must keep a left-edge inset rather than touch it.
+    func testOriginXLeavesMarginWhenButtonNearLeftEdge() {
+        let x = PanelGeometry.originX(
+            buttonMinX: 2,
+            buttonMaxX: 36,
+            width: 400,
+            visibleMinX: 0,
+            visibleMaxX: 1920
+        )
+        XCTAssertEqual(x, PanelGeometry.screenEdgeMargin, accuracy: 0.5)
+    }
+
+    /// Degenerate: a panel wider than the usable frame minus both margins (upperBound < lowerBound)
+    /// must stay on-screen (origin never left of the usable area) rather than return a bogus,
+    /// off-screen-left origin.
+    func testOriginXStaysOnScreenWhenPanelWiderThanUsableArea() {
+        let x = PanelGeometry.originX(
+            buttonMinX: 200,
+            buttonMaxX: 240,
+            width: 520,
+            visibleMinX: 0,
+            visibleMaxX: 500
+        )
+        XCTAssertGreaterThanOrEqual(x, 0)
+        XCTAssertEqual(x, 0, accuracy: 0.5)
+    }
 }
 
 // MARK: - PanelWidthTests

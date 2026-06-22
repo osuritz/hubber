@@ -74,6 +74,12 @@ enum PanelGeometry {
             : preferredRightAligned
         let lowerBound = visibleMinX + edgeMargin
         let upperBound = visibleMaxX - width - edgeMargin
+        // A panel wider than the usable frame minus both margins makes upperBound < lowerBound;
+        // clamping to upperBound would push the origin off-screen to the left. Keep it on-screen
+        // (anchored to the left of the usable area) instead.
+        guard upperBound >= lowerBound else {
+            return max(visibleMinX, visibleMaxX - width)
+        }
         return min(max(unclamped, lowerBound), upperBound)
     }
 }
