@@ -58,3 +58,9 @@ dist: app dmg zip
 ## Set HUBBER_INSTALLER_SIGN_IDENTITY for a signed pkg (required for silent MDM deploy).
 pkg: app
 	bash Scripts/make-pkg.sh $(VERSION)
+
+## Phase-0 spike only: build + assemble HubberWidgetSpike.appex and embed in Hubber.app.
+## Records empirical answers for Gates 1–3 (Gate 4 requires GUI).
+## NOT part of CI or the regular distribution build.
+widget-spike:
+	bash Scripts/make-widget-spike.sh $(VERSION)

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Phase-0 spike: proves App Group container access under ad-hoc signing. -->
+    <!-- This entitlement must be present on BOTH the host and the .appex. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.osuritz.hubber</string>
+    </array>
+</dict>
+</plist>
