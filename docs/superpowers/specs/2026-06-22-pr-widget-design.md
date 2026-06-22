@@ -27,11 +27,21 @@ gated by M4b).
 - **Separate sandboxed process.** A WidgetKit widget is an `.appex` extension that runs in its
   own sandboxed process. It **cannot** read `HubberStore`'s in-memory `HubberData`. All data
   reaches it through a shared **App Group** container. The widget **never** touches the network.
-- **App Group requires entitlements + signing.** `com.apple.security.application-groups` must be
-  present on both the host and the widget, and both must be code-signed with it. This works with
-  ad-hoc signing for **local** development; reliable end-user distribution requires the app to be
-  properly signed (Apple Developer account). This work is built and tested locally now and ships
-  to users when the app is signed. This is an accepted, known gate — not a blocker for the work.
+- **App Group requires entitlements + signing — and may be unavailable under ad-hoc signing.**
+  `com.apple.security.application-groups` must be present on both the host and the widget, both
+  code-signed with it. Reliable end-user distribution requires a properly signed app (Apple
+  Developer account) — an accepted, known gate. The sharper, nearer risk is **local development**:
+  a non-sandboxed, ad-hoc-signed binary carrying only the app-groups entitlement may get `nil`
+  back from `containerURL(forSecurityApplicationGroupIdentifier:)` (no Team ID / provisioning). If
+  that holds, the feature **cannot be developed or tested locally at all**, regardless of build
+  approach (A or C). Phase 0 (§8, Gate 1) proves or kills this **first**, before any other work.
+- **Host sandbox decision.** App Groups are entitlement/sandbox-sensitive. The host is currently
+  **non-sandboxed** (Keychain, file token store, Sparkle, launch-at-login, Application Support).
+  The design's default is to keep it non-sandboxed and confirm group-container access works that
+  way in §8. Adding `com.apple.security.app-sandbox` to the host is a **last resort** with a large
+  blast radius — it would touch Sparkle, the token stores, launch-at-login, and existing file
+  paths. If §8 shows the container is usable *only* when the host is sandboxed, that trade-off is
+  re-evaluated with the user before proceeding; it may defer the feature under the unsigned model.
 - **Pure-SPM repo, hand-assembled bundle.** The repo is a SwiftPM executable; `Scripts/make-app.sh`
   hand-assembles and inside-out-signs the `.app` (including embedding `Sparkle.framework`) with no
   Xcode project. The widget must fit this model — see §8/§9.
@@ -43,14 +53,14 @@ gated by M4b).
 Strictly **host-writes / widget-reads**:
 
 ```
-HubberStore.refreshPullRequests()  ──maps live models──▶  WidgetSnapshot (Codable DTOs)
+HubberStore (per-connection aggregate)  ──maps live models──▶  WidgetSnapshot (Codable DTOs)
         │                                                          │
-        │                                              SnapshotStore.write(atomic JSON)
+        │                                        WidgetSnapshotStore.write(atomic JSON)
         │                                                          ▼
-        └── WidgetCenter.reloadAllTimelines() ───────▶  App Group container
+        └── WidgetCenter.reloadTimelines(ofKind:) ───▶  App Group container
                                                        group.com.osuritz.hubber
                                                                    │
-                            Widget TimelineProvider ◀── SnapshotStore.read() ── (no network)
+                      Widget TimelineProvider ◀── WidgetSnapshotStore.read() ── (no network)
                                        │
                             apply instance config (list/connection/filter/sort) → render
 ```
@@ -68,22 +78,37 @@ build step**. It contains only what the widget needs — not the whole app:
   shipped in PR #122, `MenubarPresentation`/`TabBadgePresentation`), it is **moved**
   into `HubberKit` and reused by both — not duplicated.
 - **Design tokens / colors** (`HubberColors` and the token set) so app and widget render identically.
-- **`SnapshotStore`**: the App Group read/write seam.
+- **`WidgetSnapshotStore`**: the App Group read/write seam. Named to avoid colliding with the
+  **existing** `Sources/Hubber/Notifications/SnapshotStore.swift`, which is unrelated
+  per-connection notification state.
 
 Extraction is mechanical but touches many files (current code is one monolithic `Hubber`
 executable target). The plan must sequence it so the app keeps building/testing green at each
 step before the widget target is added.
 
-### 3b. App Group + `SnapshotStore`
+### 3b. App Group + `WidgetSnapshotStore`
 
-- **Group id:** `group.com.osuritz.hubber` (host bundle id is `com.osuritz.hubber`).
-- **Storage:** a single JSON file written **atomically** into the group container
-  (`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`). One file, not three —
-  the widget reads the whole snapshot and selects its list. (UserDefaults(suiteName:) is rejected:
-  the lists are unbounded and JSON-on-disk is cleaner for the row arrays.)
-- **Write trigger:** at the end of every **successful** `refreshPullRequests()`, `HubberStore` maps
-  its live `IncomingReview`/`OutgoingReview`/`DraftReview` arrays → snapshot DTOs, writes the file,
-  then calls `WidgetCenter.shared.reloadAllTimelines()`.
+- **Group id:** `group.com.osuritz.hubber` (host bundle id is `com.osuritz.hubber`). Treated as
+  **provisional** — the final identifier may be constrained by the Apple Developer team / app-group
+  registration once the app is signed, so it lives behind a single constant and is **not** baked
+  into tests or the on-disk schema in a way that's painful to change later.
+- **Availability is gated by §8.** The container path comes from
+  `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`, which §8 Gate 1 proves
+  returns a usable, shared, non-`nil` path under the planned local signing **before** this seam is
+  built upon.
+- **Storage:** a single JSON file written **atomically** into the group container. One file, not
+  three — the widget reads the whole snapshot and selects its list. (UserDefaults(suiteName:) is
+  rejected: the lists are unbounded and JSON-on-disk is cleaner for the row arrays.)
+- **Write trigger + merge semantics.** Refresh aggregates **per connection** and can **partially
+  fail** (one connection errors while others succeed). So the host does **not** blindly overwrite
+  on "refresh finished". Instead the snapshot is rebuilt from the store's current **aggregated**
+  state whenever that state changes: successful connections contribute fresh rows; failed/stale
+  connections keep their **last-known** rows (never silently collapsed to empty). On **sign-out /
+  no connections**, the host writes an explicit signed-out/empty snapshot. Every write is followed
+  by a timeline reload.
+- **Reload:** `WidgetCenter.shared.reloadTimelines(ofKind:)` for the widget's kind. Reloads are
+  system-coalesced, so the widget's stale-state rendering (§11) — not the reload call — is the
+  correctness backstop.
 - **Read path:** the widget's `TimelineProvider` reads the file, applies the instance's config, and
   renders. No fetching, ever.
 
@@ -143,37 +168,79 @@ reuses the same tokens.)
 - **Header → app:** a `Link` to a new **`hubber://open`** URL scheme, registered via `CFBundleURLTypes`
   in the host Info.plist and handled in `main.swift` to bring up the popover.
 
-## 8. Phase 0 — de-risking spike (go/no-go for Approach A)
+## 8. Phase 0 — de-risking spike (the real go/no-go)
 
-Before committing to the hand-assembled path, prove it works end-to-end with a throwaway
-hello-world widget:
+The spike is **not** "can a static widget render?" — that would pass while the actual design still
+fails. It must prove the **exact** signing + configurable-AppIntents + App-Group model works under
+the planned local signing. Build a throwaway but **representative** widget:
 
-1. Add a minimal widget SPM target (`@main WidgetBundle` with one static widget).
-2. Hand-assemble a `.appex`: widget `Info.plist` with `NSExtensionPointIdentifier =
-   com.apple.widgetkit-extension`, ad-hoc signature, `com.apple.security.application-groups`
-   entitlement; embed in `Hubber.app/Contents/PlugIns/`.
-3. Install the locally-signed app and verify **all three**:
-   - (a) the widget appears in the macOS widget gallery ("Edit Widgets");
-   - (b) it renders a static timeline entry;
-   - (c) it reads a value the host wrote to the App Group container (proves entitlement/group
-     sharing works under ad-hoc signing).
+1. Add a minimal widget SPM target with a **configurable** widget — `AppIntentConfiguration` plus a
+   real `AppEntity` + `EntityQuery` that reads the App Group snapshot file — **not** a
+   `StaticConfiguration`. (Rationale: `AppIntentConfiguration` depends on App Intents metadata
+   extraction, which Xcode runs via `appintentsmetadataprocessor`; `swift build` does **not** run
+   that step automatically. A static-only spike would hide this failure mode entirely.)
+2. Hand-assemble the `.appex` with the **full** Xcode-equivalent bundle shape (see §9), signed with
+   the exact local identity dev will use (ad-hoc or self-signed) carrying
+   `com.apple.security.application-groups`; embed in `Hubber.app/Contents/PlugIns/`. The host also
+   carries the app-groups entitlement.
 
-**Success = all three pass → proceed with Approach A.** Any failure → fall back to **Approach C**:
-a thin XcodeGen `project.yml` defining only the widget extension target (consuming `HubberKit` as a
-local package), built via `xcodebuild` and embedded by `make-app.sh`. Everything in §3–§7 and §10
-is identical either way; only the appex's build/sign mechanics differ.
+Then verify the four gates **in this order** — each is independently decisive:
+
+- **Gate 1 — App Group container (most likely to fail).** Both host and widget get a non-`nil`,
+  shared `containerURL`, and the widget reads a value the host wrote. Confirm this holds with the
+  host **non-sandboxed** (preferred); only if it doesn't, test whether sandboxing the host fixes it
+  (§2 host-sandbox decision).
+- **Gate 2 — AppIntents metadata.** The configurable widget's intent / `EntityQuery` actually
+  surfaces in the widget's edit/configuration UI — proving the metadata pipeline produced usable
+  output outside Xcode.
+- **Gate 3 — Discovery.** The widget is registered and offered by the system, verified with
+  `pluginkit -m -A` (not just eyeballing the gallery) under the **exact** local signing mode that
+  day-to-day development will use.
+- **Gate 4 — Render.** A timeline entry renders.
+
+**Failure handling — disaggregated, because the fallback differs by failure type:**
+
+- **Build-product failure** (can't produce a valid `.appex` from `swift build` — wrong Mach-O type,
+  missing AppIntents metadata, link/entry issues) → fall back to **Approach C**: a thin XcodeGen
+  `project.yml` defining only the widget extension target (consuming `HubberKit` as a local
+  package), built via `xcodebuild`, embedded by `make-app.sh`. C fixes Xcode-only **build mechanics**.
+- **Signing / discovery / App-Group failure** (Gate 1 or Gate 3 fails for *signing* reasons — e.g.
+  the container only materializes under a real Team ID, or the system refuses an ad-hoc extension)
+  → **C does not help.** This is an Apple-Developer-account / provisioning question, not a build
+  one. Surface it to the user as a go/no-go on the feature under the current unsigned model: the
+  honest outcome may be **"defer until the app is signed"** rather than "switch build tools".
+
+Everything in §3–§7 and §10 is identical under A or C; only the appex's build/sign mechanics differ.
 
 ## 9. Build / CI integration
 
-- **Targets:** new `HubberKit` library; `Hubber` executable depends on it; widget target depends on it.
-- **`make-app.sh`:** build the widget binary, hand-assemble + inside-out sign the `.appex` (mirroring
-  the existing `Sparkle.framework` embed/sign flow — no `--deep`), inject the App Group entitlement
-  into the **host** as well, and embed the appex under `Contents/PlugIns/`. Add the `hubber://` URL
-  scheme to the host Info.plist.
-- **CI is unchanged.** Unit CI runs `swift build/test/lint` on the pinned `macos-26` runner and
-  already does **not** build the `.app`; the appex assembly lives in `make app` (distribution),
-  exercised manually + in the local verification matrix. (Locally-green is not CI-green until the
-  PR's CI passes on the runner.)
+- **Targets:** new `HubberKit` library; `Hubber` executable depends on it; the widget target depends
+  on it. The widget target is built only by `make app` (Approach A) or the XcodeGen step (Approach
+  C), plus a dedicated `make widget-spike` for Phase 0 — **not** by default `swift build` / unit CI
+  (see CI bullet).
+- **`.appex` bundle shape (Approach A).** Hand-assembling the appex requires the full
+  Xcode-equivalent layout, not just `NSExtensionPointIdentifier`:
+  - `Contents/Info.plist`: `CFBundlePackageType = XPC!`, a **unique** `CFBundleIdentifier`
+    (`com.osuritz.hubber.widget`), `CFBundleExecutable`, `CFBundleShortVersionString` /
+    `CFBundleVersion` matching the host, `LSMinimumSystemVersion`, `CFBundleSupportedPlatforms =
+    [MacOSX]`, and the `NSExtension` dict (`NSExtensionPointIdentifier = com.apple.widgetkit-extension`).
+  - The binary is a Mach-O **executable** (`@main WidgetBundle`) at `Contents/MacOS/<exec>` — note
+    Codex confirmed system widgets are `EXECUTE`, not `MH_BUNDLE`, so an SPM executable target is
+    plausible — with correct runpaths only if it links shared frameworks (`HubberKit` is statically
+    linked, so likely none).
+  - Its own `.entitlements` (app-groups) passed to `codesign --entitlements`.
+- **Universal + inside-out signing.** Release host builds are universal (`arm64` + `x86_64`); the
+  `.appex` binary must be **lipo'd universal too**, and signed **before** the host app (inside-out,
+  no `--deep`), mirroring the existing `Sparkle.framework` flow. Embed under `Contents/PlugIns/`.
+  Add the `hubber://` URL scheme (`CFBundleURLTypes`) + app-groups entitlement to the **host**.
+- **Verification in `make-app.sh`.** After assembly, assert: `lipo -info` (two arches), `file` /
+  `otool -hv` (Mach-O executable, both slices), and `codesign -d --entitlements :-` (app-groups
+  present on **both** host and appex), in addition to the existing `codesign --verify --deep --strict`.
+- **CI scope.** Unit CI runs `swift build/test/lint` on the pinned `macos-26` runner and continues
+  to build **only** the library + executable + tests — the widget target is excluded from the
+  default build-product set so CI never depends on the WidgetKit / AppIntents extension pipeline.
+  The appex assembly lives in `make app` (distribution), exercised manually + in the §10 matrix.
+  (Locally-green is not CI-green until the PR's CI passes on the runner.)
 
 ## 10. Testing
 
@@ -185,9 +252,10 @@ is identical either way; only the appex's build/sign mechanics differ.
   - connection-list persistence + the config `EntityQuery` selecting from it.
 - **Widget views** — render-tested with sample snapshots (SwiftUI previews + optional snapshot
   tests); covers each size × each state.
-- **Manual verification matrix** — the Phase 0 spike checklist, then a locally-signed install
+- **Manual verification matrix** — the Phase 0 four-gate checklist, then a locally-signed install
   exercising each size (Medium/Large/XL) × each config axis (list/connection/attentionOnly/sort) ×
-  each state (§11).
+  each state (§11), plus the two interactions: a **row tap** opens the PR in the browser, and the
+  **header tap** (`hubber://open`) launches/raises Hubber and shows the popover.
 
 ## 11. States
 
@@ -202,8 +270,9 @@ All driven by the snapshot — no network:
 
 ## 12. Phasing
 
-- **Phase 0 — Spike.** §8 go/no-go for A-vs-C.
-- **Phase 1 — Shared foundation.** Extract `HubberKit`; define `WidgetSnapshot` + `SnapshotStore`;
+- **Phase 0 — Spike.** §8 four-gate go/no-go (App Group container · AppIntents metadata · discovery
+  · render). Decides **A vs C vs defer**.
+- **Phase 1 — Shared foundation.** Extract `HubberKit`; define `WidgetSnapshot` + `WidgetSnapshotStore`;
   host writes snapshots + reloads timelines; register `hubber://open` and handle it. App stays green.
 - **Phase 2 — Configuration.** Widget target + `ConfigurationAppIntent` (4 axes) + connection
   `EntityQuery`.
@@ -213,8 +282,18 @@ All driven by the snapshot — no network:
 
 ## 13. Open questions / risks
 
-- **A-vs-C is unresolved until the spike.** The single biggest technical risk is whether a
-  hand-assembled widget appex registers with the system; §8 resolves it before any downstream work.
+- **App Group under local signing is the top risk** (§2/§8). If `containerURL` is `nil` for a
+  non-sandboxed ad-hoc/self-signed host+widget, the feature can't be developed or tested locally at
+  all. Gate 1 of the spike resolves this first; sandboxing the host to fix it is a last resort with
+  a large blast radius (§2).
+- **A-vs-C is unresolved until the spike — but C only covers *build* failures** (§8). A
+  signing/discovery/App-Group failure is an Apple-account/provisioning question that C doesn't fix;
+  the honest fallback there may be "defer until the app is signed", surfaced to the user.
+- **`AppIntentConfiguration` outside Xcode** (§5/§8). The App Intents metadata pipeline
+  (`appintentsmetadataprocessor`) isn't run by `swift build`; Gate 2 proves the *configurable*
+  widget works under Approach A, not just a static one.
 - **`HubberKit` extraction blast radius.** Moving presentation/token code out of the monolithic
   target touches many files; sequence it to keep the app green at each step.
+- **Partial-refresh correctness** (§3b). Snapshot writes must preserve last-known rows for failed
+  connections and never collapse to empty on a partial failure; covered by unit tests (§10).
 - **Row-count tuning** per size is empirical (rendered height), settled during Phase 3.
