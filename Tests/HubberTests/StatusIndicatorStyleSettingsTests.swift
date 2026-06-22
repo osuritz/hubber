@@ -55,6 +55,12 @@ final class StatusIndicatorStyleSettingsTests: XCTestCase {
         XCTAssertEqual(makeStore(managed: managed).statusIndicatorStyle, .badge) // MDM wins
     }
 
+    func testForcedMixedCaseResolves() {
+        // IT may write "Badge" (title-case) in a profile — must resolve, not silently fall back.
+        let managed = InMemoryManagedPreferences([ManagedKey.statusIndicatorStyle: "Badge"])
+        XCTAssertEqual(makeStore(managed: managed).statusIndicatorStyle, .badge)
+    }
+
     func testIsLockedWhenForced() {
         let managed = InMemoryManagedPreferences([ManagedKey.statusIndicatorStyle: "badge"])
         XCTAssertTrue(makeStore(managed: managed).isLocked(ManagedKey.statusIndicatorStyle))

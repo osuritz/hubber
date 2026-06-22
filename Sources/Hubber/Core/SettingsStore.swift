@@ -433,13 +433,15 @@ final class SettingsStore: ObservableObject {
         defaults: UserDefaults,
         managed: any ManagedPreferences
     ) -> StatusIndicatorStyle {
+        // Lowercase so a forced "Rail"/"Badge" in an MDM profile resolves (and doesn't lock the
+        // control to a value that silently falls back to the default). Matches resolveRowDensity.
         StatusIndicatorStyle(rawValue: string(
             managedKey: ManagedKey.statusIndicatorStyle,
             defaultsKey: ManagedKey.statusIndicatorStyle,
             defaults: defaults,
             managed: managed,
             fallback: StatusIndicatorStyle.rail.rawValue
-        )) ?? .rail
+        ).lowercased()) ?? .rail
     }
 
     /// Resolves per-type notification flags.

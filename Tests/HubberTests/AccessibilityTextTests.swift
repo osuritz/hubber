@@ -44,9 +44,9 @@ struct AccessibilityTextComposedTests {
     func outgoing() {
         let label = AccessibilityText.outgoingRow(
             number: 42, title: "Add cache", repo: "acme/app", ci: .failing,
-            unresolved: 1, reviewers: [Reviewer(user: user("a"), state: .changesRequested)]
+            unresolved: 1, verdict: .changesRequested
         )
-        #expect(label == "Pull request 42, Add cache, in acme/app, checks failing, 1 unresolved thread, 1 reviewer: 1 changes requested")
+        #expect(label == "Pull request 42, Add cache, in acme/app, checks failing, 1 unresolved thread, changes requested")
     }
 
     @Test("draft row label")
@@ -78,9 +78,9 @@ struct AccessibilityTextComposedTests {
     func outgoingWithSize() {
         let label = AccessibilityText.outgoingRow(
             number: 42, title: "Add cache", repo: "acme/app", ci: .passing,
-            unresolved: 0, reviewers: [], additions: 1240, deletions: 0
+            unresolved: 0, verdict: .awaitingReview, additions: 1240, deletions: 0
         )
-        #expect(label == "Pull request 42, Add cache, in acme/app, checks passing, no reviewers, 1240 lines added")
+        #expect(label == "Pull request 42, Add cache, in acme/app, checks passing, awaiting review, 1240 lines added")
     }
 
     @Test("draft row label omits PR size when zero")

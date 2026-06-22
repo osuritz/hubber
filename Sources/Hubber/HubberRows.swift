@@ -255,16 +255,16 @@ struct OutgoingReviewRow: View {
         review.ci == .failing || review.unresolved > 0
     }
 
-    /// Rail mode draws a CI-coloured leading edge; badge mode keeps the CIBadgeView and lets
-    /// RowShell fall back to its signal accent.
-    private var railColor: Color? {
-        indicatorStyle == .rail ? HubberDesign.ciColor(for: review.ci) : nil
-    }
-
     var body: some View {
         let cfg = density.cfg
+        // Use the rail only when a non-colour CI cue exists elsewhere — the secondary line's CI
+        // detail text. Compact rows have no secondary line, so they keep the CIBadgeView (whose
+        // shape is the non-colour cue); otherwise CI would be conveyed by rail colour alone.
+        let railColor: Color? = (indicatorStyle == .rail && cfg.secondary)
+            ? HubberDesign.ciColor(for: review.ci)
+            : nil
         RowShell(density: density, isLast: isLast, isSignal: isSignal, railColor: railColor) {
-            if indicatorStyle == .badge {
+            if railColor == nil {
                 CIBadgeView(ci: review.ci, size: cfg.ci)
                     .alignmentGuide(.top) { $0[.top] + 1 }
             }
@@ -310,7 +310,7 @@ struct OutgoingReviewRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AccessibilityText.outgoingRow(
             number: review.number, title: review.title, repo: review.repo,
-            ci: review.ci, unresolved: review.unresolved, reviewers: review.reviewers,
+            ci: review.ci, unresolved: review.unresolved, verdict: review.reviewVerdict,
             additions: review.additions, deletions: review.deletions
         ))
     }
@@ -324,18 +324,19 @@ struct DraftPRRow: View {
     let isLast: Bool
     var indicatorStyle: StatusIndicatorStyle = .rail
 
-    private var railColor: Color? {
-        indicatorStyle == .rail ? HubberDesign.ciColor(for: draft.ci) : nil
-    }
-
     var body: some View {
         let cfg = density.cfg
+        // Same rule as OutgoingReviewRow: rail only when the secondary line carries CI text as a
+        // non-colour cue; compact rows keep the CIBadgeView so CI is never colour-only.
+        let railColor: Color? = (indicatorStyle == .rail && cfg.secondary)
+            ? HubberDesign.ciColor(for: draft.ci)
+            : nil
         RowShell(density: density, isLast: isLast, railColor: railColor) {
             // CI indicator as the leading status column — same position/treatment as
             // OutgoingReviewRow so it reads consistently across tabs. Rail mode shows a
             // CI-coloured rail (a muted gray for drafts without checks); badge mode shows
             // the CIBadgeView (a gray dash for no-pipeline drafts; real status otherwise).
-            if indicatorStyle == .badge {
+            if railColor == nil {
                 CIBadgeView(ci: draft.ci, size: cfg.ci)
                     .alignmentGuide(.top) { $0[.top] + 1 }
             }
@@ -346,6 +347,15 @@ struct DraftPRRow: View {
                 if cfg.secondary {
                     SecondaryLine {
                         Text(draft.repo)
+                        RowDot()
+                        // CI detail as the non-colour cue for the rail (drafts otherwise show no
+                        // CI text); red when failing, mirroring OutgoingReviewRow.
+                        Text(draft.ciDetail)
+                            .foregroundStyle(
+                                draft.ci == .failing
+                                    ? HubberDesign.ciColor(for: draft.ci)
+                                    : HubberDesign.text2
+                            )
                         RowDot()
                         Text("\(draft.commits) commits")
                         RowDot()
