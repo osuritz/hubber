@@ -23,7 +23,7 @@ let spikeJSONFileName = "spike.json"
 
 struct SpikePayload: Codable {
     var value: String
-    var writtenAt: Double  // epoch seconds
+    var writtenAt: Double // epoch seconds
 }
 
 // MARK: — App Group reader (used by EntityQuery + TimelineProvider)
@@ -94,8 +94,8 @@ struct SpikeWidgetIntent: WidgetConfigurationIntent {
 
 struct SpikeEntry: TimelineEntry {
     let date: Date
-    let sharedValue: String     // read from App Group container
-    let containerNonNil: Bool   // Gate 1 signal
+    let sharedValue: String // read from App Group container
+    let containerNonNil: Bool // Gate 1 signal
     let chosenConnection: String?
 }
 

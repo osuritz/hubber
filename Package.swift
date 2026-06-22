@@ -9,6 +9,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "Hubber", targets: ["Hubber"]),
+        .library(name: "HubberKit", targets: ["HubberKit"]),
         // Phase-0 spike only — NOT built by default swift build / CI.
         // Built only via `make widget-spike` (Scripts/make-widget-spike.sh).
         .executable(name: "HubberWidgetSpike", targets: ["HubberWidgetSpike"]),
@@ -21,6 +22,7 @@ let package = Package(
         .executableTarget(
             name: "Hubber",
             dependencies: [
+                "HubberKit",
                 .product(name: "TelemetryDeck", package: "SwiftSDK"),
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
@@ -43,10 +45,19 @@ let package = Package(
                              .when(platforms: [.macOS]))
             ]
         ),
+        .target(
+            name: "HubberKit",
+            path: "Sources/HubberKit"
+        ),
         .testTarget(
             name: "HubberTests",
             dependencies: ["Hubber"],
             path: "Tests/HubberTests"
+        ),
+        .testTarget(
+            name: "HubberKitTests",
+            dependencies: ["HubberKit"],
+            path: "Tests/HubberKitTests"
         ),
     ]
 )
