@@ -1,5 +1,14 @@
 import Foundation
 
+// MARK: - Widget kind constant
+
+/// Shared widget kind identifier. Used by both the host (WidgetCenter reload calls) and the
+/// widget extension target (as `WidgetConfiguration.kind`). Lives in HubberKit so both sides
+/// agree without string duplication.
+public enum HubberWidgetKind {
+    public static let prList = "com.osuritz.hubber.widget"
+}
+
 // MARK: - Schema version
 
 public let currentSchemaVersion = 1

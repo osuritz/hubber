@@ -224,6 +224,12 @@ final class HubberStore: ObservableObject {
         }
         connections = remainingConnections
         rebindConnections()
+        // After sign-out, write an explicit empty/signed-out snapshot so the widget reflects
+        // the logged-out state rather than showing stale data. rebindConnections() calls
+        // recomputeAggregate(), which already calls writeWidgetSnapshot(); we write the
+        // signed-out snapshot explicitly here to set isSignedIn = false regardless of the
+        // connections that remain (e.g., errored ones that couldn't be cleaned up).
+        writeSignedOutWidgetSnapshot()
     }
 
     /// Restores connections from the registry. If the registry is empty, falls back to
@@ -293,6 +299,10 @@ final class HubberStore: ObservableObject {
             visibility: settings.connectionVisibility
         )
         isRefreshingPullRequests = connections.contains { $0.isRefreshingPullRequests }
+        // Keep the widget snapshot in sync after every aggregation. The write is a no-op
+        // when the App Group container is unavailable (unsigned/dev builds). See
+        // HubberStore+Widget.swift for partial-failure preservation notes.
+        writeWidgetSnapshot()
     }
 
     private func pruneSignedOutGhosts() {

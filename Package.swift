@@ -28,7 +28,13 @@ let package = Package(
             ],
             path: "Sources/Hubber",
             resources: [
-                .process("Resources")
+                .process("Resources"),
+            ],
+            linkerSettings: [
+                // WidgetKit is used by HubberStore to reload widget timelines after each
+                // snapshot write. Safe in a menu-bar executable — WidgetCenter calls are
+                // no-ops when no widget extension is registered.
+                .linkedFramework("WidgetKit", .when(platforms: [.macOS])),
             ]
         ),
         // Phase-0 spike: exercises AppIntentConfiguration + EntityQuery + App Group.
