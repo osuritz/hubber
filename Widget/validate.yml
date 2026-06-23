@@ -1,0 +1,54 @@
+# Throwaway VALIDATION project: proves an AUTHORIZED non-sandboxed host shares App Group
+# data with the (authorized) sandboxed widget. Both built by xcodebuild automatic signing,
+# so both get provisioning profiles authorizing group.com.osuritz.hubber.
+# The host uses a distinct bundle id (com.osuritz.hubberhoststub) authorized for the SAME
+# app group — app-group membership is by group id, not bundle id — so it won't collide with
+# the real com.osuritz.hubber app.
+name: HubberValidate
+options:
+  bundleIdPrefix: com.osuritz
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: NO
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: 4XP97LDDTH
+packages:
+  Hubber:
+    path: ..
+targets:
+  HubberHostStub:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/HubberHostStub
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.osuritz.hubberhoststub
+        PRODUCT_NAME: HubberHostStub
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_ENTITLEMENTS: Sources/HubberHostStub/HubberHostStub.entitlements
+    dependencies:
+      - package: Hubber
+        product: HubberKit
+      - target: HubberWidget
+        embed: true
+  HubberWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Sources/HubberWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.osuritz.hubberhoststub.widget
+        PRODUCT_NAME: HubberWidget
+        INFOPLIST_FILE: Sources/HubberWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/HubberWidget/HubberWidget.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+    dependencies:
+      - package: Hubber
+        product: HubberKit

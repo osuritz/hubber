@@ -93,3 +93,5 @@ HubberWidgetSpike.appex/
 
 # Approach C throwaway spike (not production)
 spike-c/
+Widget/*.xcodeproj/
+Widget/.build/

@@ -48,6 +48,49 @@ signed host. **Fallback if raw container files prove finicky across the sandbox 
 Detailed gate-by-gate evidence: `docs/superpowers/SPIKE-RESULTS.md` (Approach A) and
 `docs/superpowers/SPIKE-C-RESULTS.md` (Approach C).
 
+## Data path — findings (free = build/render; live data = paid M4b gate)
+
+Extensive local validation (hand-assembled *and* xcodebuild-built hosts + the real Approach-C
+widget) resolved exactly how far the host→widget data handoff works under the **free Personal Team**.
+
+**Channel:** a **JSON file** in the App Group container (`WidgetSnapshotStore`), **not**
+`UserDefaults(suiteName:)`. UserDefaults proved unreliable cross-process — a host write was not
+visible to the sandboxed widget's `cfprefsd` view even with both sides sandboxed. A plain file read
+(`Data(contentsOf:)`) is deterministic. Host calls `WidgetCenter.reloadTimelines(ofKind:)` after each write.
+
+**Works on the free Personal Team (no paid account):**
+- Build + sign the widget (Approach C / xcodebuild automatic signing).
+- Widget discovered in the gallery and **rendered** on the desktop (all view states).
+- The host writes `snapshot.json` into `~/Library/Group Containers/group.com.osuritz.hubber/` and the
+  file is present + correct.
+
+**Does NOT work on the free team (the wall):**
+- The sandboxed widget **cannot read** the host-written file: `containerURL(...)` resolves (store
+  opens) and `makeEntry` runs, but `read()` returns `nil`. Verified identical for a file and for
+  `UserDefaults`, with the host non-sandboxed *and* sandboxed, both authorized, in a clean container.
+- There is a single shared container dir with correct perms — **not** a path/permission mismatch. The
+  **cross-app App Group sandbox grant is simply not enforced** under free/development provisioning.
+
+**Root cause + the gate:** App Groups must be a **portal-registered group on a paid Developer
+Program** account to be genuinely shared across apps. A free Personal Team *signs in* the
+`application-groups` entitlement and gives each app *a* container, but does not create a real shared
+group. ⇒ **Live app→widget data requires the paid Apple Developer account — the same M4b signing gate
+already planned for distribution.** Build/discovery/render need only the free account.
+
+**Open question to settle at M4b (with a real registered App Group):**
+- Does the **non-sandboxed** real Hubber host (with a *paid-authorized* app-groups entitlement) share
+  with the sandboxed widget? Codex's read: yes, an authorized non-sandboxed host can. We could not
+  confirm it locally (the free team blocked sharing regardless of host sandbox state). If it does
+  **not** work at M4b, the fallbacks are (a) sandbox the host, or (b) a small sandboxed XPC/login-item
+  helper that does the write. The throwaway `HubberHostStub` + `validate.yml` harness (both-sandboxed,
+  authorized) is the scaffold to re-run this test once a registered group exists.
+
+**Confirmed requirements for the signed build (M4b):**
+- Widget extension entitlements: `com.apple.security.app-sandbox` **and** `application-groups`.
+- Host + widget signed via **xcodebuild automatic signing** (or Developer ID with a profile that
+  authorizes the registered App Group) — hand `codesign --entitlements` is not enough (unauthorized).
+- Widget bundle id must be prefixed by the host's (`com.osuritz.hubber` → `com.osuritz.hubber.widget`).
+
 ## 1. Goal & motivation
 
 Hubber today surfaces PRs only through the menu-bar popover, which requires a click and is

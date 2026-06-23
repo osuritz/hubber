@@ -1,0 +1,37 @@
+name: HubberWidget
+options:
+  bundleIdPrefix: com.osuritz
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: NO
+
+packages:
+  Hubber:
+    path: ..
+
+targets:
+  HubberWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Sources/HubberWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.osuritz.hubber.widget
+        PRODUCT_NAME: HubberWidget
+        INFOPLIST_FILE: Sources/HubberWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/HubberWidget/HubberWidget.entitlements
+        SWIFT_VERSION: 6.0
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 4XP97LDDTH
+    dependencies:
+      - package: Hubber
+        product: HubberKit
