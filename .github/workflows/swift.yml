@@ -41,11 +41,12 @@ jobs:
       - name: Show toolchain
         run: swift --version
 
+      # --disable-keychain: self-hosted user has no login keychain; cold-cache Sparkle download fails (-25308).
       - name: Build
-        run: swift build -v
+        run: swift build -v --disable-keychain
 
       - name: Run tests
-        run: swift test -v
+        run: swift test -v --disable-keychain
 
       - name: SwiftLint
         run: |
