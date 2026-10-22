@@ -56,8 +56,10 @@ swift run Hubber
 
 ## Validating Before You Push
 
-CI (`.github/workflows/swift.yml`) is currently manual-only to cut macOS runner
-spend, so **local validation is the safety net** — and a plain `swift build`
+CI (`.github/workflows/swift.yml`) runs automatically on push to `main` and on
+PRs while the repo variable `MACOS_RUNS_ON` routes it to the self-hosted Mac mini;
+with the variable unset it is manual-only on hosted `macos-26` to cut runner spend.
+Either way, validate locally first — and a plain `swift build`
 is not enough. `swift build` does *not* compile the test target, so test-target
 compile errors (e.g. Swift 6.2 actor-isolation) and test failures slip through.
 
