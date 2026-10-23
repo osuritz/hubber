@@ -3,16 +3,17 @@
 
 name: Swift
 
-# Temporarily set to manual-only (workflow_dispatch) to cut macOS CI spend
-# while the project is under heavy active development. macos-26 runners bill
-# at 10x, and automatic runs on every push/PR were the main cost driver.
-# Re-enable the push/pull_request triggers below when development settles.
+# Cost guard: hosted macos-26 runners bill at 10x, so push/pull_request runs
+# are only allowed while the repo variable MACOS_RUNS_ON routes the job to the
+# self-hosted Mac mini (see the job-level `if` and `runs-on` below). With the
+# variable unset, the workflow falls back to manual-only (workflow_dispatch) on
+# hosted macos-26.
 on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
-  # push:
-  #   branches: [ "main" ]
-  # pull_request:
-  #   branches: [ "main" ]
 
 # Cancel superseded runs on the same ref. macOS minutes bill at 10x, and an
 # active agent pushes frequently, so we don't want stacked redundant runs.
@@ -25,30 +26,42 @@ permissions:
 
 jobs:
   build:
-    # Pin to macos-26 (Xcode 26 / Swift 6.3), the toolchain this project targets
-    # per AGENTS.md and uses locally. macos-latest (currently macos-15) ships
-    # Xcode 16.4 / Swift 6.1, which rejects valid Swift 6.2+ actor-isolation in
-    # the test target ("passes locally, fails in CI").
-    runs-on: macos-26
+    # Automatic runs only while routed to the Mini; manual runs always allowed.
+    # Deleting MACOS_RUNS_ON is the kill switch back to manual-only on hosted.
+    if: github.event_name == 'workflow_dispatch' || vars.MACOS_RUNS_ON != ''
+    # MACOS_RUNS_ON is a JSON label array, e.g. ["self-hosted","macOS","ARM64","homelab"].
+    # Unset falls back to hosted macos-26 (Xcode 26 / Swift 6.3, the toolchain
+    # this project targets per AGENTS.md). Avoid macos-latest: it can lag on
+    # Swift and reject valid 6.2+ actor-isolation in the test target.
+    runs-on: ${{ vars.MACOS_RUNS_ON && fromJSON(vars.MACOS_RUNS_ON) || 'macos-26' }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show toolchain
         run: swift --version
 
+      # --disable-keychain: self-hosted user has no login keychain; cold-cache Sparkle download fails (-25308).
       - name: Build
-        run: swift build -v
+        run: swift build -v --disable-keychain
 
       - name: Run tests
-        run: swift test -v
+        run: swift test -v --disable-keychain
+
+      # Versions are pinned in Scripts/lint-tools.env (sha256-verified), so a tool
+      # release can't turn the build red; no Homebrew needed on the Mini.
+      - name: Install lint tools
+        run: |
+          bash Scripts/install-lint-tools.sh "$RUNNER_TEMP/lint-tools"
+          echo "$RUNNER_TEMP/lint-tools" >> "$GITHUB_PATH"
+
+      - name: Show lint tool versions
+        run: |
+          swiftformat --version
+          swiftlint version
 
       - name: SwiftLint
-        run: |
-          brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
-          make lint
+        run: make lint
 
       - name: SwiftFormat (lint mode)
-        run: |
-          brew list swiftformat >/dev/null 2>&1 || brew install swiftformat
-          swiftformat --lint Sources/ Tests/
+        run: swiftformat --lint Sources/ Tests/

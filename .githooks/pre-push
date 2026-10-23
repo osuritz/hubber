@@ -1,9 +1,9 @@
 #!/bin/sh
 # Pre-push gate: run the same checks CI runs (.github/workflows/swift.yml) so a
-# locally-green tree means a CI-green tree. This exists because CI was turned
-# off on every PR to cut macOS runner spend, and the local routine (build +
-# lint) was a strict subset of CI — it never ran `swift test` (which compiles
-# the test target; plain `swift build` does not) or `swiftformat --lint`.
+# locally-green tree means a CI-green tree. CI runs on push to main and on PRs
+# while MACOS_RUNS_ON routes it to the self-hosted Mac mini, and is manual-only
+# on hosted runners otherwise. This also covers what plain `swift build` misses:
+# `swift test` (which compiles the test target) and `swiftformat --lint`.
 #
 # Bypass for emergencies with:  git push --no-verify
 # Or skip just this hook with:  SKIP_CI_HOOK=1 git push

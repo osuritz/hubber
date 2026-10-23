@@ -22,10 +22,11 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/). 
 
 ## Linting and Formatting
 
-This project uses [SwiftLint](https://github.com/realm/SwiftLint) and [SwiftFormat](https://github.com/nicklockwood/SwiftFormat). Install both via Homebrew:
+This project uses [SwiftLint](https://github.com/realm/SwiftLint) and [SwiftFormat](https://github.com/nicklockwood/SwiftFormat), pinned to the versions in `Scripts/lint-tools.env` (see "Pinned lint tools" below). Install the pinned versions locally:
 
 ```sh
-brew install swiftlint swiftformat
+bash Scripts/install-lint-tools.sh .build/lint-tools
+export PATH="$PWD/.build/lint-tools:$PATH"
 ```
 
 Run via the Makefile:
@@ -40,6 +41,17 @@ Note that `make lint` covers SwiftLint only. CI additionally runs
 `swiftformat --lint` (check mode, fails on drift), which is *not* the same as
 `make format` (which silently rewrites files). Use `make ci` (below) to catch
 formatting drift the way CI does.
+
+### Pinned lint tools
+
+CI installs SwiftFormat and SwiftLint from `Scripts/lint-tools.env` (version and
+sha256 of the GitHub release asset) via `Scripts/install-lint-tools.sh`, with no
+Homebrew, so a new tool release can't break the build. `make lint` and `make ci`
+(and so the pre-push hook) warn if your local versions differ. To bump a tool:
+
+1. Edit `Scripts/lint-tools.env` (version and sha256; GitHub shows the digest on each release asset).
+2. Run the new `swiftformat` on `Sources/ Tests/` and commit the reformat in the same PR.
+3. CI verifies.
 
 Rules are configured in `.swiftlint.yml` and `.swiftformat`. Key constraints: 120-character line limit, Swift 6.0, Google Swift Style Guide conventions (no force unwraps/casts/tries, sorted imports, trailing commas in multi-line collections).
 
@@ -56,8 +68,10 @@ swift run Hubber
 
 ## Validating Before You Push
 
-CI (`.github/workflows/swift.yml`) is currently manual-only to cut macOS runner
-spend, so **local validation is the safety net** — and a plain `swift build`
+CI (`.github/workflows/swift.yml`) runs automatically on push to `main` and on
+PRs while the repo variable `MACOS_RUNS_ON` routes it to the self-hosted Mac mini;
+with the variable unset it is manual-only on hosted `macos-26` to cut runner spend.
+Either way, validate locally first — and a plain `swift build`
 is not enough. `swift build` does *not* compile the test target, so test-target
 compile errors (e.g. Swift 6.2 actor-isolation) and test failures slip through.
 

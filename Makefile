@@ -1,6 +1,10 @@
-.PHONY: lint format fix build test ci app app-dev zip dmg dist pkg
+.PHONY: lint lint-tools-check format fix build test ci app app-dev zip dmg dist pkg
 
 SWIFT_PATHS = Sources/ Tests/
+
+# Pinned SwiftFormat/SwiftLint versions (shared with CI); sets SWIFTFORMAT_VERSION
+# and SWIFTLINT_VERSION.
+include Scripts/lint-tools.env
 
 build:
 	swift build
@@ -8,7 +12,17 @@ build:
 test:
 	swift test
 
-lint:
+## Warn (never fail) when the local lint tools differ from the versions pinned in
+## Scripts/lint-tools.env, since CI uses the pinned ones.
+lint-tools-check:
+	@fix='bash Scripts/install-lint-tools.sh .build/lint-tools && export PATH="$$PWD/.build/lint-tools:$$PATH"'; \
+	v=$$(swiftformat --version 2>/dev/null); \
+	[ "$$v" = "$(SWIFTFORMAT_VERSION)" ] || echo "warning: swiftformat $${v:-not found}, CI pins $(SWIFTFORMAT_VERSION). Fix: $$fix" >&2; \
+	v=$$(swiftlint version 2>/dev/null); \
+	[ "$$v" = "$(SWIFTLINT_VERSION)" ] || echo "warning: swiftlint $${v:-not found}, CI pins $(SWIFTLINT_VERSION). Fix: $$fix" >&2; \
+	true
+
+lint: lint-tools-check
 	swiftlint lint --no-cache $(SWIFT_PATHS)
 
 ## Mirror exactly what CI (.github/workflows/swift.yml) runs. Use this as the
