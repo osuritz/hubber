@@ -80,7 +80,9 @@ final class GatedTelemetrySinkTests: XCTestCase {
             }
 
             func send(_ event: String, _ params: [String: String]) {
-                if !isInited() { lock.withLock { _sawForwardBeforeInit = true } }
+                if !isInited() {
+                    lock.withLock { _sawForwardBeforeInit = true }
+                }
             }
         }
         final class InitFlag: @unchecked Sendable {

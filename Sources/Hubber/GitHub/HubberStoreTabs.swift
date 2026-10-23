@@ -86,7 +86,9 @@ extension Connection {
             setTabError(nil, for: tab)
             return (value, nil)
         case let .failure(error):
-            if isGlobalError(error) { return (existing, error) }
+            if isGlobalError(error) {
+                return (existing, error)
+            }
             setTabError(error.localizedDescription, for: tab)
             appendDeveloperLog("\(label) tab refresh failed: \(error.localizedDescription)")
             return (existing, nil)
@@ -94,7 +96,9 @@ extension Connection {
     }
 
     private func isGlobalError(_ error: Error) -> Bool {
-        if case CodeHostAuthError.rateLimited = error { return true }
+        if case CodeHostAuthError.rateLimited = error {
+            return true
+        }
         return Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) != nil
     }
 

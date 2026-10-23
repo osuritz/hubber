@@ -27,9 +27,13 @@ struct SMAppServiceLaunchAtLogin: LaunchAtLoginManaging {
     func setEnabled(_ enabled: Bool) throws {
         guard isBundledApp else { return }
         if enabled {
-            if SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
+            if SMAppService.mainApp.status != .enabled {
+                try SMAppService.mainApp.register()
+            }
         } else {
-            if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
+            if SMAppService.mainApp.status == .enabled {
+                try SMAppService.mainApp.unregister()
+            }
         }
     }
 }

@@ -251,7 +251,11 @@ struct OnboardingConsentStep: View {
                 .padding(.top, 14)
             }
         }
-        .onAppear { if !isManaged { primaryFocused = true } }
+        .onAppear {
+            if !isManaged {
+                primaryFocused = true
+            }
+        }
     }
 
     private var choiceButtons: some View {
@@ -311,7 +315,9 @@ struct OnboardingConnectStep: View {
         }
         .onChange(of: store.authState) { _, newState in
             guard coordinator.currentStep == .connect else { return }
-            if case .signedIn = newState { coordinator.advance() }
+            if case .signedIn = newState {
+                coordinator.advance()
+            }
         }
         .sheet(isPresented: $showingAdd) { addAccountSheet }
     }
@@ -578,6 +584,10 @@ struct OnboardingLaunchAtLoginStep: View {
                 }
             }
         }
-        .onAppear { if !isManaged { primaryFocused = true } }
+        .onAppear {
+            if !isManaged {
+                primaryFocused = true
+            }
+        }
     }
 }

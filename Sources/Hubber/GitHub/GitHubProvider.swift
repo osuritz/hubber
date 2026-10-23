@@ -124,7 +124,9 @@ final class GitHubProvider: CodeHostProvider {
         // Accept explicit user request or team request (no login field on Team).
         if login == viewerLogin || login == nil {
             if let prev = current {
-                if date < prev { current = date }
+                if date < prev {
+                    current = date
+                }
             } else {
                 current = date
             }
@@ -141,7 +143,9 @@ final class GitHubProvider: CodeHostProvider {
             let date = iso.date(from: dateStr)
         else { return }
         if let prev = current {
-            if date > prev { current = date }
+            if date > prev {
+                current = date
+            }
         } else {
             current = date
         }
@@ -206,7 +210,9 @@ final class GitHubProvider: CodeHostProvider {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw CodeHostAuthError.invalidResponse }
-        if http.statusCode == 401 { throw CodeHostAuthError.badCredentials }
+        if http.statusCode == 401 {
+            throw CodeHostAuthError.badCredentials
+        }
 
         // Rate-limit detection: 429, or 403 with x-ratelimit-remaining: 0
         let isRateLimitedByHeader =

@@ -158,11 +158,21 @@ final class SettingsStore: ObservableObject {
     var enabledNotificationTypes: Set<NotificationEventType> {
         guard notificationsEnabled else { return [] }
         var types: Set<NotificationEventType> = []
-        if notifyNewReview { types.insert(.newReview) }
-        if notifyReviewApproved { types.insert(.reviewApproved) }
-        if notifyChangesRequested { types.insert(.changesRequested) }
-        if notifyCIFailed { types.insert(.ciFailed) }
-        if notifyPRMerged { types.insert(.prMerged) }
+        if notifyNewReview {
+            types.insert(.newReview)
+        }
+        if notifyReviewApproved {
+            types.insert(.reviewApproved)
+        }
+        if notifyChangesRequested {
+            types.insert(.changesRequested)
+        }
+        if notifyCIFailed {
+            types.insert(.ciFailed)
+        }
+        if notifyPRMerged {
+            types.insert(.prMerged)
+        }
         return types
     }
 
@@ -410,9 +420,13 @@ final class SettingsStore: ObservableObject {
     ) -> Bool {
         if managed.isForced(managedKey) {
             // Bool-typed plist value (most MDM platforms)
-            if let v = managed.value(managedKey) as? Bool { return v }
+            if let v = managed.value(managedKey) as? Bool {
+                return v
+            }
             // Integer-encoded boolean: some MDM platforms write <integer>0</integer> / <integer>1</integer>
-            if let v = managed.value(managedKey) as? Int { return v != 0 }
+            if let v = managed.value(managedKey) as? Int {
+                return v != 0
+            }
         }
         guard defaults.object(forKey: defaultsKey) != nil else { return fallback }
         return defaults.bool(forKey: defaultsKey)
@@ -427,8 +441,12 @@ final class SettingsStore: ObservableObject {
     ) -> Double {
         if managed.isForced(managedKey) {
             // Accept both Double and Int from managed profiles
-            if let v = managed.value(managedKey) as? Double { return v }
-            if let v = managed.value(managedKey) as? Int { return Double(v) }
+            if let v = managed.value(managedKey) as? Double {
+                return v
+            }
+            if let v = managed.value(managedKey) as? Int {
+                return Double(v)
+            }
         }
         guard defaults.object(forKey: defaultsKey) != nil else { return fallback }
         return defaults.double(forKey: defaultsKey)
@@ -507,11 +525,21 @@ final class SettingsStore: ObservableObject {
         let resolveFlag = { (key: String, fallback: Bool) -> Bool in
             bool(managedKey: key, defaultsKey: key, defaults: defaults, managed: managed, fallback: fallback)
         }
-        if resolveFlag("notifyNewReview", true) { types.insert(.newReview) }
-        if resolveFlag("notifyReviewApproved", false) { types.insert(.reviewApproved) }
-        if resolveFlag("notifyChangesRequested", false) { types.insert(.changesRequested) }
-        if resolveFlag("notifyCIFailed", false) { types.insert(.ciFailed) }
-        if resolveFlag("notifyPRMerged", false) { types.insert(.prMerged) }
+        if resolveFlag("notifyNewReview", true) {
+            types.insert(.newReview)
+        }
+        if resolveFlag("notifyReviewApproved", false) {
+            types.insert(.reviewApproved)
+        }
+        if resolveFlag("notifyChangesRequested", false) {
+            types.insert(.changesRequested)
+        }
+        if resolveFlag("notifyCIFailed", false) {
+            types.insert(.ciFailed)
+        }
+        if resolveFlag("notifyPRMerged", false) {
+            types.insert(.prMerged)
+        }
         return types
     }
 

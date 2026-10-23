@@ -315,10 +315,16 @@ extension OutgoingReview {
     /// satisfied approval count reads as approved; an empty reviewer set with no approvals
     /// is "awaiting"; anything else means reviewers are engaged but undecided ("in review").
     var reviewVerdict: ReviewVerdict {
-        if reviewers.contains(where: { $0.state == .changesRequested }) { return .changesRequested }
+        if reviewers.contains(where: { $0.state == .changesRequested }) {
+            return .changesRequested
+        }
         // requiredApprovals can be 0 when a repo has no rule; treat a single approval as enough then.
-        if approvals >= max(requiredApprovals, 1) { return .approved }
-        if reviewers.isEmpty, approvals == 0 { return .awaitingReview }
+        if approvals >= max(requiredApprovals, 1) {
+            return .approved
+        }
+        if reviewers.isEmpty, approvals == 0 {
+            return .awaitingReview
+        }
         return .inReview
     }
 }
@@ -448,6 +454,10 @@ func catchingResult<T: Sendable>(_ body: @Sendable () async throws -> T) async -
 
 extension Result {
     var failureError: Failure? {
-        if case let .failure(e) = self { e } else { nil }
+        if case let .failure(e) = self {
+            e
+        } else {
+            nil
+        }
     }
 }

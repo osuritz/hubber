@@ -303,10 +303,7 @@ final class HubberStore: ObservableObject {
                 return nil
             }
             settledIDs.append(conn.id)
-            guard registeredIDs.contains(conn.id), conn.authState == .signedOut else {
-                return nil
-            }
-            guard (try? conn.tokenStore.load()) == nil else {
+            guard registeredIDs.contains(conn.id), conn.authState == .signedOut, (try? conn.tokenStore.load()) == nil else {
                 return nil
             }
             return conn.id

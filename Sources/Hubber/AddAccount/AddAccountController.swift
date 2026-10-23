@@ -191,9 +191,13 @@ final class AddAccountController: ObservableObject {
 
     /// github.com is fixed; otherwise derive the host from the entered server URL.
     static func host(from serverURL: String, provider: AddAccountProvider) -> String {
-        if provider == .gitHubDotCom { return "github.com" }
+        if provider == .gitHubDotCom {
+            return "github.com"
+        }
         let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let comps = URLComponents(string: trimmed), let h = comps.host { return h }
+        if let comps = URLComponents(string: trimmed), let h = comps.host {
+            return h
+        }
         return trimmed
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")

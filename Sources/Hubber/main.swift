@@ -418,7 +418,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closePanelForOutsideClick() {
         // Keep the panel pinned during device-flow sign-in or while the add-account sheet is
         // open, so clicking into the browser (enter the code / create a token) doesn't dismiss it.
-        if store.shouldPinPanel { return }
+        if store.shouldPinPanel {
+            return
+        }
         let clickLocation = NSEvent.mouseLocation
         if panel.frame.contains(clickLocation) || statusButtonFrame()?.contains(clickLocation) == true {
             return

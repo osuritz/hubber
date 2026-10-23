@@ -31,7 +31,9 @@ final class MockURLProtocol: URLProtocol {
             var buffer = [UInt8](repeating: 0, count: bufferSize)
             while stream.hasBytesAvailable {
                 let count = stream.read(&buffer, maxLength: bufferSize)
-                if count > 0 { data.append(&buffer, count: count) }
+                if count > 0 {
+                    data.append(&buffer, count: count)
+                }
             }
             stream.close()
             mutableRequest.httpBody = data
