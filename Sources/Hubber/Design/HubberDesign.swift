@@ -51,7 +51,9 @@ extension NSColor {
 
         // Handle #RRGGBB or #RRGGBBAA
         var clean = hex
-        if clean.hasPrefix("#") { clean = String(clean.dropFirst()) }
+        if clean.hasPrefix("#") {
+            clean = String(clean.dropFirst())
+        }
         if clean.count == 3 {
             clean = String(clean.flatMap { c in [c, c] })
         }

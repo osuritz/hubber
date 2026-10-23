@@ -212,8 +212,12 @@ struct IncomingReviewRow: View {
 
     private var sloStatus: SLOStatus {
         let ratio = review.assignedAgoHours / sloHours
-        if ratio < 0.5 { return .green }
-        if ratio < 1 { return .amber }
+        if ratio < 0.5 {
+            return .green
+        }
+        if ratio < 1 {
+            return .amber
+        }
         return .red
     }
 

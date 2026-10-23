@@ -128,8 +128,7 @@ enum NotificationDiffer {
         currentPR: OutgoingReview,
         enabled: Set<NotificationEventType>
     ) -> NotificationEvent? {
-        guard enabled.contains(.ciFailed) else { return nil }
-        guard currentPR.ci == .failing, prevSnap.ci != PullRequestCI.failing.rawValue else { return nil }
+        guard enabled.contains(.ciFailed), currentPR.ci == .failing, prevSnap.ci != PullRequestCI.failing.rawValue else { return nil }
         return NotificationEvent(
             type: .ciFailed,
             prID: prID,

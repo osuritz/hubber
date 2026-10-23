@@ -75,7 +75,9 @@ final class GitLabProvider: CodeHostProvider {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw CodeHostAuthError.invalidResponse }
 
-        if http.statusCode == 401 { throw CodeHostAuthError.badCredentials }
+        if http.statusCode == 401 {
+            throw CodeHostAuthError.badCredentials
+        }
         if http.statusCode == 429 {
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
             throw CodeHostAuthError.rateLimited(retryAfter: retryAfter)

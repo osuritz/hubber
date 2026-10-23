@@ -17,8 +17,7 @@ final class SnapshotStore: Sendable {
 
     /// Loads the persisted snapshot, or returns `nil` if none exists yet.
     func load() -> ReviewSnapshot? {
-        guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return nil }
-        guard let data = try? Data(contentsOf: snapshotURL) else { return nil }
+        guard FileManager.default.fileExists(atPath: snapshotURL.path), let data = try? Data(contentsOf: snapshotURL) else { return nil }
         return try? JSONDecoder().decode(ReviewSnapshot.self, from: data)
     }
 

@@ -72,9 +72,13 @@ extension AccessibilityText {
         var parts = ["Pull request \(number)", title, "in \(repo)", "by \(authorLogin)"]
         if sloEnabled, let sloStatus {
             parts.append("review \(sloPhrase(sloStatus))")
-            if let sloText, !sloText.isEmpty { parts.append(sloText) }
+            if let sloText, !sloText.isEmpty {
+                parts.append(sloText)
+            }
         }
-        if let size = sizePhrase(additions: additions, deletions: deletions) { parts.append(size) }
+        if let size = sizePhrase(additions: additions, deletions: deletions) {
+            parts.append(size)
+        }
         return parts.joined(separator: ", ")
     }
 
@@ -90,7 +94,9 @@ extension AccessibilityText {
         // Aggregate review verdict — mirrors the visible review pill. (The per-reviewer
         // breakdown is no longer shown visually, so the spoken label tracks the pill.)
         parts.append(reviewVerdictPhrase(verdict))
-        if let size = sizePhrase(additions: additions, deletions: deletions) { parts.append(size) }
+        if let size = sizePhrase(additions: additions, deletions: deletions) {
+            parts.append(size)
+        }
         return parts.joined(separator: ", ")
     }
 
@@ -100,7 +106,9 @@ extension AccessibilityText {
     ) -> String {
         let commitText = "\(commits) \(commits == 1 ? "commit" : "commits")"
         var parts = ["Draft pull request \(number)", title, "in \(repo)", ciPhrase(ci), commitText]
-        if let size = sizePhrase(additions: additions, deletions: deletions) { parts.append(size) }
+        if let size = sizePhrase(additions: additions, deletions: deletions) {
+            parts.append(size)
+        }
         return parts.joined(separator: ", ")
     }
 

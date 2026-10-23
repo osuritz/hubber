@@ -42,7 +42,9 @@ private actor MCNBlockingPostGate {
     }
 
     func waitForFirstPostStarted() async {
-        if firstPostStarted { return }
+        if firstPostStarted {
+            return
+        }
 
         await withCheckedContinuation { continuation in
             firstPostStartedWaiters.append(continuation)
