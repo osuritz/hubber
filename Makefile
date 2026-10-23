@@ -1,6 +1,13 @@
-.PHONY: lint lint-tools-check format fix build test ci app app-dev zip dmg dist pkg
+.PHONY: lint-tools lint format-lint format fix build test ci app app-dev zip dmg dist pkg
 
 SWIFT_PATHS = Sources/ Tests/
+
+# The lint tools always come from the pinned install, never from PATH, so local
+# runs and CI can't disagree. Override a binary deliberately if you must, e.g.
+# `make lint SWIFTLINT=$(which swiftlint)`.
+LINT_TOOLS_DIR = .build/lint-tools
+SWIFTFORMAT ?= $(LINT_TOOLS_DIR)/swiftformat
+SWIFTLINT ?= $(LINT_TOOLS_DIR)/swiftlint
 
 # Pinned SwiftFormat/SwiftLint versions (shared with CI); sets SWIFTFORMAT_VERSION
 # and SWIFTLINT_VERSION.
@@ -12,33 +19,31 @@ build:
 test:
 	swift test
 
-## Warn (never fail) when the local lint tools differ from the versions pinned in
-## Scripts/lint-tools.env, since CI uses the pinned ones.
-lint-tools-check:
-	@fix='bash Scripts/install-lint-tools.sh .build/lint-tools && export PATH="$$PWD/.build/lint-tools:$$PATH"'; \
-	v=$$(swiftformat --version 2>/dev/null); \
-	[ "$$v" = "$(SWIFTFORMAT_VERSION)" ] || echo "warning: swiftformat $${v:-not found}, CI pins $(SWIFTFORMAT_VERSION). Fix: $$fix" >&2; \
-	v=$$(swiftlint version 2>/dev/null); \
-	[ "$$v" = "$(SWIFTLINT_VERSION)" ] || echo "warning: swiftlint $${v:-not found}, CI pins $(SWIFTLINT_VERSION). Fix: $$fix" >&2; \
-	true
+## Install the pinned SwiftFormat/SwiftLint into .build/lint-tools (gitignored).
+## Idempotent: a stamp per tool makes repeat runs cheap and offline.
+lint-tools:
+	bash Scripts/install-lint-tools.sh $(LINT_TOOLS_DIR)
 
-lint: lint-tools-check
-	swiftlint lint --no-cache $(SWIFT_PATHS)
+lint: lint-tools
+	$(SWIFTLINT) lint --no-cache $(SWIFT_PATHS)
+
+## Check-only SwiftFormat run (fails on drift, never rewrites files).
+format-lint: lint-tools
+	$(SWIFTFORMAT) --lint $(SWIFT_PATHS)
 
 ## Mirror exactly what CI (.github/workflows/swift.yml) runs. Use this as the
 ## pre-push gate so "passes locally" means the same thing as "passes in CI".
 ## Note: `swift test` compiles the test target (plain `swift build` does not),
-## and `swiftformat --lint` only checks — it does NOT rewrite files like
-## `make format` does.
-ci: build test lint
-	swiftformat --lint $(SWIFT_PATHS)
+## and `format-lint` only checks — it does NOT rewrite files like `make format`
+## does.
+ci: build test lint format-lint
 
-format:
-	swiftformat $(SWIFT_PATHS)
+format: lint-tools
+	$(SWIFTFORMAT) $(SWIFT_PATHS)
 
-fix:
-	swiftlint lint --fix --no-cache $(SWIFT_PATHS)
-	swiftformat $(SWIFT_PATHS)
+fix: lint-tools
+	$(SWIFTLINT) lint --fix --no-cache $(SWIFT_PATHS)
+	$(SWIFTFORMAT) $(SWIFT_PATHS)
 
 # ---------------------------------------------------------------------------
 # Distribution targets

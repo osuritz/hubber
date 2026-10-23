@@ -22,36 +22,37 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/). 
 
 ## Linting and Formatting
 
-This project uses [SwiftLint](https://github.com/realm/SwiftLint) and [SwiftFormat](https://github.com/nicklockwood/SwiftFormat), pinned to the versions in `Scripts/lint-tools.env` (see "Pinned lint tools" below). Install the pinned versions locally:
-
-```sh
-bash Scripts/install-lint-tools.sh .build/lint-tools
-export PATH="$PWD/.build/lint-tools:$PATH"
-```
+This project uses [SwiftLint](https://github.com/realm/SwiftLint) and [SwiftFormat](https://github.com/nicklockwood/SwiftFormat), pinned to the versions in `Scripts/lint-tools.env` (see "Pinned lint tools" below). The make targets below install the pinned versions into `.build/lint-tools` on first use and always run those binaries, never whatever is on your `PATH` or in Homebrew, so local results match CI. You can also run `make lint-tools` to install them on their own.
 
 Run via the Makefile:
 
 ```sh
-make lint    # check for SwiftLint violations
-make format  # reformat source files in place (SwiftFormat — rewrites files)
-make fix     # autocorrect SwiftLint violations, then reformat
+make lint         # check for SwiftLint violations
+make format-lint  # check SwiftFormat drift (check-only, as CI does)
+make format       # reformat source files in place (SwiftFormat — rewrites files)
+make fix          # autocorrect SwiftLint violations, then reformat
 ```
 
 Note that `make lint` covers SwiftLint only. CI additionally runs
-`swiftformat --lint` (check mode, fails on drift), which is *not* the same as
-`make format` (which silently rewrites files). Use `make ci` (below) to catch
-formatting drift the way CI does.
+`make format-lint` (SwiftFormat check mode, fails on drift), which is *not* the
+same as `make format` (which silently rewrites files). Use `make ci` (below) to
+catch formatting drift the way CI does.
 
 ### Pinned lint tools
 
-CI installs SwiftFormat and SwiftLint from `Scripts/lint-tools.env` (version and
-sha256 of the GitHub release asset) via `Scripts/install-lint-tools.sh`, with no
-Homebrew, so a new tool release can't break the build. `make lint` and `make ci`
-(and so the pre-push hook) warn if your local versions differ. To bump a tool:
+CI and the make targets install SwiftFormat and SwiftLint from
+`Scripts/lint-tools.env` (version and sha256 of the GitHub release asset) via
+`Scripts/install-lint-tools.sh`, with no Homebrew, so a new tool release can't
+break the build. The install is idempotent (a stamp file per tool), so repeat
+runs are cheap and work offline. To run a
+different binary on purpose, override the variables, e.g.
+`make lint SWIFTLINT=$(which swiftlint)`. To bump a tool:
 
 1. Edit `Scripts/lint-tools.env` (version and sha256; GitHub shows the digest on each release asset).
 2. Run the new `swiftformat` on `Sources/ Tests/` and commit the reformat in the same PR.
 3. CI verifies.
+
+`.git-blame-ignore-revs` lists the squash SHAs of formatting-only commits (such as tool bumps) so blame skips them. For local `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once per clone.
 
 Rules are configured in `.swiftlint.yml` and `.swiftformat`. Key constraints: 120-character line limit, Swift 6.0, Google Swift Style Guide conventions (no force unwraps/casts/tries, sorted imports, trailing commas in multi-line collections).
 
@@ -78,7 +79,7 @@ compile errors (e.g. Swift 6.2 actor-isolation) and test failures slip through.
 Run the full CI-parity gate before pushing:
 
 ```sh
-make ci      # build + swift test + swiftlint + swiftformat --lint
+make ci      # build + swift test + swiftlint + swiftformat --lint (pinned tools)
 make test    # just the test target, on its own
 ```
 

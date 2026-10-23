@@ -49,19 +49,17 @@ jobs:
         run: swift test -v --disable-keychain
 
       # Versions are pinned in Scripts/lint-tools.env (sha256-verified), so a tool
-      # release can't turn the build red; no Homebrew needed on the Mini.
-      - name: Install lint tools
-        run: |
-          bash Scripts/install-lint-tools.sh "$RUNNER_TEMP/lint-tools"
-          echo "$RUNNER_TEMP/lint-tools" >> "$GITHUB_PATH"
-
+      # release can't turn the build red; no Homebrew needed on the Mini. The make
+      # targets install them into .build/lint-tools and always use those binaries,
+      # the same as a local `make ci`.
       - name: Show lint tool versions
         run: |
-          swiftformat --version
-          swiftlint version
+          make lint-tools
+          .build/lint-tools/swiftformat --version
+          .build/lint-tools/swiftlint version
 
       - name: SwiftLint
         run: make lint
 
       - name: SwiftFormat (lint mode)
-        run: swiftformat --lint Sources/ Tests/
+        run: make format-lint
