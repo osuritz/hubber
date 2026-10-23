@@ -1,4 +1,4 @@
-.PHONY: lint-tools lint format-lint format fix build test ci app app-dev zip dmg dist pkg
+.PHONY: setup lint-tools lint format-lint format fix build test ci app app-dev zip dmg dist pkg
 
 SWIFT_PATHS = Sources/ Tests/
 
@@ -18,6 +18,12 @@ build:
 
 test:
 	swift test
+
+## One-time setup per clone: enable the pre-push hook and make `git blame`
+## skip formatting-only commits (.git-blame-ignore-revs).
+setup:
+	git config core.hooksPath .githooks
+	git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 ## Install the pinned SwiftFormat/SwiftLint into .build/lint-tools (gitignored).
 ## Idempotent: a stamp per tool makes repeat runs cheap and offline.
