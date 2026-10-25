@@ -52,7 +52,7 @@ different binary on purpose, override the variables, e.g.
 2. Run the new `swiftformat` on `Sources/ Tests/` and commit the reformat in the same PR.
 3. CI verifies.
 
-`.git-blame-ignore-revs` lists the squash SHAs of formatting-only commits (such as tool bumps) so blame skips them. For local `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once per clone.
+`.git-blame-ignore-revs` lists the squash SHAs of formatting-only commits (such as tool bumps) so blame skips them. For local `git blame`, run `make setup` once per clone; it sets `blame.ignoreRevsFile` for you.
 
 Rules are configured in `.swiftlint.yml` and `.swiftformat`. Key constraints: 120-character line limit, Swift 6.0, Google Swift Style Guide conventions (no force unwraps/casts/tries, sorted imports, trailing commas in multi-line collections).
 
@@ -90,10 +90,10 @@ CI will be green.
 
 A tracked Git hook (`.githooks/pre-push`) runs `make ci` automatically on every
 push. Hooks live in `.githooks/` (version-controlled), so after a fresh clone
-enable them once with:
+run `make setup` once. It enables the pre-push hook and the blame ignore list:
 
 ```sh
-git config core.hooksPath .githooks
+make setup
 ```
 
 Bypass the hook for an emergency push with `git push --no-verify`, or skip just
