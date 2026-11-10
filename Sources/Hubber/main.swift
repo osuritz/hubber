@@ -282,6 +282,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostingView.frame = NSRect(origin: .zero, size: Self.initialPanelSize)
         // Reflow with the panel as it resizes (width setting / screen-adaptive height).
         hostingView.autoresizingMask = [.width, .height]
+        // The panel frame is owned by panelFrame(); don't let SwiftUI's ideal size resize the window
+        // (the signed-out screens otherwise balloon the panel past the screen height).
+        hostingView.sizingOptions = []
         panelHostingView = hostingView
         applyPanelBacking()
 
