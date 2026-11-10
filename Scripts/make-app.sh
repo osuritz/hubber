@@ -37,7 +37,7 @@ if [[ "$CONFIG" == "debug" ]]; then
 else
   echo "==> swift build -c release --arch arm64 --arch x86_64"
   swift build -c release --arch arm64 --arch x86_64
-  BINARY=".build/apple/Products/Release/Hubber"
+  BINARY="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/Hubber"
 fi
 
 if [[ ! -f "$BINARY" ]]; then
