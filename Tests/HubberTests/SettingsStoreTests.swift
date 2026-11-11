@@ -75,6 +75,17 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(defaults.double(forKey: "sloWindowHours"), 8.0)
     }
 
+    /// A hand-edited or managed SLO window that is NaN/infinite/non-positive would trap in the
+    /// `Int(hours)` footer formatting; it must fall back to the default instead.
+    func testSloHoursFallsBackForNonFiniteOrNonPositiveStoredValues() {
+        for stored in [Double.nan, .infinity, 0, -3] {
+            defaults.set(stored, forKey: "sloWindowHours")
+            let store = makeStore()
+            XCTAssertEqual(store.sloHours, 4.0, "stored \(stored)")
+            XCTAssertEqual(ReviewSLOPresentation.footerText(isEnabled: true, hours: store.sloHours), "SLO 4h")
+        }
+    }
+
     func testIncomingModePersistedToUserDefaults() {
         sut.incomingMode = .team
         XCTAssertEqual(defaults.string(forKey: "incomingMode"), IncomingReviewMode.team.rawValue)

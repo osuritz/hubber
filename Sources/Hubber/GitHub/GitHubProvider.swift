@@ -219,8 +219,7 @@ final class GitHubProvider: CodeHostProvider {
             http.statusCode == 403 &&
             http.value(forHTTPHeaderField: "x-ratelimit-remaining").flatMap(Int.init) == 0
         if http.statusCode == 429 || isRateLimitedByHeader {
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
-            throw CodeHostAuthError.rateLimited(retryAfter: retryAfter)
+            throw CodeHostAuthError.rateLimited(retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
         }
 
         guard (200..<300).contains(http.statusCode) else {

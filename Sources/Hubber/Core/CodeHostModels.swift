@@ -47,6 +47,19 @@ enum CodeHostAuthError: LocalizedError, Equatable {
     case providerMessage(String)
     case rateLimited(retryAfter: TimeInterval?)
 
+    /// Longest back-off a server can ask for. Also keeps the value safely convertible to `Int`.
+    static let maxRetryAfter: TimeInterval = 24 * 60 * 60
+
+    /// Builds `.rateLimited` from a raw `Retry-After` header. The header is server-controlled, so
+    /// anything that isn't a finite, non-negative number of seconds ("inf", "nan", an HTTP date) is
+    /// dropped — `Int(_:)` traps on infinite/NaN doubles — and the rest is capped at `maxRetryAfter`.
+    static func rateLimited(retryAfterHeader header: String?) -> CodeHostAuthError {
+        let seconds = header
+            .flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) }
+            .flatMap { $0.isFinite && $0 >= 0 ? min($0, maxRetryAfter) : nil }
+        return .rateLimited(retryAfter: seconds)
+    }
+
     var errorDescription: String? {
         switch self {
         case .invalidResponse:

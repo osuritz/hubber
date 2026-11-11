@@ -215,7 +215,7 @@ struct AccountsSettingsSection: View {
     }
 
     private func avatarColor(for login: String) -> Color {
-        let hue = Double(abs(login.hashValue) % 360) / 360.0
+        let hue = Double(login.hashValue.magnitude % 360) / 360.0
         return Color(hue: hue, saturation: 0.55, brightness: 0.70)
     }
 }

@@ -507,6 +507,27 @@ final class GitHubProviderTests: XCTestCase {
             XCTAssertNil(retryAfter, "Non-numeric Retry-After must yield nil retryAfter")
         }
     }
+
+    /// `Retry-After` is server-controlled: "inf"/"nan" parse as doubles and would trap in the
+    /// `Int(_:)` conversions that format the back-off, so they must never get through.
+    func testRetryAfterHeaderRejectsNonFiniteAndNegativeValues() {
+        for header in ["inf", "-inf", "infinity", "nan", "-5", "1e400"] {
+            XCTAssertEqual(
+                CodeHostAuthError.rateLimited(retryAfterHeader: header),
+                .rateLimited(retryAfter: nil),
+                "Retry-After: \(header)"
+            )
+        }
+        XCTAssertEqual(CodeHostAuthError.rateLimited(retryAfterHeader: nil), .rateLimited(retryAfter: nil))
+    }
+
+    func testRetryAfterHeaderAcceptsSecondsAndCapsHugeValues() {
+        XCTAssertEqual(CodeHostAuthError.rateLimited(retryAfterHeader: " 30 "), .rateLimited(retryAfter: 30))
+        let capped = CodeHostAuthError.rateLimited(retryAfterHeader: "1e300")
+        XCTAssertEqual(capped, .rateLimited(retryAfter: CodeHostAuthError.maxRetryAfter))
+        // The message formats the delay through Int(_:) — must not trap for any accepted value.
+        XCTAssertEqual(capped.errorDescription, "Rate limit reached. Retry in 1440m.")
+    }
 }
 
 // MARK: - Partial data + errors[] tolerance
