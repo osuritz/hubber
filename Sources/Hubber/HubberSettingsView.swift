@@ -262,16 +262,19 @@ struct SettingsView: View {
                             .disabled(settings.isLocked(ManagedKey.analyticsEnabled))
                     }
 
-                    // Crash reporting toggle — LOCAL os_log only (transmits nothing). Label must
-                    // not imply transmission. See #104.
+                    // Diagnostic logging toggle — everything it records stays LOCAL (os_log and
+                    // ~/Library/Logs/Hubber). Label must not imply transmission. See #104. The one
+                    // thing a crash can transmit is the minimal `app.crashed` analytics event, which
+                    // is governed by the analytics toggle above (and needs this toggle on too).
                     SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Diagnostic logging")
                                 .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text(
-                                "Crash, hang, and performance diagnostics are written to your "
-                                    + "Mac's local log only — never sent anywhere."
+                                "Crash logs and diagnostics are kept on your Mac, in "
+                                    + "~/Library/Logs/Hubber. With analytics on, a crash also sends "
+                                    + "an anonymous crash category."
                             )
                             .hubberFont(.settingsSub)
                             .foregroundStyle(HubberDesign.text2)

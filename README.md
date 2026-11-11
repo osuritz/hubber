@@ -136,6 +136,15 @@ If `swift run Hubber` appears to hang, that is expected: the process is running 
 
 If the status item is hard to find, look on the right side of the macOS menu bar for the Hubber symbol and count.
 
+### Logs and crash reports
+
+Hubber keeps its own logs in `~/Library/Logs/Hubber/` (also listed in Console.app under *Log Reports*):
+
+- `hubber.log` and `hubber.previous.log`: the current and previous session's activity log.
+- `crash-<date>.log`: written on the launch after a crash, with the error message, the backtrace, and the last log lines before it. Attach this file when reporting a crash.
+
+macOS's own report (`~/Library/Logs/DiagnosticReports/Hubber-*.ips`) is still produced, but it does not include the Swift error message. To check that crash capture works on a build, run `open Hubber.app --env HUBBER_CRASH_SELFTEST=1`, then launch Hubber again normally. Logging can be turned off under Settings → Privacy ("Diagnostic logging").
+
 ## Roadmap
 
 - Replace remaining mock data with GitHub API data

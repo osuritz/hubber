@@ -179,13 +179,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Telemetry / crash reporting
 
-    /// Crash/hang diagnostics (MetricKit → local os_log only) are gated here at launch.
-    /// Analytics (TelemetryDeck) is gated LIVE by GatedTelemetrySink, so it is NOT started here.
+    /// Crash/hang diagnostics (MetricKit → local os_log, CrashReporter → ~/Library/Logs/Hubber) are
+    /// gated here at launch. Analytics (TelemetryDeck) is gated LIVE by GatedTelemetrySink, so it is
+    /// NOT started here — which also means the crash event below is dropped unless analytics is on.
     private func startTelemetry() {
-        if store.settings.crashReportingEnabled {
-            MXMetricManager.shared.add(metricSubscriber)
-            metricKitStarted = true
+        guard store.settings.crashReportingEnabled else { return }
+        MXMetricManager.shared.add(metricSubscriber)
+        metricKitStarted = true
+        if let previousCrash = CrashReporter.start() {
+            store.telemetry.crashDetected(previousCrash)
         }
+        CrashReporter.crashIfSelfTestRequested()
     }
 
     // MARK: - Status item badge + animation
