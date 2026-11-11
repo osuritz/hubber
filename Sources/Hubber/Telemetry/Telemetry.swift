@@ -8,7 +8,8 @@ protocol TelemetrySink: Sendable {
     ///
     /// - Parameters:
     ///   - event: Dot-separated event name, e.g. `"session.opened"`.
-    ///   - params: Key-value pairs that are ONLY counts or enum raw values — never PII.
+    ///   - params: Key-value pairs that are ONLY counts, enum raw values, or (for `app.crashed`)
+    ///     the name of a function in Hubber's own binary — never PII.
     func send(_ event: String, _ params: [String: String])
 }
 
@@ -59,6 +60,23 @@ struct Telemetry {
     /// Emitted when the user manually triggers a PR refresh (⌘R or footer button).
     func manualRefresh() {
         sink.send("refresh.manual", [:])
+    }
+
+    // MARK: Crashes
+
+    /// Emitted on the launch after a crash. Sends only the signal number, the closed-vocabulary
+    /// reason, and the symbol of the Hubber function that crashed. The fatal-error text itself can
+    /// contain user data (e.g. a login used as a dictionary key), so it is never sent — it stays in
+    /// the local crash log.
+    func crashDetected(_ report: CrashReport) {
+        sink.send(
+            "app.crashed",
+            [
+                "signal": "\(report.signal ?? 0)",
+                "reason": report.reason.rawValue,
+                "frame": report.topAppSymbol,
+            ]
+        )
     }
 
     // MARK: SLO

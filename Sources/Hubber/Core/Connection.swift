@@ -492,6 +492,7 @@ extension Connection {
     }
 
     func appendDeveloperLog(_ message: String) {
+        CrashReporter.note(message)
         developerLog.insert(DeveloperLogEntry(timestamp: Date(), message: message), at: 0)
         if developerLog.count > 80 {
             developerLog.removeLast(developerLog.count - 80)
