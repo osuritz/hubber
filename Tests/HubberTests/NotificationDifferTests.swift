@@ -66,6 +66,21 @@ private func reviewer(_ user: CodeHostUser, state: ReviewerState) -> Reviewer {
 @MainActor
 final class NotificationDifferTests: XCTestCase {
 
+    // MARK: - Duplicate keys must not trap (regression: crash on refresh)
+
+    func testSnapshotToleratesDuplicateReviewerLoginsAndPRIDs() {
+        let twice = makeOutgoing(
+            id: "pr-1",
+            reviewers: [reviewer(.bob, state: .commented), reviewer(.bob, state: .approved)]
+        )
+        let data = HubberData(incoming: [], outgoing: [twice, twice], drafts: [])
+
+        let snapshot = NotificationDiffer.snapshot(from: data)
+
+        XCTAssertEqual(snapshot.outgoing.count, 1)
+        XCTAssertEqual(snapshot.outgoing["pr-1"]?.reviewerStates["bob"], ReviewerState.approved.rawValue)
+    }
+
     // MARK: - nil baseline → no events (initial load, #34)
 
     func testNilBaselineProducesNoEvents() {
