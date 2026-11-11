@@ -217,7 +217,7 @@ extension GitHubProvider {
                 }
               }
             }
-            latestReviews: reviews(last: 20) {
+            latestReviews(first: 20) {
               nodes {
                 author { login ... on User { avatarUrl } }
                 state
