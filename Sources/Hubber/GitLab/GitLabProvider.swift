@@ -79,8 +79,7 @@ final class GitLabProvider: CodeHostProvider {
             throw CodeHostAuthError.badCredentials
         }
         if http.statusCode == 429 {
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
-            throw CodeHostAuthError.rateLimited(retryAfter: retryAfter)
+            throw CodeHostAuthError.rateLimited(retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
         }
         guard (200..<300).contains(http.statusCode) else {
             throw CodeHostAuthError.providerMessage("GitLab returned HTTP \(http.statusCode).")

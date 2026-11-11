@@ -291,13 +291,17 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func resolveSloHours(defaults: UserDefaults, managed: any ManagedPreferences) -> Double {
-        double(
+        let fallback = 4.0
+        let hours = double(
             managedKey: ManagedKey.sloWindowHours,
             defaultsKey: ManagedKey.sloWindowHours,
             defaults: defaults,
             managed: managed,
-            fallback: 4.0
+            fallback: fallback
         )
+        // A hand-edited or managed value can be NaN/infinite/≤0; `Int(hours)` would trap on the
+        // first two and the SLO ratio would be meaningless for the last.
+        return hours.isFinite && hours > 0 ? hours : fallback
     }
 
     private static func resolveSloDisplay(defaults: UserDefaults, managed: any ManagedPreferences) -> SLODisplay {
