@@ -35,6 +35,14 @@ jobs:
           echo "Building release version $VERSION"
           make dist VERSION="$VERSION"
 
+      # install.sh verifies Hubber.zip against Hubber.zip.sha256 from the same release.
+      - name: Write checksums
+        working-directory: dist
+        run: |
+          shasum -a 256 Hubber.zip > Hubber.zip.sha256
+          shasum -a 256 Hubber.dmg > Hubber.dmg.sha256
+          cat Hubber.zip.sha256 Hubber.dmg.sha256
+
       - name: List artifacts
         run: ls -lh dist/
 
@@ -45,5 +53,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             dist/Hubber.dmg \
             dist/Hubber.zip \
+            dist/Hubber.zip.sha256 \
+            dist/Hubber.dmg.sha256 \
             --generate-notes \
             --title "Hubber $GITHUB_REF_NAME"
