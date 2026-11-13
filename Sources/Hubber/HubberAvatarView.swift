@@ -26,11 +26,13 @@ struct AvatarView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var image: NSImage?
 
-    let user: GitHubUser
+    let user: CodeHostUser
     /// Point size for the avatar circle. Use AvatarSize.xxx.rawValue or pass any CGFloat.
     let size: CGFloat
     /// Optional reviewer state dot overlay (bottom-right).
     var reviewerState: ReviewerState?
+    /// Optional role descriptor for accessibility (e.g. "author"). Nil = omitted from label.
+    var accessibilityRole: String?
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -40,6 +42,11 @@ struct AvatarView: View {
             }
         }
         .frame(width: size, height: size)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            [user.login, accessibilityRole, reviewerState.map(AccessibilityText.reviewerPhrase)]
+                .compactMap(\.self).joined(separator: ", ")
+        )
         .task(id: user.avatarURL) {
             guard let url = user.avatarURL else { return }
             // withTaskCancellationHandler ensures that when the .task is cancelled

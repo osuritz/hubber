@@ -3,6 +3,9 @@ import SwiftUI
 struct DeveloperPanelView: View {
     @ObservedObject var store: HubberStore
     @State private var onboardingReset = false
+    #if DEBUG
+        @ObservedObject private var mockMode = MockMode.shared
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -61,6 +64,18 @@ struct DeveloperPanelView: View {
 
                 Spacer()
             }
+
+            #if DEBUG
+                Picker("Mock mode", selection: $mockMode.scenario) {
+                    ForEach(MockScenario.allCases) { scenario in
+                        Text(scenario.title).tag(scenario)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: mockMode.scenario) { _, newValue in
+                    mockMode.apply(newValue, to: store)
+                }
+            #endif
         }
         .controlSize(.small)
     }
@@ -69,7 +84,7 @@ struct DeveloperPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             if store.developerLog.isEmpty {
                 Text("No logs yet")
-                    .font(HubberType.log)
+                    .hubberFont(.log)
                     .foregroundStyle(HubberDesign.text2)
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
             } else {
@@ -87,12 +102,12 @@ private struct DeveloperLogRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(Self.timeFormatter.string(from: entry.timestamp))
-                .font(HubberType.log)
+                .hubberFont(.log)
                 .foregroundStyle(HubberDesign.text3)
                 .frame(width: 48, alignment: .leading)
 
             Text(entry.message)
-                .font(HubberType.log)
+                .hubberFont(.log)
                 .foregroundStyle(HubberDesign.text2)
                 .fixedSize(horizontal: false, vertical: true)
         }

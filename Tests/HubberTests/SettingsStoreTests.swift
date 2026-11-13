@@ -6,10 +6,10 @@ import XCTest
 final class SettingsStoreTests: XCTestCase {
     private var sut: SettingsStore!
     private var defaults: UserDefaults!
-    private nonisolated(unsafe) var suiteName: String!
+    private var suiteName: String!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "SettingsStoreTests-\(UUID())"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         sut = SettingsStore(defaults: defaults)
@@ -22,9 +22,9 @@ final class SettingsStoreTests: XCTestCase {
         SettingsStore(defaults: defaults, managed: managed)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testDefaultSLOHoursIs4() {
@@ -47,9 +47,43 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(sut.rowDensity, .normal)
     }
 
+    // MARK: - panelWidth
+
+    func testDefaultPanelWidthIsNormal() {
+        XCTAssertEqual(sut.panelWidth, .normal)
+    }
+
+    func testPanelWidthPersistedToUserDefaults() {
+        sut.panelWidth = .wide
+        XCTAssertEqual(defaults.integer(forKey: "panelWidth"), PanelWidth.wide.rawValue)
+    }
+
+    func testUserDefaultsValueOverridesPanelWidthDefault() {
+        defaults.set(PanelWidth.wide.rawValue, forKey: "panelWidth")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.panelWidth, .wide)
+    }
+
+    func testPanelWidthInvalidUserDefaultsFallsBackToNormal() {
+        defaults.set(99, forKey: "panelWidth")
+        let store = SettingsStore(defaults: defaults)
+        XCTAssertEqual(store.panelWidth, .normal)
+    }
+
     func testSloHoursPersistedToUserDefaults() {
         sut.sloHours = 8.0
         XCTAssertEqual(defaults.double(forKey: "sloWindowHours"), 8.0)
+    }
+
+    /// A hand-edited or managed SLO window that is NaN/infinite/non-positive would trap in the
+    /// `Int(hours)` footer formatting; it must fall back to the default instead.
+    func testSloHoursFallsBackForNonFiniteOrNonPositiveStoredValues() {
+        for stored in [Double.nan, .infinity, 0, -3] {
+            defaults.set(stored, forKey: "sloWindowHours")
+            let store = makeStore()
+            XCTAssertEqual(store.sloHours, 4.0, "stored \(stored)")
+            XCTAssertEqual(ReviewSLOPresentation.footerText(isEnabled: true, hours: store.sloHours), "SLO 4h")
+        }
     }
 
     func testIncomingModePersistedToUserDefaults() {

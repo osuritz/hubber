@@ -62,7 +62,7 @@ private enum TestError: Error, LocalizedError {
 /// (already in the test target).
 @MainActor
 private func makeSignedInStore(provider: some CodeHostProvider) -> HubberStore {
-    let token = GitHubStoredToken(
+    let token = StoredToken(
         accessToken: "test-token",
         accessTokenExpiresAt: nil,
         refreshToken: nil,
@@ -103,7 +103,9 @@ private struct NullTelemetrySink: TelemetrySink {
 private func waitForSignedIn(_ store: HubberStore, timeout: TimeInterval = 3) async throws {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
-        if case .signedIn = store.authState { return }
+        if case .signedIn = store.authState {
+            return
+        }
         try await Task.sleep(for: .milliseconds(50))
     }
     // If still not signedIn after timeout, the test helper fails gracefully
@@ -182,7 +184,9 @@ final class PerTabRefreshTests: XCTestCase {
         store.refreshPullRequests()
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
-            if !store.isRefreshingPullRequests { break }
+            if !store.isRefreshingPullRequests {
+                break
+            }
             try await Task.sleep(for: .milliseconds(50))
         }
 
@@ -207,7 +211,7 @@ final class PerTabRefreshTests: XCTestCase {
         let retryAfter: TimeInterval = 5 * 60
         let provider = StubCodeHostProvider(
             incoming: .success(sampleIncoming), // success — non-empty
-            outgoing: .failure(GitHubAuthError.rateLimited(retryAfter: retryAfter)), // global error
+            outgoing: .failure(CodeHostAuthError.rateLimited(retryAfter: retryAfter)), // global error
             drafts: .success(sampleDrafts) // success — non-empty
         )
 
@@ -217,7 +221,9 @@ final class PerTabRefreshTests: XCTestCase {
         store.refreshPullRequests()
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
-            if !store.isRefreshingPullRequests { break }
+            if !store.isRefreshingPullRequests {
+                break
+            }
             try await Task.sleep(for: .milliseconds(50))
         }
 
@@ -254,7 +260,9 @@ final class PerTabRefreshTests: XCTestCase {
         store.refreshPullRequests()
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
-            if !store.isRefreshingPullRequests { break }
+            if !store.isRefreshingPullRequests {
+                break
+            }
             try await Task.sleep(for: .milliseconds(50))
         }
 
@@ -279,7 +287,9 @@ final class PerTabRefreshTests: XCTestCase {
         store.refreshPullRequests()
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
-            if !store.isRefreshingPullRequests { break }
+            if !store.isRefreshingPullRequests {
+                break
+            }
             try await Task.sleep(for: .milliseconds(50))
         }
 

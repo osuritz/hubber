@@ -27,27 +27,30 @@ struct SettingsView: View {
                     SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ReviewSLOPresentation.title)
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text(ReviewSLOPresentation.subtitle)
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Toggle("", isOn: $settings.sloEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .accessibilityLabel(ReviewSLOPresentation.title)
                             .disabled(settings.isLocked("reviewSLOEnabled"))
                     }
 
                     // Review window slider
                     SettingsRow(isLast: false) {
                         Text(ReviewSLOPresentation.windowLabel)
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(settings.sloEnabled ? HubberDesign.text : HubberDesign.text3)
 
                         Slider(value: $settings.sloHours, in: 1...24, step: 1)
                             .frame(maxWidth: 190)
+                            .accessibilityLabel("Review SLO")
+                            .accessibilityValue("\(Int(settings.sloHours)) hours")
 
                         Text("\(Int(settings.sloHours))h")
                             .font(.system(size: 12, weight: .semibold).monospacedDigit())
@@ -60,14 +63,15 @@ struct SettingsView: View {
                     // SLO display mode
                     SettingsRow(isStack: true, isLast: false) {
                         Text("Show SLO as")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(settings.sloEnabled ? HubberDesign.text : HubberDesign.text3)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
                             SLODisplay.self,
                             selection: $settings.sloDisplay,
                             isEnabled: settings.sloEnabled && !settings.isLocked("sloDisplay"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Show SLO as"
                         )
                         .opacity(settings.sloEnabled ? 1 : 0.45)
                     }
@@ -75,14 +79,15 @@ struct SettingsView: View {
                     // Incoming mode
                     SettingsRow(isStack: true, isLast: true) {
                         Text("Incoming requests")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
                             IncomingReviewMode.self,
                             selection: $settings.incomingMode,
                             isEnabled: !settings.isLocked("incomingMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Incoming requests"
                         )
                     }
                 }
@@ -94,10 +99,10 @@ struct SettingsView: View {
                     SettingsRow(isStack: true, isLast: true) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Unresolved threads")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text("Which threads count as unresolved")
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -105,7 +110,8 @@ struct SettingsView: View {
                             UnresolvedThreadMode.self,
                             selection: $settings.unresolvedMode,
                             isEnabled: !settings.isLocked("unresolvedThreadMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Unresolved threads"
                         )
                     }
                 }
@@ -114,16 +120,53 @@ struct SettingsView: View {
             // Appearance
             SettingsSection(title: "Appearance") {
                 SettingsGroup {
-                    SettingsRow(isStack: true, isLast: true) {
+                    SettingsRow(isStack: true, isLast: false) {
                         Text("Row density")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
                             RowDensity.self,
                             selection: $settings.rowDensity,
                             isEnabled: !settings.isLocked("rowDensity"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Row density"
+                        )
+                    }
+
+                    // Panel width preset — resizes the menu-bar panel. Height is automatic
+                    // (a fraction of the screen), so only width is user-set here.
+                    SettingsRow(isStack: true, isLast: false) {
+                        Text("Panel width")
+                            .hubberFont(.settingsLabel)
+                            .foregroundStyle(HubberDesign.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            PanelWidth.self,
+                            selection: $settings.panelWidth,
+                            isEnabled: !settings.isLocked(ManagedKey.panelWidth),
+                            title: \.title,
+                            accessibilityLabel: "Panel width"
+                        )
+                    }
+
+                    SettingsRow(isStack: true, isLast: true) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Status indicator")
+                                .hubberFont(.settingsLabel)
+                                .foregroundStyle(HubberDesign.text)
+                            Text("Slim colour rail for roomier titles, or the classic CI badge.")
+                                .hubberFont(.settingsSub)
+                                .foregroundStyle(HubberDesign.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        NativeSegmentedPicker(
+                            StatusIndicatorStyle.self,
+                            selection: $settings.statusIndicatorStyle,
+                            isEnabled: !settings.isLocked(ManagedKey.statusIndicatorStyle),
+                            title: \.title,
+                            accessibilityLabel: "Status indicator"
                         )
                     }
                 }
@@ -135,10 +178,10 @@ struct SettingsView: View {
                     SettingsRow(isLast: true) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Open at login")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text("Start Hubber automatically when you log in.")
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                         }
                         Toggle("", isOn: Binding(
@@ -147,6 +190,7 @@ struct SettingsView: View {
                         ))
                         .toggleStyle(.switch)
                         .labelsHidden()
+                        .accessibilityLabel("Open at login")
                         .disabled(settings.isLocked(ManagedKey.launchAtLogin))
                     }
                 }
@@ -157,14 +201,15 @@ struct SettingsView: View {
                 SettingsGroup {
                     SettingsRow(isStack: true, isLast: true) {
                         Text("Badge shows")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
                             BadgeMode.self,
                             selection: $settings.badgeMode,
                             isEnabled: !settings.isLocked("badgeMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Menubar badge"
                         )
                     }
                 }
@@ -175,14 +220,15 @@ struct SettingsView: View {
                 SettingsGroup {
                     SettingsRow(isStack: true, isLast: true) {
                         Text("Badges show")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         NativeSegmentedPicker(
                             TabBadgeMode.self,
                             selection: $settings.tabBadgeMode,
                             isEnabled: !settings.isLocked("tabBadgeMode"),
-                            title: \.title
+                            title: \.title,
+                            accessibilityLabel: "Tab badges"
                         )
                     }
                 }
@@ -202,49 +248,54 @@ struct SettingsView: View {
                     SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Share anonymous usage analytics")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text("Helps improve Hubber. No personal data is shared.")
-                                .font(HubberType.settingsSub)
+                                .hubberFont(.settingsSub)
                                 .foregroundStyle(HubberDesign.text2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Toggle("", isOn: $settings.analyticsEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .accessibilityLabel("Share anonymous usage analytics")
                             .disabled(settings.isLocked(ManagedKey.analyticsEnabled))
                     }
 
-                    // Crash reporting toggle — LOCAL os_log only (transmits nothing). Label must
-                    // not imply transmission. See #104.
+                    // Diagnostic logging toggle — everything it records stays LOCAL (os_log and
+                    // ~/Library/Logs/Hubber). Label must not imply transmission. See #104. The one
+                    // thing a crash can transmit is the minimal `app.crashed` analytics event, which
+                    // is governed by the analytics toggle above (and needs this toggle on too).
                     SettingsRow(isLast: false) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Diagnostic logging")
-                                .font(HubberType.settingsLabel)
+                                .hubberFont(.settingsLabel)
                                 .foregroundStyle(HubberDesign.text)
                             Text(
-                                "Crash, hang, and performance diagnostics are written to your "
-                                    + "Mac's local log only — never sent anywhere."
+                                "Crash logs and diagnostics are kept on your Mac, in "
+                                    + "~/Library/Logs/Hubber. With analytics on, a crash also sends "
+                                    + "an anonymous crash category."
                             )
-                            .font(HubberType.settingsSub)
+                            .hubberFont(.settingsSub)
                             .foregroundStyle(HubberDesign.text2)
                             .fixedSize(horizontal: false, vertical: true)
                         }
                         Toggle("", isOn: $settings.crashReportingEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .accessibilityLabel("Diagnostic logging")
                             .disabled(settings.isLocked(ManagedKey.crashReportingEnabled))
                     }
 
                     // Privacy policy link (#104)
                     SettingsRow(isLast: true) {
                         Text("Privacy Policy")
-                            .font(HubberType.settingsLabel)
+                            .hubberFont(.settingsLabel)
                             .foregroundStyle(HubberDesign.text)
                         Spacer()
                         Button("Read") { NSWorkspace.shared.open(PrivacyLinks.privacyPolicy) }
                             .buttonStyle(.plain)
-                            .font(HubberType.settingsSub)
+                            .hubberFont(.settingsSub)
                             .foregroundStyle(HubberDesign.accent)
                     }
                 }

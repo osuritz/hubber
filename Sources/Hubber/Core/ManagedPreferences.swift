@@ -67,6 +67,8 @@ struct CFManagedPreferences: ManagedPreferences {
 //   incomingMode                String       incomingMode            incomingMode
 //   unresolvedThreadMode        String       unresolvedThreadMode    unresolvedMode
 //   rowDensity                  String|Int   rowDensity              rowDensity
+//   panelWidth                  String|Int   panelWidth              panelWidth
+//   statusIndicatorStyle        String       statusIndicatorStyle    statusIndicatorStyle
 //   analyticsEnabled            Bool         analyticsEnabled        analyticsEnabled
 //   crashReportingEnabled       Bool         crashReportingEnabled   crashReportingEnabled
 //   notificationsEnabled        Bool         notificationsEnabled    notificationsEnabled
@@ -88,6 +90,8 @@ enum ManagedKey {
     static let badgeMode = "badgeMode"
     static let tabBadgeMode = "tabBadgeMode"
     static let rowDensity = "rowDensity"
+    static let panelWidth = "panelWidth"
+    static let statusIndicatorStyle = "statusIndicatorStyle"
 
     // PR modes
     static let incomingMode = "incomingMode"

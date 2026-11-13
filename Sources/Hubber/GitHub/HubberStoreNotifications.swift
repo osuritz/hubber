@@ -93,8 +93,12 @@ extension HubberStore {
         if let existing {
             var newIncoming = existing.incomingIDs
             var newOutgoing = existing.outgoing
-            if tabSuccesses.incoming { newIncoming = freshSnapshot.incomingIDs }
-            if tabSuccesses.outgoing { newOutgoing = freshSnapshot.outgoing }
+            if tabSuccesses.incoming {
+                newIncoming = freshSnapshot.incomingIDs
+            }
+            if tabSuccesses.outgoing {
+                newOutgoing = freshSnapshot.outgoing
+            }
             newBaseline = ReviewSnapshot(incomingIDs: newIncoming, outgoing: newOutgoing)
         } else {
             newBaseline = freshSnapshot

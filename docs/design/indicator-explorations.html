@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hubber — slim rail + pill (with Rail/Badge setting)</title>
+<style>
+  /* ── Tokens lifted from docs/design/.../tokens.jsx ─────────────────────── */
+  :root {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    --font-d: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --material: rgba(246,246,248,0.72);
+    --text:  rgba(0,0,0,0.85);
+    --text2: rgba(60,60,67,0.56);
+    --text3: rgba(60,60,67,0.32);
+    --sep:   rgba(0,0,0,0.08);
+    --fill:  rgba(0,0,0,0.035);
+    --track: rgba(0,0,0,0.055);
+    --thumb: #ffffff;
+    --thumb-shadow: 0 1px 2px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.04);
+
+    --ci-pass: #248A3D;
+    --ci-fail: #D70015;
+    --ci-run:  #8E8E93;
+    --ci-none: #8E8E93;
+
+    --st-green:   #248A3D;
+    --st-amber:   #C26A00;
+    --st-red:     #D70015;
+    --st-neutral: #B8B8BF;
+
+    --add: #248A3D;
+    --del: #D70015;
+
+    --signal-tint: rgba(255,59,48,0.05);
+
+    --page-bg: radial-gradient(1200px 800px at 18% -10%, #dfe7f5 0%, #eef0f6 42%, #e7e9f1 100%);
+    --label:  rgba(0,0,0,0.55);
+  }
+  [data-theme="dark"] {
+    --material: rgba(38,38,40,0.82);
+    --text:  rgba(255,255,255,0.92);
+    --text2: rgba(235,235,245,0.58);
+    --text3: rgba(235,235,245,0.32);
+    --sep:   rgba(255,255,255,0.10);
+    --fill:  rgba(255,255,255,0.06);
+    --track: rgba(255,255,255,0.06);
+    --thumb: rgba(120,120,128,0.50);
+    --thumb-shadow: inset 0 0.5px 0 rgba(255,255,255,0.18);
+
+    --ci-pass: #30D158;
+    --ci-fail: #FF453A;
+    --ci-run:  #98989D;
+    --ci-none: #98989D;
+
+    --st-green:   #30D158;
+    --st-amber:   #FF9F0A;
+    --st-red:     #FF453A;
+    --st-neutral: #5A5A5E;
+
+    --add: #30D158;
+    --del: #FF453A;
+
+    --signal-tint: rgba(255,69,58,0.08);
+
+    --page-bg: radial-gradient(1200px 800px at 18% -10%, #2a3344 0%, #1c1c20 48%, #121214 100%);
+    --label:  rgba(255,255,255,0.62);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--page-bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Toolbar ─────────────────────────────────────────────────────────── */
+  .bar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+    padding: 13px 26px;
+    background: var(--material);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border-bottom: 0.5px solid var(--sep);
+  }
+  .bar h1 { font: 600 14px/1 var(--font-d); margin: 0; letter-spacing: -0.01em; }
+  .ctl { display: inline-flex; align-items: center; gap: 8px; }
+  .ctl > .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); }
+  .spacer { flex: 1; }
+  .toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--label); cursor: pointer; user-select: none; }
+  .toggle input { accent-color: #007AFF; width: 14px; height: 14px; }
+  .seg-toggle { display: inline-flex; background: var(--track); border-radius: 8px; padding: 2px; }
+  .seg-toggle button {
+    border: 0; background: transparent; font: 590 12px var(--font); color: var(--text2);
+    padding: 4px 13px; border-radius: 6px; cursor: pointer;
+  }
+  .seg-toggle button[aria-pressed="true"] { background: var(--thumb); color: var(--text); box-shadow: var(--thumb-shadow); }
+
+  /* ── Stage ───────────────────────────────────────────────────────────── */
+  .stage { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; justify-content: center; padding: 44px 26px 60px; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .col .cap { font: 600 12px var(--font-d); color: var(--label); }
+
+  /* ── The panel (faithful menu-bar popover) ───────────────────────────── */
+  .panel {
+    width: 400px; max-width: 100%;
+    background: var(--material);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid var(--sep);
+    border-radius: 13px;
+    overflow: hidden;
+    box-shadow: 0 16px 44px rgba(0,0,0,0.24), 0 1px 0 rgba(255,255,255,0.18) inset;
+  }
+  body.gray .panel { filter: grayscale(1); }
+
+  .ph { display: flex; align-items: center; padding: 11px 14px 9px; }
+  .ph .l { display: inline-flex; align-items: center; gap: 7px; font: 600 14px/1 var(--font-d); }
+  .ph .ico { font-size: 13px; color: var(--text2); }
+  .ph .r { display: inline-flex; gap: 14px; color: var(--text2); font-size: 14px; }
+
+  .seg { display: flex; margin: 2px 12px 8px; background: var(--track); border-radius: 8px; padding: 2px; }
+  .seg .i { flex: 1; text-align: center; font: 590 12.5px var(--font); color: var(--text2); padding: 5px 0; border-radius: 6px; }
+  .seg .i.sel { background: var(--thumb); color: var(--text); box-shadow: var(--thumb-shadow); }
+
+  /* Row: leading + text + trailing pill. metrics mirror RowDensityCfg(.normal) */
+  .row { position: relative; display: flex; align-items: flex-start; gap: 11px; padding: 9.5px 14px; }
+  .row + .row::before { content:""; position:absolute; top:0; left:14px; right:14px; height:0.5px; background: var(--sep); }
+  .row.signal { background: var(--signal-tint); }
+
+  .rtext { flex: 1; min-width: 0; }
+  .tline { display: flex; align-items: baseline; gap: 6px; }
+  .tline .num { font: 400 11px var(--font); color: var(--text3); flex: none; font-variant-numeric: tabular-nums; }
+  .tline .title {
+    font: 500 13px var(--font); color: var(--text); letter-spacing: -0.005em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
+  .sline { display: flex; align-items: center; gap: 5px; margin-top: 3px; font: 400 11px var(--font); color: var(--text2); white-space: nowrap; overflow: hidden; }
+  .sline .dot { color: var(--text3); }
+  .sline .cidet.fail { color: var(--ci-fail); }
+  .size { font-variant-numeric: tabular-nums; display: inline-flex; gap: 4px; }
+  .size .add { color: var(--add); }
+  .size .del { color: var(--del); }
+
+  /* leading: slim rail */
+  .lead { flex: none; }
+  .rail { width: 3px; height: 30px; border-radius: 2px; margin-top: 1px; }
+  .rail.s-green { background: var(--st-green); }
+  .rail.s-amber { background: var(--st-amber); }
+  .rail.s-red   { background: var(--st-red); }
+  .rail.s-neutral { background: var(--st-neutral); }
+
+  /* leading: CI badge (the "Badge" setting) */
+  .badge { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; margin-top: 1px; }
+  .badge.pass { background: var(--ci-pass); color: #fff; }
+  .badge.fail { background: var(--ci-fail); color: #fff; }
+  .badge.none { border: 1.5px solid var(--ci-none); color: var(--ci-none); }
+  .badge.run  { border: 1.5px solid var(--ci-run); }
+  .spin { width: 13px; height: 13px; border-radius: 50%; border: 1.6px solid var(--ci-run); border-top-color: transparent; animation: sp 0.8s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  /* trailing: state pill (the text channel that keeps it accessible) */
+  .pill {
+    flex: none; margin-top: 1px; display: inline-flex; align-items: center; gap: 5px;
+    font: 590 11px var(--font); padding: 2.5px 9px 2.5px 7px; border-radius: 7px;
+    border: 0.5px solid; white-space: nowrap;
+  }
+  .pill .pd { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .pill.s-green   { color: var(--st-green); background: color-mix(in srgb, var(--st-green) 13%, transparent); border-color: color-mix(in srgb, var(--st-green) 30%, transparent); }
+  .pill.s-amber   { color: var(--st-amber); background: color-mix(in srgb, var(--st-amber) 14%, transparent); border-color: color-mix(in srgb, var(--st-amber) 32%, transparent); }
+  .pill.s-red     { color: var(--st-red);   background: color-mix(in srgb, var(--st-red) 12%, transparent);   border-color: color-mix(in srgb, var(--st-red) 30%, transparent); }
+  .pill.s-neutral { color: var(--text2);    background: var(--fill);                                          border-color: var(--sep); }
+  .pill .pd.s-green{background:var(--st-green);} .pill .pd.s-amber{background:var(--st-amber);}
+  .pill .pd.s-red{background:var(--st-red);} .pill .pd.s-neutral{background:var(--text3);}
+
+  .pf { display: flex; align-items: center; padding: 9px 14px; border-top: 0.5px solid var(--sep); font: 400 11px var(--font); color: var(--text2); }
+
+  /* ── Settings mock (shows where the toggle lives) ─────────────────────── */
+  .settings { width: 400px; max-width: 100%; }
+  .settings .sh { font: 600 11px var(--font); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); margin: 0 0 8px 4px; }
+  .settings .card {
+    background: var(--material); border: 0.5px solid var(--sep); border-radius: 11px;
+    backdrop-filter: blur(20px); overflow: hidden;
+  }
+  .settings .srow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  .settings .srow .desc .t { font: 500 13px var(--font); }
+  .settings .srow .desc .d { font: 400 11px var(--font); color: var(--text2); margin-top: 2px; max-width: 230px; }
+  .settings .srow .pick { margin-left: auto; }
+
+  .note { max-width: 860px; margin: 0 auto; padding: 0 26px 64px; color: var(--label); font-size: 13px; line-height: 1.6; }
+  .note h3 { font: 600 14px var(--font-d); color: var(--text); margin: 22px 0 8px; }
+  .note code { font: 12px var(--mono); background: var(--fill); padding: 1px 5px; border-radius: 4px; }
+  .note .con { color: #C26A00; } [data-theme="dark"] .note .con { color: #FF9F0A; }
+  .note .ok  { color: #248A3D; } [data-theme="dark"] .note .ok  { color: #30D158; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <h1>Hubber · slim rail + pill</h1>
+
+    <div class="ctl"><span class="lbl">Theme</span>
+      <div class="seg-toggle" role="group" aria-label="Theme">
+        <button data-theme-btn="light" aria-pressed="true">Light</button>
+        <button data-theme-btn="dark" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+
+    <div class="ctl"><span class="lbl">Indicator (the setting)</span>
+      <div class="seg-toggle" role="group" aria-label="Indicator style">
+        <button data-ind-btn="rail" aria-pressed="true">Rail</button>
+        <button data-ind-btn="badge" aria-pressed="false">Badge</button>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <label class="toggle"><input type="checkbox" id="gray" /> Grayscale (color-blind stress test)</label>
+  </div>
+
+  <div class="stage">
+    <div class="col">
+      <div class="cap">Menu-bar panel — Outgoing</div>
+      <div class="panel" id="panel"></div>
+    </div>
+    <div class="col">
+      <div class="cap">Where the setting lives</div>
+      <div class="settings">
+        <div class="sh">Appearance</div>
+        <div class="card">
+          <div class="srow">
+            <div class="desc">
+              <div class="t">Status indicator</div>
+              <div class="d">Slim colour rail (roomier titles) or the classic CI badge.</div>
+            </div>
+            <div class="pick seg-toggle" role="group" aria-label="Status indicator (settings copy)">
+              <button data-ind-btn="rail" aria-pressed="true">Rail</button>
+              <button data-ind-btn="badge" aria-pressed="false">Badge</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>What you're looking at</h3>
+    Two independent axes per row. The 3&nbsp;px <b>rail</b> on the left is coloured by <b>CI status</b>
+    (green = passing, red = failing, grey = running / no checks). The <b>pill</b> on the right is the aggregate
+    <b>review verdict</b> (Approved / Changes / In&nbsp;review / Awaiting). They move independently — e.g. <i>#2</i>
+    has a green rail (CI passing) but a red <i>Changes</i> pill.
+
+    <h3>The setting</h3>
+    The <b>Indicator</b> toggle is the real Appearance setting — <b>Rail</b> (default, roomier titles) or
+    <b>Badge</b> to fall back to today's <code>CIBadgeView</code> circle+glyph. The review pill shows in both modes.
+
+    <h3>Why the pill is text, not just colour</h3>
+    <span class="ok">Click <b>Grayscale</b>.</span> The rail is colour-only, so on its own it would collapse to
+    identical grey bars — the WCAG&nbsp;1.4.1 failure that <code>#117</code> fixed. The pill keeps the review state as
+    a <i>word</i>, and CI stays readable in the secondary line (<i>1/1 checks</i>, <i>CI failed</i>), so neither axis
+    depends on colour alone.
+  </div>
+
+<script>
+  const ROWS = [
+    {num:39,  title:"feat(hooks): add use-fetch one-shot fetch drop-in",            repo:"osuritz/react-kit",  ci:"pass", ciDetail:"1/1 checks", add:585,  del:0, verdict:"approved"},
+    {num:2,   title:"feat: native macOS app (UniFFI + SwiftUI) — Plan 2",            repo:"osuritz/shelf",      ci:"pass", ciDetail:"3/3 checks", add:1500, del:4, verdict:"changes"},
+    {num:112, title:"ci(release): Sparkle rollout — signed releases + auto-update",  repo:"osuritz/hubber",     ci:"fail", ciDetail:"CI failed",  add:80,   del:1, verdict:"inReview", signal:true},
+    {num:88,  title:"docs: SQL question shape decision memo for the rehearsal repo", repo:"osuritz/rehearsal",  ci:"run",  ciDetail:"Running…",   add:246,  del:0, verdict:"awaiting"},
+    {num:118, title:"build(homebrew): draft cask for brew install (#50)",            repo:"osuritz/hubber",     ci:"none", ciDetail:"No checks",  add:99,   del:0, verdict:"awaiting"},
+  ];
+
+  let indicator = "rail"; // 'rail' | 'badge'
+
+  const abbr = (n) => n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,"") + "k" : String(n);
+  const GLYPH = { pass:"✓", fail:"✕", none:"–", run:'<span class="spin"></span>' };
+
+  // Two axes: the rail colour comes from CI status; the pill from the review verdict — independent.
+  const CI_RAIL = { pass: "green", fail: "red", run: "neutral", none: "neutral" };
+  const VERDICT = {
+    approved: { label: "Approved",  s: "green"   },
+    changes:  { label: "Changes",   s: "red"     },
+    inReview: { label: "In review", s: "amber"   },
+    awaiting: { label: "Awaiting",  s: "neutral" },
+  };
+  const railLead  = (r) => `<div class="lead rail s-${CI_RAIL[r.ci]}"></div>`;
+  const badgeLead = (r) => `<div class="lead badge ${r.ci}">${GLYPH[r.ci]}</div>`;
+  const pill = (r) => {
+    const v = VERDICT[r.verdict];
+    return `<div class="pill s-${v.s}"><span class="pd s-${v.s}"></span>${v.label}</div>`;
+  };
+
+  function rowHTML(r) {
+    const lead = indicator === "rail" ? railLead(r) : badgeLead(r);
+    return `<div class="row${r.signal ? " signal" : ""}">
+      ${lead}
+      <div class="rtext">
+        <div class="tline"><span class="num">#${r.num}</span><span class="title">${r.title}</span></div>
+        <div class="sline">
+          <span>${r.repo}</span><span class="dot">·</span>
+          <span class="cidet${r.ci==="fail"?" fail":""}">${r.ciDetail}</span><span class="dot">·</span>
+          <span class="size"><span class="add">+${abbr(r.add)}</span><span class="del">-${abbr(r.del)}</span></span>
+        </div>
+      </div>
+      ${pill(r)}
+    </div>`;
+  }
+
+  function render() {
+    document.getElementById("panel").innerHTML = `
+      <div class="ph">
+        <div class="l"><span class="ico">⎇</span>All accounts</div>
+        <div class="spacer" style="flex:1"></div>
+        <div class="r"><span>⟳</span><span>⚙</span></div>
+      </div>
+      <div class="seg"><div class="i">Reviews</div><div class="i sel">Outgoing</div><div class="i">Drafts</div></div>
+      <div class="rows">${ROWS.map(rowHTML).join("")}</div>
+      <div class="pf"><span>Updated 11m ago</span><span style="flex:1"></span><span>⟳&nbsp;&nbsp;⌘R</span></div>`;
+  }
+  render();
+
+  // theme
+  document.querySelectorAll("[data-theme-btn]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.documentElement.setAttribute("data-theme", btn.dataset.themeBtn);
+      document.querySelectorAll("[data-theme-btn]").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+    });
+  });
+  // indicator setting (kept in sync across both toggle copies)
+  document.querySelectorAll("[data-ind-btn]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      indicator = btn.dataset.indBtn;
+      document.querySelectorAll("[data-ind-btn]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.indBtn === indicator)));
+      render();
+    });
+  });
+  // grayscale
+  document.getElementById("gray").addEventListener("change", (e) => document.body.classList.toggle("gray", e.target.checked));
+</script>
+</body>
+</html>

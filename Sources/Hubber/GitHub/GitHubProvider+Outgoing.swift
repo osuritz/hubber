@@ -20,7 +20,7 @@ extension GitHubProvider {
             let viewer = payload["viewer"] as? [String: Any],
             let prs = viewer["pullRequests"] as? [String: Any],
             let nodes = prs["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap { Self.parseOutgoingPR($0, unresolvedMode: unresolvedMode) }
     }
@@ -60,7 +60,10 @@ extension GitHubProvider {
             requiredApprovals: 1,
             reviewers: reviewers,
             updatedAgoHours: max(0, Date().timeIntervalSince(updatedAt) / 3600),
-            mergeable: mergeable
+            mergeable: mergeable,
+            additions: node["additions"] as? Int ?? 0,
+            deletions: node["deletions"] as? Int ?? 0,
+            files: node["changedFiles"] as? Int ?? 0
         )
     }
 
@@ -128,7 +131,7 @@ extension GitHubProvider {
             }
 
             let avatarURL = (author["avatarUrl"] as? String).flatMap(URL.init(string:))
-            let user = GitHubUser(
+            let user = CodeHostUser(
                 login: login,
                 initials: String(login.prefix(2)).uppercased(),
                 color: colorForLogin(login),
@@ -179,6 +182,9 @@ extension GitHubProvider {
             isDraft
             updatedAt
             mergeable
+            additions
+            deletions
+            changedFiles
             repository { nameWithOwner }
             commits(last: 1) {
               nodes {
@@ -211,7 +217,7 @@ extension GitHubProvider {
                 }
               }
             }
-            latestReviews: reviews(last: 20) {
+            latestReviews(first: 20) {
               nodes {
                 author { login ... on User { avatarUrl } }
                 state

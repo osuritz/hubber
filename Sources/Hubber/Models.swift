@@ -33,6 +33,30 @@ enum ReviewerState: String {
     case pending
 }
 
+/// Aggregate review decision for an outgoing PR, derived from its reviewers + approval
+/// count. Drives the trailing review-status pill — the "review axis" that pairs with the
+/// leading CI rail so a row encodes CI and review state on two independent channels.
+enum ReviewVerdict: Equatable {
+    /// Meets the required number of approvals.
+    case approved
+    /// At least one reviewer requested changes (takes priority — it's the blocker).
+    case changesRequested
+    /// Reviewers are engaged but there's no decision yet.
+    case inReview
+    /// No reviewer activity yet.
+    case awaitingReview
+
+    /// Short pill text. Kept here (not in the view) so it's unit-testable.
+    var pillLabel: String {
+        switch self {
+        case .approved: "Approved"
+        case .changesRequested: "Changes"
+        case .inReview: "In review"
+        case .awaitingReview: "Awaiting"
+        }
+    }
+}
+
 enum SLOStatus {
     case green
     case amber
@@ -71,6 +95,53 @@ enum RowDensity: Int, CaseIterable, Identifiable {
         case .compact: "Compact"
         case .normal: "Default"
         case .spacious: "Spacious"
+        }
+    }
+}
+
+/// Menu-bar panel width preset. The panel height is automatic (a fraction of the screen),
+/// so width is the only user-set dimension. `points` is the rendered width in points.
+enum PanelWidth: Int, CaseIterable, Identifiable {
+    case narrow = 1
+    case normal = 2
+    case wide = 3
+
+    var id: Int {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .narrow: "Narrow"
+        case .normal: "Normal"
+        case .wide: "Wide"
+        }
+    }
+
+    var points: Double {
+        switch self {
+        case .narrow: 400
+        case .normal: 460
+        case .wide: 520
+        }
+    }
+}
+
+/// Leading status indicator for CI-bearing rows (Outgoing, Drafts): a slim colour rail
+/// or the classic CI badge. User-toggleable in Appearance; MDM-lockable. (`rail` is the
+/// default — the badge is the opt-out.)
+enum StatusIndicatorStyle: String, CaseIterable, Identifiable {
+    case rail
+    case badge
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .rail: "Rail"
+        case .badge: "Badge"
         }
     }
 }
@@ -145,7 +216,7 @@ enum UnresolvedThreadMode: String, CaseIterable, Identifiable {
     }
 }
 
-struct GitHubUser: Identifiable, Hashable {
+struct CodeHostUser: Identifiable, Hashable {
     let login: String
     let initials: String
     let color: Color
@@ -169,7 +240,7 @@ struct IncomingReview: Identifiable {
     let number: Int
     let title: String
     let url: URL?
-    let author: GitHubUser
+    let author: CodeHostUser
     let sloClockStart: Date // max(reviewRequestedAt, readyForReviewAt)
     let additions: Int
     let deletions: Int
@@ -194,6 +265,68 @@ struct OutgoingReview: Identifiable {
     let reviewers: [Reviewer]
     let updatedAgoHours: Double
     let mergeable: Bool
+    let additions: Int
+    let deletions: Int
+    let files: Int
+
+    /// `additions`/`deletions`/`files` default to 0 ("size unknown") so call sites
+    /// that don't carry diff stats stay terse; providers fill in real values.
+    init(
+        id: String,
+        repo: String,
+        number: Int,
+        title: String,
+        url: URL?,
+        ci: PullRequestCI,
+        ciDetail: String,
+        unresolved: Int,
+        approvals: Int,
+        requiredApprovals: Int,
+        reviewers: [Reviewer],
+        updatedAgoHours: Double,
+        mergeable: Bool,
+        additions: Int = 0,
+        deletions: Int = 0,
+        files: Int = 0
+    ) {
+        self.id = id
+        self.repo = repo
+        self.number = number
+        self.title = title
+        self.url = url
+        self.ci = ci
+        self.ciDetail = ciDetail
+        self.unresolved = unresolved
+        self.approvals = approvals
+        self.requiredApprovals = requiredApprovals
+        self.reviewers = reviewers
+        self.updatedAgoHours = updatedAgoHours
+        self.mergeable = mergeable
+        self.additions = additions
+        self.deletions = deletions
+        self.files = files
+    }
+}
+
+extension OutgoingReview {
+    /// Aggregate review decision shown by the trailing review pill. Pure + testable.
+    ///
+    /// Priority: a changes-requested review blocks, so it wins over everything; then a
+    /// satisfied approval count reads as approved; an empty reviewer set with no approvals
+    /// is "awaiting"; anything else means reviewers are engaged but undecided ("in review").
+    var reviewVerdict: ReviewVerdict {
+        if reviewers.contains(where: { $0.state == .changesRequested }) {
+            return .changesRequested
+        }
+        // requiredApprovals can be 0 when a repo has no rule; treat a single approval as enough then.
+        if approvals >= max(requiredApprovals, 1) {
+            return .approved
+        }
+        if reviewers.isEmpty, approvals == 0 {
+            return .awaitingReview
+        }
+        return .inReview
+    }
 }
 
 struct DraftReview: Identifiable {
@@ -206,14 +339,47 @@ struct DraftReview: Identifiable {
     let ciDetail: String
     let commits: Int
     let updatedAt: Date
+    let additions: Int
+    let deletions: Int
+    let files: Int
 
     var updatedAgoHours: Double {
         max(0, Date().timeIntervalSince(updatedAt) / 3600)
     }
+
+    /// `additions`/`deletions`/`files` default to 0 ("size unknown") so call sites
+    /// that don't carry diff stats stay terse; providers fill in real values.
+    init(
+        id: String,
+        repo: String,
+        number: Int,
+        title: String,
+        url: URL?,
+        ci: PullRequestCI,
+        ciDetail: String,
+        commits: Int,
+        updatedAt: Date,
+        additions: Int = 0,
+        deletions: Int = 0,
+        files: Int = 0
+    ) {
+        self.id = id
+        self.repo = repo
+        self.number = number
+        self.title = title
+        self.url = url
+        self.ci = ci
+        self.ciDetail = ciDetail
+        self.commits = commits
+        self.updatedAt = updatedAt
+        self.additions = additions
+        self.deletions = deletions
+        self.files = files
+    }
 }
 
 struct Reviewer: Identifiable {
-    let user: GitHubUser
+    let user: CodeHostUser
     let state: ReviewerState
 
     var id: String {
@@ -257,14 +423,16 @@ extension Date {
     }
 }
 
-extension GitHubUser {
-    static let marisol = GitHubUser(login: "marisol", initials: "MR", color: Color(red: 0.49, green: 0.36, blue: 1.00))
-    static let tobi = GitHubUser(login: "tobi-l", initials: "TL", color: Color(red: 0.12, green: 0.62, blue: 0.33))
-    static let kenji = GitHubUser(login: "kenji", initials: "KS", color: Color(red: 0.84, green: 0.20, blue: 0.42))
-    static let priyanka = GitHubUser(
+extension CodeHostUser {
+    static let marisol = CodeHostUser(
+        login: "marisol", initials: "MR", color: Color(red: 0.49, green: 0.36, blue: 1.00)
+    )
+    static let tobi = CodeHostUser(login: "tobi-l", initials: "TL", color: Color(red: 0.12, green: 0.62, blue: 0.33))
+    static let kenji = CodeHostUser(login: "kenji", initials: "KS", color: Color(red: 0.84, green: 0.20, blue: 0.42))
+    static let priyanka = CodeHostUser(
         login: "priyanka", initials: "PV", color: Color(red: 0.06, green: 0.44, blue: 1.00)
     )
-    static let ines = GitHubUser(login: "ines", initials: "IF", color: Color(red: 0.90, green: 0.47, blue: 0.00))
+    static let ines = CodeHostUser(login: "ines", initials: "IF", color: Color(red: 0.90, green: 0.47, blue: 0.00))
 }
 
 // MARK: - Auth state
@@ -286,6 +454,10 @@ func catchingResult<T: Sendable>(_ body: @Sendable () async throws -> T) async -
 
 extension Result {
     var failureError: Failure? {
-        if case let .failure(e) = self { e } else { nil }
+        if case let .failure(e) = self {
+            e
+        } else {
+            nil
+        }
     }
 }

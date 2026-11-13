@@ -57,6 +57,18 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rowDensity.rawValue, forKey: "rowDensity") }
     }
 
+    /// Menu-bar panel width preset (Narrow/Normal/Wide). User-adjustable (Appearance picker)
+    /// and MDM-lockable. The panel height is automatic, so width is the only user-set dimension.
+    @Published var panelWidth: PanelWidth {
+        didSet { defaults.set(panelWidth.rawValue, forKey: "panelWidth") }
+    }
+
+    /// Leading status indicator for Outgoing/Drafts rows — slim CI rail (default) or the
+    /// classic CI badge. Persisted by rawValue; MDM-lockable via `statusIndicatorStyle`.
+    @Published var statusIndicatorStyle: StatusIndicatorStyle {
+        didSet { defaults.set(statusIndicatorStyle.rawValue, forKey: "statusIndicatorStyle") }
+    }
+
     // MARK: - Privacy / Telemetry kill-switches (#53, #102)
 
     //
@@ -146,11 +158,21 @@ final class SettingsStore: ObservableObject {
     var enabledNotificationTypes: Set<NotificationEventType> {
         guard notificationsEnabled else { return [] }
         var types: Set<NotificationEventType> = []
-        if notifyNewReview { types.insert(.newReview) }
-        if notifyReviewApproved { types.insert(.reviewApproved) }
-        if notifyChangesRequested { types.insert(.changesRequested) }
-        if notifyCIFailed { types.insert(.ciFailed) }
-        if notifyPRMerged { types.insert(.prMerged) }
+        if notifyNewReview {
+            types.insert(.newReview)
+        }
+        if notifyReviewApproved {
+            types.insert(.reviewApproved)
+        }
+        if notifyChangesRequested {
+            types.insert(.changesRequested)
+        }
+        if notifyCIFailed {
+            types.insert(.ciFailed)
+        }
+        if notifyPRMerged {
+            types.insert(.prMerged)
+        }
         return types
     }
 
@@ -165,6 +187,8 @@ final class SettingsStore: ObservableObject {
         incomingMode = Self.resolveIncomingMode(defaults: defaults, managed: managed)
         unresolvedMode = Self.resolveUnresolvedMode(defaults: defaults, managed: managed)
         rowDensity = Self.resolveRowDensity(defaults: defaults, managed: managed)
+        panelWidth = Self.resolvePanelWidth(defaults: defaults, managed: managed)
+        statusIndicatorStyle = Self.resolveStatusIndicatorStyle(defaults: defaults, managed: managed)
         badgeMode = Self.resolveBadgeMode(defaults: defaults, managed: managed)
         tabBadgeMode = Self.resolveTabBadgeMode(defaults: defaults, managed: managed)
         analyticsEnabled = Self.bool(
@@ -267,13 +291,17 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func resolveSloHours(defaults: UserDefaults, managed: any ManagedPreferences) -> Double {
-        double(
+        let fallback = 4.0
+        let hours = double(
             managedKey: ManagedKey.sloWindowHours,
             defaultsKey: ManagedKey.sloWindowHours,
             defaults: defaults,
             managed: managed,
-            fallback: 4.0
+            fallback: fallback
         )
+        // A hand-edited or managed value can be NaN/infinite/≤0; `Int(hours)` would trap on the
+        // first two and the SLO ratio would be meaningless for the last.
+        return hours.isFinite && hours > 0 ? hours : fallback
     }
 
     private static func resolveSloDisplay(defaults: UserDefaults, managed: any ManagedPreferences) -> SLODisplay {
@@ -332,6 +360,36 @@ final class SettingsStore: ObservableObject {
         )) ?? .needsAttention
     }
 
+    /// Resolves the menu-bar panel width preset from the managed seam (accepts Int rawValue or
+    /// a String label) before falling back to UserDefaults and the hardcoded default (.normal).
+    ///
+    /// IT can write either `panelWidth = 3` (Int rawValue) or `panelWidth = "wide"` (String) in
+    /// a configuration profile; both are accepted so the profile is human-readable. Mirrors
+    /// `resolveRowDensity`.
+    private static func resolvePanelWidth(defaults: UserDefaults, managed: any ManagedPreferences) -> PanelWidth {
+        if managed.isForced(ManagedKey.panelWidth) {
+            // Int rawValue path
+            if
+                let intVal = managed.value(ManagedKey.panelWidth) as? Int,
+                let width = PanelWidth(rawValue: intVal) {
+                return width
+            }
+            // String label path: "narrow" | "normal" | "wide"
+            if let strVal = managed.value(ManagedKey.panelWidth) as? String {
+                switch strVal.lowercased() {
+                case "narrow": return .narrow
+                case "normal": return .normal
+                case "wide": return .wide
+                default: break
+                }
+            }
+        }
+        let raw = defaults.object(forKey: ManagedKey.panelWidth) != nil
+            ? defaults.integer(forKey: ManagedKey.panelWidth)
+            : PanelWidth.normal.rawValue
+        return PanelWidth(rawValue: raw) ?? .normal
+    }
+
     private static func resolveLaunchAtLogin(defaults: UserDefaults, managed: any ManagedPreferences) -> Bool {
         bool(
             managedKey: ManagedKey.launchAtLogin,
@@ -366,9 +424,13 @@ final class SettingsStore: ObservableObject {
     ) -> Bool {
         if managed.isForced(managedKey) {
             // Bool-typed plist value (most MDM platforms)
-            if let v = managed.value(managedKey) as? Bool { return v }
+            if let v = managed.value(managedKey) as? Bool {
+                return v
+            }
             // Integer-encoded boolean: some MDM platforms write <integer>0</integer> / <integer>1</integer>
-            if let v = managed.value(managedKey) as? Int { return v != 0 }
+            if let v = managed.value(managedKey) as? Int {
+                return v != 0
+            }
         }
         guard defaults.object(forKey: defaultsKey) != nil else { return fallback }
         return defaults.bool(forKey: defaultsKey)
@@ -383,8 +445,12 @@ final class SettingsStore: ObservableObject {
     ) -> Double {
         if managed.isForced(managedKey) {
             // Accept both Double and Int from managed profiles
-            if let v = managed.value(managedKey) as? Double { return v }
-            if let v = managed.value(managedKey) as? Int { return Double(v) }
+            if let v = managed.value(managedKey) as? Double {
+                return v
+            }
+            if let v = managed.value(managedKey) as? Int {
+                return Double(v)
+            }
         }
         guard defaults.object(forKey: defaultsKey) != nil else { return fallback }
         return defaults.double(forKey: defaultsKey)
@@ -419,6 +485,24 @@ final class SettingsStore: ObservableObject {
         return RowDensity(rawValue: raw) ?? .normal
     }
 
+    /// Resolves `statusIndicatorStyle` from the managed seam (String label) before falling
+    /// back to UserDefaults and the hardcoded default (`.rail`). Mirrors the String-label
+    /// half of `resolveRowDensity` so IT can write `statusIndicatorStyle = "badge"`.
+    private static func resolveStatusIndicatorStyle(
+        defaults: UserDefaults,
+        managed: any ManagedPreferences
+    ) -> StatusIndicatorStyle {
+        // Lowercase so a forced "Rail"/"Badge" in an MDM profile resolves (and doesn't lock the
+        // control to a value that silently falls back to the default). Matches resolveRowDensity.
+        StatusIndicatorStyle(rawValue: string(
+            managedKey: ManagedKey.statusIndicatorStyle,
+            defaultsKey: ManagedKey.statusIndicatorStyle,
+            defaults: defaults,
+            managed: managed,
+            fallback: StatusIndicatorStyle.rail.rawValue
+        ).lowercased()) ?? .rail
+    }
+
     /// Resolves per-type notification flags.
     /// The MDM composite key `defaultNotificationEvents` (array of rawValues or csv string) takes
     /// priority when forced; otherwise per-type UserDefaults keys are used.
@@ -445,11 +529,21 @@ final class SettingsStore: ObservableObject {
         let resolveFlag = { (key: String, fallback: Bool) -> Bool in
             bool(managedKey: key, defaultsKey: key, defaults: defaults, managed: managed, fallback: fallback)
         }
-        if resolveFlag("notifyNewReview", true) { types.insert(.newReview) }
-        if resolveFlag("notifyReviewApproved", false) { types.insert(.reviewApproved) }
-        if resolveFlag("notifyChangesRequested", false) { types.insert(.changesRequested) }
-        if resolveFlag("notifyCIFailed", false) { types.insert(.ciFailed) }
-        if resolveFlag("notifyPRMerged", false) { types.insert(.prMerged) }
+        if resolveFlag("notifyNewReview", true) {
+            types.insert(.newReview)
+        }
+        if resolveFlag("notifyReviewApproved", false) {
+            types.insert(.reviewApproved)
+        }
+        if resolveFlag("notifyChangesRequested", false) {
+            types.insert(.changesRequested)
+        }
+        if resolveFlag("notifyCIFailed", false) {
+            types.insert(.ciFailed)
+        }
+        if resolveFlag("notifyPRMerged", false) {
+            types.insert(.prMerged)
+        }
         return types
     }
 

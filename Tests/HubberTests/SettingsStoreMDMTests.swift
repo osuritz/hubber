@@ -14,17 +14,17 @@ import XCTest
 @MainActor
 final class SettingsStoreMDMTests: XCTestCase {
     private var defaults: UserDefaults!
-    private nonisolated(unsafe) var suiteName: String!
+    private var suiteName: String!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "SettingsStoreMDMTests-\(UUID())"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func makeStore(managed: InMemoryManagedPreferences = InMemoryManagedPreferences()) -> SettingsStore {
@@ -135,6 +135,27 @@ final class SettingsStoreMDMTests: XCTestCase {
         ])
         let store = makeStore(managed: managed)
         XCTAssertEqual(store.enabledNotificationTypes, [.changesRequested, .prMerged])
+    }
+
+    // panelWidth: MDM forced Int rawValue beats a conflicting UserDefaults value
+    func testForcedPanelWidthIntWinsOverUserDefaults() {
+        defaults.set(PanelWidth.narrow.rawValue, forKey: "panelWidth") // UserDefaults: narrow
+        let managed = InMemoryManagedPreferences([ManagedKey.panelWidth: PanelWidth.wide.rawValue])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.panelWidth, .wide)
+        XCTAssertTrue(store.isLocked(ManagedKey.panelWidth))
+    }
+
+    // panelWidth: MDM accepts a human-readable string label ("narrow"|"normal"|"wide")
+    func testForcedPanelWidthStringLabel() {
+        let managed = InMemoryManagedPreferences([ManagedKey.panelWidth: "wide"])
+        let store = makeStore(managed: managed)
+        XCTAssertEqual(store.panelWidth, .wide)
+    }
+
+    func testPanelWidthNotLockedWhenNotForced() {
+        let store = makeStore(managed: InMemoryManagedPreferences())
+        XCTAssertFalse(store.isLocked(ManagedKey.panelWidth))
     }
 
     // MARK: - CSV-string defaultNotificationEvents (legacy branch)
@@ -267,5 +288,6 @@ final class SettingsStoreMDMTests: XCTestCase {
         XCTAssertEqual(ManagedKey.defaultNotificationEvents, "defaultNotificationEvents")
         XCTAssertEqual(ManagedKey.providerAllowlist, "providerAllowlist")
         XCTAssertEqual(ManagedKey.allowPersonalGitHub, "allowPersonalGitHub")
+        XCTAssertEqual(ManagedKey.panelWidth, "panelWidth")
     }
 }

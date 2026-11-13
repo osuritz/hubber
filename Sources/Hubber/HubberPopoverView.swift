@@ -3,6 +3,8 @@ import SwiftUI
 
 struct HubberPopoverView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
 
     @ObservedObject var store: HubberStore
 
@@ -11,14 +13,28 @@ struct HubberPopoverView: View {
     @State private var showSignInSuccess = false
     @State private var showingAdd = false
     @StateObject private var onboarding = OnboardingCoordinator()
+    /// Default focus target when the popover opens: lands keyboard users on the tab bar.
+    @FocusState private var tabBarFocused: Bool
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .popover)
-                .ignoresSafeArea()
-
-            HubberAppearance.panelFill(for: colorScheme)
-                .ignoresSafeArea()
+            // Panel-background precedence (mirrors applyPanelBacking() on the AppKit side):
+            //  1. Reduce Transparency (accessibility) → opaque solid, on every OS. The AppKit
+            //     layer also skips the glass in this case, so nothing translucent shows through.
+            //  2. macOS 26+ → transparent root so the system Liquid Glass (NSGlassEffectView,
+            //     applied at the AppKit layer) shows through.
+            //  3. Pre-Tahoe → legacy vibrancy material + a light contrast frost.
+            if reduceTransparency {
+                HubberDesign.materialSolid
+                    .ignoresSafeArea()
+            } else if #available(macOS 26, *) {
+                Color.clear
+            } else {
+                VisualEffectView(material: .popover)
+                    .ignoresSafeArea()
+                HubberAppearance.panelFill(for: colorScheme)
+                    .ignoresSafeArea()
+            }
 
             if !onboarding.isCompleted {
                 OnboardingFlow(coordinator: onboarding, store: store)
@@ -87,10 +103,12 @@ struct HubberPopoverView: View {
             } else {
                 normalChrome
                     .transition(.opacity)
+                    .onAppear { tabBarFocused = true }
             }
 
         case .sessionExpired:
             normalChrome
+                .onAppear { tabBarFocused = true }
         }
     }
 
@@ -177,6 +195,7 @@ struct HubberPopoverView: View {
                 .contentShape(Rectangle())
                 .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
                 .help("Refresh pull requests (⌘R)")
+                .accessibilityLabel("Refresh")
 
                 Button {
                     showSettings.toggle()
@@ -190,6 +209,7 @@ struct HubberPopoverView: View {
                 .contentShape(Rectangle())
                 .help("Settings (⌘,)")
                 .keyboardShortcut(",", modifiers: .command)
+                .accessibilityLabel("Settings")
             }
 
             HubberTabBar(
@@ -200,12 +220,13 @@ struct HubberPopoverView: View {
                     mode: store.settings.tabBadgeMode
                 )
             )
+            .focused($tabBarFocused)
         }
         .padding(.horizontal, 14)
         .padding(.top, 13)
         .padding(.bottom, 10)
         .overlay(alignment: .bottom) {
-            HubberDesign.sep.frame(height: 0.5)
+            (contrast == .increased ? HubberDesign.sepStrong : HubberDesign.sep).frame(height: 0.5)
         }
     }
 
@@ -236,7 +257,7 @@ struct HubberPopoverView: View {
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.incoming.isEmpty {
-            AllClearState()
+            AllClearState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
         } else {
             if let error = store.incomingError {
                 ErrorState(
@@ -276,7 +297,7 @@ struct HubberPopoverView: View {
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.outgoing.isEmpty {
-            EmptyOutgoingState()
+            EmptyOutgoingState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
         } else {
             if let error = store.outgoingError {
                 ErrorState(
@@ -293,7 +314,8 @@ struct HubberPopoverView: View {
                         OutgoingReviewRow(
                             review: review,
                             density: store.settings.rowDensity,
-                            isLast: index == store.data.outgoing.count - 1
+                            isLast: index == store.data.outgoing.count - 1,
+                            indicatorStyle: store.settings.statusIndicatorStyle
                         )
                     }
                 )
@@ -313,7 +335,7 @@ struct HubberPopoverView: View {
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.drafts.isEmpty {
-            EmptyDraftsState()
+            EmptyDraftsState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
         } else {
             if let error = store.draftsError {
                 ErrorState(
@@ -330,7 +352,8 @@ struct HubberPopoverView: View {
                         DraftPRRow(
                             draft: draft,
                             density: store.settings.rowDensity,
-                            isLast: index == store.data.drafts.count - 1
+                            isLast: index == store.data.drafts.count - 1,
+                            indicatorStyle: store.settings.statusIndicatorStyle
                         )
                     }
                 )
@@ -369,12 +392,12 @@ struct HubberPopoverView: View {
             .disabled(store.isRefreshingPullRequests)
             .keyboardShortcut("r", modifiers: .command)
         }
-        .font(HubberType.footer)
+        .hubberFont(.footer)
         .foregroundStyle(HubberDesign.text2)
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
         .overlay(alignment: .top) {
-            HubberDesign.sep.frame(height: 0.5)
+            (contrast == .increased ? HubberDesign.sepStrong : HubberDesign.sep).frame(height: 0.5)
         }
     }
 
@@ -413,6 +436,8 @@ private struct ClickableRow<Content: View>: View {
             }
             .buttonStyle(.plain)
             .help("Open pull request")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens the pull request")
         } else {
             content()
         }
@@ -453,6 +478,9 @@ private struct HubberTabBar: View {
                             .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
                     }
                 }
+                .accessibilityLabel(tab.title)
+                .accessibilityValue(AccessibilityText.tabValue(count: counts[tab, default: 0]))
+                .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(2)
@@ -470,7 +498,8 @@ private struct CountBadge: View {
 
     var body: some View {
         Text("\(count)")
-            .font(HubberType.badge)
+            .hubberFont(.badge)
+            .monospacedDigit()
             .foregroundStyle(isActive ? HubberDesign.text : HubberDesign.text2)
             .frame(minWidth: 16)
             .padding(.horizontal, 5)

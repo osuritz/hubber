@@ -40,7 +40,9 @@ final class UNNotificationDispatcher: NotificationDispatching {
     nonisolated func ensureAuthorized() async -> Bool {
         // Fast path: already determined
         let (determined, granted) = await MainActor.run { (authorizationDetermined, authorizationGranted) }
-        if determined { return granted }
+        if determined {
+            return granted
+        }
 
         // No app bundle (xctest / `swift run`): treat UN as unavailable rather than crashing.
         // notificationsDenied stays false — this is an environment limitation, not a user denial.

@@ -5,6 +5,7 @@ import SwiftUI
 struct OnboardingFlow: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @ObservedObject var store: HubberStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -22,6 +23,9 @@ struct OnboardingFlow: View {
             }
         }
         .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: coordinator.currentStep)
+        .animation(
+            AccessibilityGates.animation(.easeInOut(duration: 0.2), reduceMotion: reduceMotion),
+            value: coordinator.currentStep
+        )
     }
 }

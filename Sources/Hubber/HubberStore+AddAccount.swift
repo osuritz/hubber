@@ -13,8 +13,8 @@ extension HubberStore {
     @discardableResult
     func addResolvedAccount(
         id: ConnectionID,
-        token: GitHubStoredToken,
-        user: GitHubAuthenticatedUser
+        token: StoredToken,
+        user: AuthenticatedUser
     ) async throws -> Connection {
         guard !connections.contains(where: { $0.id == id }) else {
             throw AddAccountError.alreadyAdded

@@ -143,7 +143,7 @@ struct GitHubAuthSettingsView: View {
     private func signedInView(login: String) -> some View {
         HStack(spacing: 10) {
             AvatarView(
-                user: GitHubUser(
+                user: CodeHostUser(
                     login: login,
                     initials: initials(for: store.viewerName ?? login),
                     color: avatarColor(for: login),
@@ -155,14 +155,14 @@ struct GitHubAuthSettingsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 if let name = store.viewerName, !name.isEmpty {
                     Text(name)
-                        .font(HubberType.title)
+                        .hubberFont(.title)
                         .foregroundStyle(HubberDesign.text)
                     Text("@\(login)")
-                        .font(HubberType.secondary)
+                        .hubberFont(.secondary)
                         .foregroundStyle(HubberDesign.text2)
                 } else {
                     Text("@\(login)")
-                        .font(HubberType.title)
+                        .hubberFont(.title)
                         .foregroundStyle(HubberDesign.text)
                 }
             }
@@ -197,7 +197,7 @@ struct GitHubAuthSettingsView: View {
 
     /// Deterministic hue from login — mirrors the GitHubProvider avatar color approach.
     private func avatarColor(for login: String) -> Color {
-        let hue = Double(abs(login.hashValue) % 360) / 360.0
+        let hue = Double(login.hashValue.magnitude % 360) / 360.0
         return Color(hue: hue, saturation: 0.55, brightness: 0.70)
     }
 

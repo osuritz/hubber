@@ -1,149 +1,115 @@
 # Hubber
 
-Hubber is a macOS menu-bar prototype for keeping GitHub review work visible at a glance.
+Hubber is a macOS menu-bar app that keeps GitHub and GitLab review work visible at a glance, so you do not have to open a browser to find out what is waiting on you.
 
-It is currently a prototype with mock incoming/outgoing data and a live draft PR proof of concept. The app is focused on validating a native macOS popover experience for three GitHub work streams: incoming reviews, outgoing pull requests, and draft pull requests.
+It shows three streams of work in a native popover:
+
+- **Incoming**: pull requests where your review is requested, with review-SLO timing.
+- **Outgoing**: your open pull requests, with CI status, unresolved review threads, and reviewer state.
+- **Drafts**: your draft pull requests, with CI status and freshness.
+
+Hubber surfaces work and opens it in your browser. It does not show diffs, write reviews, or merge.
+
+## What it does today
+
+- Live data from github.com, GitHub Enterprise Server, and GitLab (gitlab.com or a self-hosted server).
+- Sign-in: GitHub App device flow or a personal access token for github.com; personal access tokens for GitHub Enterprise Server and GitLab.
+- Multiple accounts at once, added under Settings → Accounts, with a first-run onboarding flow.
+- Menu-bar badge and per-tab count badges.
+- Review-SLO timing on incoming reviews, with a configurable threshold.
+- Notifications for new review requests, approvals, requested changes, failed CI, and merged PRs. Each type can be toggled.
+- Settings for the badge, row density, panel width, status indicator style, and open at login.
+- Managed preferences for IT-deployed configuration; see [`docs/enterprise`](docs/enterprise).
+- Opt-in anonymous usage analytics, off by default. See [`PRIVACY.md`](PRIVACY.md).
 
 ## Install
 
-### Download (DMG or zip)
-
-1. Go to the [latest release](https://github.com/osuritz/hubber/releases/latest) and download `Hubber.dmg` or `Hubber.zip`.
-2. Open the DMG and drag **Hubber** to your **Applications** folder (or unzip and move `Hubber.app` to `/Applications`).
-3. **First launch: right-click → Open** (or go to **System Settings → Privacy & Security → "Open Anyway"**).
-   Hubber is ad-hoc-signed but not notarized, so macOS Gatekeeper will warn on the first browser-downloaded launch.
-4. When Hubber asks for notification permission, click **Allow** so review banners can appear.
-
-### One-liner installer (no Gatekeeper warning)
+### Quick install (recommended)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | bash
 ```
 
-The installer downloads the release zip via `curl` (which bypasses Gatekeeper quarantine), strips the quarantine attribute, installs to `/Applications`, and opens the app automatically.
+The [installer](install.sh) downloads `Hubber.zip` from the latest release, verifies its SHA-256 and code signature, installs `Hubber.app` to `/Applications` (replacing any existing copy), and launches it. Run it again to update.
 
-> **Note:** Hubber is ad-hoc-signed, not notarized. Notarization (for a fully seamless download experience) requires a paid Apple Developer account and is planned for a future milestone.
+Hubber is signed with a self-signed certificate and is not notarized. A copy fetched with `curl` is not quarantined, so it opens without a Gatekeeper prompt; that is why this is the recommended path.
 
----
+Options, set as environment variables before `bash`:
 
-## Status
+| Variable | Effect |
+| --- | --- |
+| `HUBBER_VERSION=0.1.2` | Install a specific release instead of the latest. |
+| `HUBBER_INSTALL_DIR=~/Applications` | Install somewhere other than `/Applications`. |
+| `HUBBER_NO_OPEN=1` | Do not launch Hubber after installing. |
 
-Prototype. Hubber runs as a Swift Package Manager executable and is not packaged as a signed `.app` bundle yet.
+For example: `curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | HUBBER_VERSION=0.1.2 bash`
 
-## Features
+When Hubber asks for notification permission, click **Allow** so review banners can appear.
 
-- Menu-bar status item with an unread-style review count
-- Native AppKit `NSStatusItem` and `NSPopover` shell
-- SwiftUI popover UI with three tabs: `Incoming`, `Outgoing`, and `Drafts`
-- Count badges beside each tab label
-- GitHub App Device Flow sign-in from settings
-- Debug token storage in an app-local file, with Keychain storage reserved for release builds
-- Live draft PR refresh on sign-in, every 5 minutes, and from the header refresh button
-- Incoming review rows with review SLO status pills
-- Outgoing PR rows with CI status, unresolved comments, and reviewer state
-- Draft PR rows with CI status and freshness
-- Settings view for review SLO display and row density
-- Developer panel with recent auth and refresh logs
-- Right-click status item menu with `Sign Out` and `Quit`
+### Manual download (DMG or zip)
 
-## Requirements
+1. Go to the [latest release](https://github.com/osuritz/hubber/releases/latest) and download `Hubber.dmg` or `Hubber.zip`.
+2. Open the DMG and drag **Hubber** to your **Applications** folder (or unzip and move `Hubber.app` to `/Applications`).
+3. Try to open Hubber once. macOS will block it, because a browser-downloaded copy is quarantined. Then go to **System Settings → Privacy & Security** and click **Open Anyway**. Alternatively, remove the quarantine attribute:
 
-- macOS
-- Xcode 26 or newer
-- Swift 6 or newer
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Hubber.app
+   ```
 
-## Build
+### Updates
+
+Release builds update themselves with [Sparkle](https://sparkle-project.org): Hubber checks the [appcast](https://osuritz.github.io/hubber/appcast.xml) and offers new versions in place, and **Check for Updates…** in the status-item menu checks on demand. Updates are verified against an EdDSA key embedded in the app.
+
+Releases up to v0.1.2 have no update feed. To move off one of those, re-run the installer once. Local builds (`make app`) carry no feed unless `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY` are set.
+
+## Signing in and access problems
+
+For token setup and required permissions for github.com, GitHub Enterprise Server, and GitLab, and for what to do when a token is rejected, see [`docs/token-permissions.md`](docs/token-permissions.md).
+
+If you are signed in but the lists are empty, or an organization's pull requests are missing, the cause is almost always access rather than a bug: see [Not seeing your organization's pull requests?](docs/token-permissions.md#not-seeing-your-organizations-pull-requests).
+
+## Build from source
+
+Requires macOS 14 or newer, Xcode 26 or newer, and Swift 6 or newer.
 
 ```sh
 swift build
+swift run Hubber   # runs the menu-bar app; the terminal stays attached until you quit
+make app           # universal, ad-hoc-signed Hubber.app in the project root
+make dist          # Hubber.app plus dist/Hubber.dmg and dist/Hubber.zip
+make ci            # build, tests, SwiftLint, SwiftFormat check (what CI runs)
 ```
 
-## Run
+Debug builds store tokens in a file under `~/Library/Application Support/Hubber/` instead of the Keychain; release builds use the Keychain. See [`AGENTS.md`](AGENTS.md) for the repository layout and tooling.
 
-```sh
-swift run Hubber
-```
+## Using Hubber
 
-`swift run Hubber` starts the menu-bar accessory app and keeps the Terminal command running until Hubber quits.
-
-## Using The Prototype
-
-- Left-click the Hubber menu-bar item to open or close the popover.
-- Right-click the Hubber menu-bar item to open the app menu.
-- Choose `Sign Out` from the right-click menu to clear the saved GitHub token.
-- Choose `Quit` from the right-click menu to stop the app.
-- Use the gear button in the popover to adjust mock SLO display and row density settings.
-- Use the refresh button beside the gear to fetch draft PRs immediately after signing in.
-
-## Project Layout
-
-```text
-Package.swift
-Sources/
-  Hubber/
-    main.swift
-    GitHubAuth.swift
-    GitHubAppConfig.swift
-    GitHubPullRequestService.swift
-    HubberPopoverView.swift
-    Models.swift
-    VisualEffectView.swift
-```
-
-- `Package.swift`: Swift Package Manager executable target definition
-- `Sources/Hubber/main.swift`: AppKit app delegate, menu-bar status item, popover, and quit menu wiring
-- `Sources/Hubber/GitHubAuth.swift`: GitHub App Device Flow client, token refresh, development token storage, release Keychain token storage, and auth view state
-- `Sources/Hubber/GitHubAppConfig.swift`: non-secret GitHub App metadata used by the Device Flow integration
-- `Sources/Hubber/GitHubPullRequestService.swift`: GitHub GraphQL client for draft pull request data
-- `Sources/Hubber/HubberPopoverView.swift`: SwiftUI popover UI, tabs, rows, settings, SLO pills, CI badges, and avatar views
-- `Sources/Hubber/Models.swift`: mock GitHub data and lightweight data models
-- `Sources/Hubber/VisualEffectView.swift`: SwiftUI wrapper around `NSVisualEffectView`
-- `AGENTS.md`: short guide for coding agents working in this repository
-
-## macOS App Notes
-
-Hubber deliberately starts as a small SPM executable so the product shape can move quickly. Before it is treated as a distributable macOS app, the project should grow into a bundled app target with:
-
-- `Info.plist` app metadata
-- `LSUIElement` menu-bar-only behavior
-- App icon and asset catalog
-- Code signing and notarization
-- Release/archive workflow
-- Login item support, if the app should launch at startup
-
-## GitHub Integration
-
-GitHub App Device Flow sign-in is implemented. After sign-in, Hubber fetches the viewer's open draft PRs with GitHub GraphQL immediately, then every 5 minutes. Incoming reviews and outgoing PRs still use static mock data in `Sources/Hubber/Models.swift`.
-
-The draft PR query only sees repositories that the Hubber GitHub App token can access. If a repository is visible in the browser but missing in Hubber, install or authorize the GitHub App for that repository/account and sign in again.
-
-The GitHub App Client ID is configured in `Sources/Hubber/GitHubAppConfig.swift`. Do not store a client secret in this desktop app.
-
-Debug builds store the GitHub token in `~/Library/Application Support/Hubber/github-auth-dev.json` to avoid repeated Keychain prompts while iterating on the unsigned SwiftPM executable. Release builds use Keychain storage instead.
-
-Expected future data sources include:
-
-- Pull requests where the user is requested as a reviewer
-- Pull requests authored by the user
-- Draft pull requests authored by the user
-- CI/check-run status
-- Outstanding review comments or unresolved review threads
-- Review SLO timestamps
+- Left-click the menu-bar item to open or close the popover.
+- Right-click it for a menu with Sign Out and Quit.
+- Use the gear button for settings and the refresh button to fetch immediately.
 
 ## Troubleshooting
 
-If `swift run Hubber` appears to hang, that is expected: the process is running the menu-bar app event loop. Quit Hubber from the right-click menu or stop the process from Terminal.
+If `swift run Hubber` appears to hang, that is expected: the process is running the menu-bar event loop.
 
 If the status item is hard to find, look on the right side of the macOS menu bar for the Hubber symbol and count.
 
-## Roadmap
+### Logs and crash reports
 
-- Replace remaining mock data with GitHub API data
-- Package Hubber as a real `.app`
-- Add app icon and release metadata
-- Persist settings
-- Add keyboard shortcuts that match the footer hints
-- Derive the menu-bar badge from live review counts
+Hubber keeps its own logs in `~/Library/Logs/Hubber/` (also listed in Console.app under *Log Reports*):
+
+- `hubber.log` and `hubber.previous.log`: the current and previous session's activity log.
+- `crash-<date>.log`: written on the launch after a crash, with the error message, the backtrace, and the last log lines before it. Attach this file when reporting a crash.
+
+macOS's own report (`~/Library/Logs/DiagnosticReports/Hubber-*.ips`) is still produced, but it does not include the Swift error message. To check that crash capture works on a build, run `open Hubber.app --env HUBBER_CRASH_SELFTEST=1`, then launch Hubber again normally. Logging can be turned off under Settings → Privacy ("Diagnostic logging").
+
+## Not done yet
+
+- Notarization, which needs a paid Apple Developer account. Release builds are signed with a self-signed certificate; local builds are ad-hoc-signed.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Contributions require agreeing to the CLA described there.
 
 ## License
 

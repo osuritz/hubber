@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history + persisted credentials so the appcast step can push to main.
           fetch-depth: 0
@@ -41,6 +41,10 @@ jobs:
           P12_B64: ${{ secrets.HUBBER_SIGNING_P12 }}
           P12_PASSWORD: ${{ secrets.HUBBER_SIGNING_P12_PASSWORD }}
         run: |
+          if [[ -z "$P12_B64" || -z "$P12_PASSWORD" ]]; then
+            echo "::error::Secrets HUBBER_SIGNING_P12 / HUBBER_SIGNING_P12_PASSWORD are not set (see docs/runbooks/sparkle-auto-update.md §3)."
+            exit 1
+          fi
           KEYCHAIN="$RUNNER_TEMP/hubber.keychain-db"
           KEYCHAIN_PW="$(openssl rand -base64 24)"
           security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
@@ -66,6 +70,14 @@ jobs:
           echo "Building release version $VERSION"
           make dist VERSION="$VERSION"
 
+      # install.sh verifies Hubber.zip against Hubber.zip.sha256 from the same release.
+      - name: Write checksums
+        working-directory: dist
+        run: |
+          shasum -a 256 Hubber.zip > Hubber.zip.sha256
+          shasum -a 256 Hubber.dmg > Hubber.dmg.sha256
+          cat Hubber.zip.sha256 Hubber.dmg.sha256
+
       - name: List artifacts
         run: ls -lh dist/
 
@@ -76,6 +88,8 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             dist/Hubber.dmg \
             dist/Hubber.zip \
+            dist/Hubber.zip.sha256 \
+            dist/Hubber.dmg.sha256 \
             --generate-notes \
             --title "Hubber $GITHUB_REF_NAME"
 

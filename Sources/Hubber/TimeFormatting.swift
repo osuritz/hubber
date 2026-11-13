@@ -2,8 +2,12 @@ import Foundation
 
 func elapsedText(hours: Double) -> String {
     let minutes = Int((hours * 60).rounded(.down))
-    if minutes < 1 { return "just now" }
-    if minutes < 60 { return "\(minutes)m ago" }
+    if minutes < 1 {
+        return "just now"
+    }
+    if minutes < 60 {
+        return "\(minutes)m ago"
+    }
     if minutes < 24 * 60 {
         let h = minutes / 60
         let m = minutes % 60
@@ -52,7 +56,9 @@ private func compactDurationText(minutes: Int, suffix: String) -> String {
 }
 
 private func detailedHoursText(minutes: Int, suffix: String) -> String {
-    if minutes < 60 { return "\(minutes)m \(suffix)" }
+    if minutes < 60 {
+        return "\(minutes)m \(suffix)"
+    }
     let h = minutes / 60
     let m = minutes % 60
     return m > 0 ? "\(h) h \(m)m \(suffix)" : "\(h) h \(suffix)"

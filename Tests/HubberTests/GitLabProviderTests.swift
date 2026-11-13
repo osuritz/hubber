@@ -47,7 +47,7 @@ final class GitLabProviderTests: XCTestCase {
                 accessToken: "bad"
             )
             XCTFail("Expected badCredentials")
-        } catch GitHubAuthError.badCredentials {
+        } catch CodeHostAuthError.badCredentials {
             // expected
         }
     }
@@ -65,7 +65,7 @@ final class GitLabProviderTests: XCTestCase {
                 accessToken: "tok"
             )
             XCTFail("Expected github error")
-        } catch let GitHubAuthError.github(message) {
+        } catch let CodeHostAuthError.providerMessage(message) {
             XCTAssertEqual(message, "x")
         }
     }
@@ -199,6 +199,9 @@ final class GitLabProviderTests: XCTestCase {
         XCTAssertEqual(premium.ciDetail, "FAILED")
         XCTAssertTrue(premium.mergeable)
         XCTAssertLessThanOrEqual(premium.updatedAgoHours, 24 * 370)
+        XCTAssertEqual(premium.additions, 220)
+        XCTAssertEqual(premium.deletions, 47)
+        XCTAssertEqual(premium.files, 8)
     }
 
     func testFetchOutgoingPullRequestsMapsBareNodeWithDefaults() async throws {
@@ -225,6 +228,10 @@ final class GitLabProviderTests: XCTestCase {
         XCTAssertEqual(bare.ciDetail, "no pipeline")
         XCTAssertFalse(bare.mergeable)
         XCTAssertTrue(bare.reviewers.isEmpty)
+        // No diffStatsSummary in the bare node → size defaults to 0.
+        XCTAssertEqual(bare.additions, 0)
+        XCTAssertEqual(bare.deletions, 0)
+        XCTAssertEqual(bare.files, 0)
     }
 
     func testFetchOutgoingPullRequestsMapsReviewerStates() async throws {
@@ -283,6 +290,9 @@ final class GitLabProviderTests: XCTestCase {
         XCTAssertEqual(successDraft.ciDetail, "SUCCESS")
         XCTAssertEqual(successDraft.commits, 6)
         XCTAssertEqual(successDraft.updatedAt, try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-17T08:00:00Z")))
+        XCTAssertEqual(successDraft.additions, 1290)
+        XCTAssertEqual(successDraft.deletions, 12)
+        XCTAssertEqual(successDraft.files, 5)
 
         let noPipelineDraft = try XCTUnwrap(drafts.first(where: { $0.id == "gid://gitlab/MergeRequest/904" }))
         XCTAssertEqual(noPipelineDraft.repo, "namespace/free-project")
@@ -410,6 +420,7 @@ private extension GitLabProviderTests {
                 "draft": false,
                 "project": { "fullPath": "namespace/premium-project" },
                 "commitCount": 3,
+                "diffStatsSummary": { "additions": 220, "deletions": 47, "fileCount": 8 },
                 "approvalsRequired": 2,
                 "approvedBy": {
                   "nodes": [
@@ -449,6 +460,7 @@ private extension GitLabProviderTests {
                 "draft": true,
                 "project": { "fullPath": "namespace/premium-project" },
                 "commitCount": "6",
+                "diffStatsSummary": { "additions": 1290, "deletions": 12, "fileCount": 5 },
                 "approvalsRequired": 1,
                 "resolvableDiscussionsCount": 9,
                 "resolvedDiscussionsCount": 0,

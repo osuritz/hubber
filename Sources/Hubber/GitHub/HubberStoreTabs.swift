@@ -8,12 +8,15 @@ extension Connection {
     /// Returns `(didStop, tabSuccesses)` where `tabSuccesses` indicates which tabs fetched successfully
     /// (used by the notification pipeline to avoid false "merged" events on partial failures).
     func fetchAllTabsIndependently(
-        token: GitHubStoredToken,
+        token: StoredToken,
         login: String
     ) async -> (didStop: Bool, tabSuccesses: TabSuccesses) {
-        let incomingResult = await fetchIncoming(token: token, login: login)
-        let outgoingResult = await fetchOutgoing(token: token, login: login)
-        let draftsResult = await fetchDrafts(token: token)
+        async let incoming = fetchIncoming(token: token, login: login)
+        async let outgoing = fetchOutgoing(token: token, login: login)
+        async let drafts = fetchDrafts(token: token)
+        let incomingResult = await incoming
+        let outgoingResult = await outgoing
+        let draftsResult = await drafts
         let errs = [incomingResult.failureError, outgoingResult.failureError, draftsResult.failureError]
         if errs.compactMap(\.self).contains(where: { $0 is CancellationError }) {
             appendDeveloperLog("Pull request refresh cancelled")
@@ -41,7 +44,7 @@ extension Connection {
     }
 
     private func fetchIncoming(
-        token: GitHubStoredToken,
+        token: StoredToken,
         login: String
     ) async -> Result<[IncomingReview], Error> {
         await catchingResult {
@@ -54,7 +57,7 @@ extension Connection {
     }
 
     private func fetchOutgoing(
-        token: GitHubStoredToken,
+        token: StoredToken,
         login: String
     ) async -> Result<[OutgoingReview], Error> {
         await catchingResult {
@@ -66,7 +69,7 @@ extension Connection {
         }
     }
 
-    private func fetchDrafts(token: GitHubStoredToken) async -> Result<[DraftReview], Error> {
+    private func fetchDrafts(token: StoredToken) async -> Result<[DraftReview], Error> {
         await catchingResult {
             try await self.provider.fetchDraftPullRequests(accessToken: token.accessToken, limit: 100)
         }
@@ -83,7 +86,9 @@ extension Connection {
             setTabError(nil, for: tab)
             return (value, nil)
         case let .failure(error):
-            if isGlobalError(error) { return (existing, error) }
+            if isGlobalError(error) {
+                return (existing, error)
+            }
             setTabError(error.localizedDescription, for: tab)
             appendDeveloperLog("\(label) tab refresh failed: \(error.localizedDescription)")
             return (existing, nil)
@@ -91,7 +96,9 @@ extension Connection {
     }
 
     private func isGlobalError(_ error: Error) -> Bool {
-        if case GitHubAuthError.rateLimited = error { return true }
+        if case CodeHostAuthError.rateLimited = error {
+            return true
+        }
         return Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) != nil
     }
 

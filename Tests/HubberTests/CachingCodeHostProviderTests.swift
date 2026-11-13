@@ -38,7 +38,9 @@ actor SpyProvider: CodeHostProvider {
         mode: IncomingReviewMode
     ) async throws -> [IncomingReview] {
         incomingCallCount += 1
-        if let error = nextError { throw error }
+        if let error = nextError {
+            throw error
+        }
         return [
             IncomingReview(
                 id: "IR-\(viewerLogin)-\(mode.rawValue)",
@@ -46,7 +48,7 @@ actor SpyProvider: CodeHostProvider {
                 number: 1,
                 title: "Incoming PR",
                 url: nil,
-                author: GitHubUser(login: "alice", initials: "AL", color: .white),
+                author: CodeHostUser(login: "alice", initials: "AL", color: .white),
                 sloClockStart: Date(),
                 additions: 0,
                 deletions: 0,
@@ -61,7 +63,9 @@ actor SpyProvider: CodeHostProvider {
         unresolvedMode: UnresolvedThreadMode
     ) async throws -> [OutgoingReview] {
         outgoingCallCount += 1
-        if let error = nextError { throw error }
+        if let error = nextError {
+            throw error
+        }
         return [
             OutgoingReview(
                 id: "OR-\(viewerLogin)-\(unresolvedMode.rawValue)",
@@ -86,7 +90,9 @@ actor SpyProvider: CodeHostProvider {
         limit: Int
     ) async throws -> [DraftReview] {
         draftsCallCount += 1
-        if let error = nextError { throw error }
+        if let error = nextError {
+            throw error
+        }
         return [
             DraftReview(
                 id: "DR-\(limit)",
@@ -199,7 +205,7 @@ final class CachingCodeHostProviderTests: XCTestCase {
         )
 
         // First call: inject error
-        await spy.setNextError(GitHubAuthError.invalidResponse)
+        await spy.setNextError(CodeHostAuthError.invalidResponse)
         do {
             _ = try await sut.fetchIncomingReviews(
                 accessToken: "tok",

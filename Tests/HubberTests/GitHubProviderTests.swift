@@ -90,7 +90,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "bad", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected badCredentials")
-        } catch GitHubAuthError.badCredentials {}
+        } catch CodeHostAuthError.badCredentials {}
     }
 
     // MARK: - Helpers (reused across task tests — keep in sync)
@@ -207,6 +207,26 @@ final class GitHubProviderTests: XCTestCase {
         XCTAssertEqual(prs[0].requiredApprovals, 1)
         XCTAssertEqual(prs[0].reviewers.count, 1)
         XCTAssertEqual(prs[0].reviewers[0].state, .approved)
+        XCTAssertEqual(prs[0].additions, 1240)
+        XCTAssertEqual(prs[0].deletions, 88)
+        XCTAssertEqual(prs[0].files, 12)
+    }
+
+    func testFetchDraftPullRequestsMapsDiffStats() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.draftPullRequestsResponse)
+        }
+
+        let drafts = try await provider.fetchDraftPullRequests(accessToken: "tok", limit: 100)
+
+        XCTAssertEqual(drafts.count, 1)
+        XCTAssertEqual(drafts[0].number, 9840)
+        XCTAssertEqual(drafts[0].title, "Ledger rewrite spike")
+        XCTAssertEqual(drafts[0].repo, "acme/api")
+        XCTAssertEqual(drafts[0].commits, 6)
+        XCTAssertEqual(drafts[0].additions, 2480)
+        XCTAssertEqual(drafts[0].deletions, 1903)
+        XCTAssertEqual(drafts[0].files, 37)
     }
 
     func testFetchOutgoingPullRequestsCountsUnresolvedThreadsForAllOpenMode() async throws {
@@ -297,6 +317,9 @@ final class GitHubProviderTests: XCTestCase {
               "isDraft": false,
               "updatedAt": "2026-06-15T09:00:00Z",
               "mergeable": "MERGEABLE",
+              "additions": 1240,
+              "deletions": 88,
+              "changedFiles": 12,
               "repository": { "nameWithOwner": "acme/api" },
               "commits": {
                 "nodes": [{
@@ -318,6 +341,30 @@ final class GitHubProviderTests: XCTestCase {
                   "state": "APPROVED"
                 }]
               }
+            }]
+          }
+        }
+      }
+    }
+    """.utf8)
+
+    static let draftPullRequestsResponse = Data("""
+    {
+      "data": {
+        "viewer": {
+          "pullRequests": {
+            "nodes": [{
+              "id": "PR_9840",
+              "number": 9840,
+              "title": "Ledger rewrite spike",
+              "isDraft": true,
+              "url": "https://github.com/acme/api/pull/9840",
+              "updatedAt": "2026-06-15T09:00:00Z",
+              "additions": 2480,
+              "deletions": 1903,
+              "changedFiles": 37,
+              "repository": { "nameWithOwner": "acme/api" },
+              "commits": { "totalCount": 6 }
             }]
           }
         }
@@ -397,7 +444,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertEqual(retryAfter, 30)
         }
     }
@@ -417,7 +464,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertEqual(retryAfter, 60)
         }
     }
@@ -429,8 +476,8 @@ final class GitHubProviderTests: XCTestCase {
 
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
-            XCTFail("Expected github error")
-        } catch GitHubAuthError.github {
+            XCTFail("Expected providerMessage error")
+        } catch CodeHostAuthError.providerMessage {
             // expected
         }
     }
@@ -443,7 +490,7 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertNil(retryAfter)
         }
     }
@@ -456,9 +503,30 @@ final class GitHubProviderTests: XCTestCase {
         do {
             _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
             XCTFail("Expected rateLimited")
-        } catch let GitHubAuthError.rateLimited(retryAfter) {
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertNil(retryAfter, "Non-numeric Retry-After must yield nil retryAfter")
         }
+    }
+
+    /// `Retry-After` is server-controlled: "inf"/"nan" parse as doubles and would trap in the
+    /// `Int(_:)` conversions that format the back-off, so they must never get through.
+    func testRetryAfterHeaderRejectsNonFiniteAndNegativeValues() {
+        for header in ["inf", "-inf", "infinity", "nan", "-5", "1e400"] {
+            XCTAssertEqual(
+                CodeHostAuthError.rateLimited(retryAfterHeader: header),
+                .rateLimited(retryAfter: nil),
+                "Retry-After: \(header)"
+            )
+        }
+        XCTAssertEqual(CodeHostAuthError.rateLimited(retryAfterHeader: nil), .rateLimited(retryAfter: nil))
+    }
+
+    func testRetryAfterHeaderAcceptsSecondsAndCapsHugeValues() {
+        XCTAssertEqual(CodeHostAuthError.rateLimited(retryAfterHeader: " 30 "), .rateLimited(retryAfter: 30))
+        let capped = CodeHostAuthError.rateLimited(retryAfterHeader: "1e300")
+        XCTAssertEqual(capped, .rateLimited(retryAfter: CodeHostAuthError.maxRetryAfter))
+        // The message formats the delay through Int(_:) — must not trap for any accepted value.
+        XCTAssertEqual(capped.errorDescription, "Rate limit reached. Retry in 1440m.")
     }
 }
 

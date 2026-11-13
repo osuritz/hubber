@@ -51,7 +51,9 @@ extension NSColor {
 
         // Handle #RRGGBB or #RRGGBBAA
         var clean = hex
-        if clean.hasPrefix("#") { clean = String(clean.dropFirst()) }
+        if clean.hasPrefix("#") {
+            clean = String(clean.dropFirst())
+        }
         if clean.count == 3 {
             clean = String(clean.flatMap { c in [c, c] })
         }
@@ -95,7 +97,7 @@ enum HubberDesign {
     // MARK: SLO Tokens
 
     static let sloGreen = SLOTokenGroup(
-        fg: Color(light: "#248A3D", dark: "#30D158"),
+        fg: Color(light: "#1F7935", dark: "#30D158"), // a11y: light #248A3D→#1F7935 (3.69→4.59:1 on green bg)
         bg: Color(light: "rgba(52,199,89,0.13)", dark: "rgba(48,209,88,0.16)"),
         border: Color(light: "rgba(52,199,89,0.30)", dark: "rgba(48,209,88,0.34)")
     )
@@ -107,7 +109,10 @@ enum HubberDesign {
     )
 
     static let sloRed = SLOTokenGroup(
-        fg: Color(light: "#D70015", dark: "#FF6961"),
+        fg: Color(
+            light: "#CE0014",
+            dark: "#FF7067"
+        ), // a11y: light #D70015→#CE0014 (4.27→4.58:1); dark #FF6961→#FF7067 (4.37→4.55:1 on materialSolid)
         bg: Color(light: "rgba(255,59,48,0.12)", dark: "rgba(255,69,58,0.18)"),
         border: Color(light: "rgba(255,59,48,0.30)", dark: "rgba(255,69,58,0.36)")
     )
@@ -117,6 +122,24 @@ enum HubberDesign {
         case .green: sloGreen
         case .amber: sloAmber
         case .red: sloRed
+        }
+    }
+
+    // MARK: Review Verdict Pill Tokens
+
+    /// Neutral chip — for the "awaiting review" verdict (no reviewer activity yet). Uses the
+    /// secondary-text colour on the standard fill so it reads as a calm, non-signal state.
+    static let neutralChip = SLOTokenGroup(fg: text2, bg: fill, border: sep)
+
+    /// Pill token group for the review-status pill. Reuses the contrast-vetted SLO colour
+    /// groups (green/amber/red) plus the neutral chip, so the review axis shares the panel's
+    /// established, AA-tuned palette rather than introducing new colours.
+    static func reviewVerdictTokens(for verdict: ReviewVerdict) -> SLOTokenGroup {
+        switch verdict {
+        case .approved: sloGreen
+        case .changesRequested: sloRed
+        case .inReview: sloAmber
+        case .awaitingReview: neutralChip
         }
     }
 
@@ -157,6 +180,17 @@ enum HubberDesign {
         }
     }
 
+    // MARK: Diff Size (PR additions / deletions)
+
+    /// Rendered as 11pt text directly on the panel material, so both diff colors
+    /// must clear AA normal-text contrast (4.5:1) on materialSolid — see ContrastTests.
+    /// Lines added — darker green than the CI glyph so it's legible as text.
+    /// a11y: light #248A3D→#1F7935 (4.07→4.6:1 on materialSolid).
+    static let diffAdded = Color(light: "#1F7935", dark: "#30D158")
+    /// Lines removed — the text-grade red shared with the SLO-breach token.
+    /// a11y: light #D70015→#CE0014 (4.27→4.58:1); dark #FF6961→#FF7067 (4.37→4.55:1).
+    static let diffRemoved = Color(light: "#CE0014", dark: "#FF7067")
+
     // MARK: System Accent / Error
 
     static let accent = Color(light: "#007AFF", dark: "#0A84FF")
@@ -175,7 +209,10 @@ enum HubberDesign {
     // MARK: Text
 
     static let text = Color(light: "rgba(0,0,0,0.85)", dark: "rgba(255,255,255,0.92)")
-    static let text2 = Color(light: "rgba(60,60,67,0.56)", dark: "rgba(235,235,245,0.58)")
+    static let text2 = Color(
+        light: "rgba(60,60,67,0.72)",
+        dark: "rgba(235,235,245,0.58)"
+    ) // a11y: light alpha 0.56→0.72 (3.03→4.56:1 on materialSolid)
     static let text3 = Color(light: "rgba(60,60,67,0.32)", dark: "rgba(235,235,245,0.32)")
 
     // MARK: Lines + Fills

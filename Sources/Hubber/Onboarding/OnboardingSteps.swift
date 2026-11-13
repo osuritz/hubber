@@ -29,6 +29,7 @@ struct OnboardingScaffold<Content: View>: View {
                     .frame(width: i == stepIndex ? 18 : 6, height: 6)
             }
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Step \(stepIndex + 1) of \(stepCount)")
     }
 }
@@ -38,6 +39,7 @@ struct OnboardingScaffold<Content: View>: View {
 struct OnboardingWelcomeStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var primaryFocused: Bool
 
     var body: some View {
         OnboardingScaffold(stepIndex: 0, stepCount: OnboardingCoordinator.Step.allCases.count) {
@@ -47,6 +49,7 @@ struct OnboardingWelcomeStep: View {
                     .font(.system(size: 19, weight: .semibold))
                     .tracking(-0.4)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
                 Text("Keep an eye on your PR reviews, CI, and drafts — right from the menu bar. Let's get you set up.")
                     .font(.system(size: 12.5))
@@ -65,8 +68,10 @@ struct OnboardingWelcomeStep: View {
                 }
                 .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
                 .frame(maxWidth: 264)
+                .focused($primaryFocused)
             }
         }
+        .onAppear { primaryFocused = true }
     }
 
     /// The app's own icon — the canonical "Welcome to <App>" mark. Falls back to the brand
@@ -189,6 +194,7 @@ struct OnboardingConsentStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var primaryFocused: Bool
 
     /// When MDM forces analyticsEnabled, the choice is not the user's to make — show the
     /// managed state and let them continue (the gate already reflects the forced value).
@@ -208,6 +214,7 @@ struct OnboardingConsentStep: View {
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
 
                 Text(
@@ -244,6 +251,11 @@ struct OnboardingConsentStep: View {
                 .padding(.top, 14)
             }
         }
+        .onAppear {
+            if !isManaged {
+                primaryFocused = true
+            }
+        }
     }
 
     private var choiceButtons: some View {
@@ -260,6 +272,7 @@ struct OnboardingConsentStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
 
             OnboardingSecondaryButton(title: "Not now") {
                 store.settings.analyticsEnabled = false
@@ -277,6 +290,7 @@ struct OnboardingConnectStep: View {
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var showingAdd = false
+    @FocusState private var primaryFocused: Bool
 
     private var isRestricted: Bool {
         !store.settings.providerAccessPolicy.canConnectGitHubDotCom
@@ -294,10 +308,16 @@ struct OnboardingConnectStep: View {
             if case .signedIn = store.authState {
                 coordinator.skipConnectIfAlreadyConnected(true)
             }
+            // Only set default focus when showing the connect prompt, not the device-code screen.
+            guard case .waitingForUser = store.authState else { primaryFocused = true
+                return
+            }
         }
         .onChange(of: store.authState) { _, newState in
             guard coordinator.currentStep == .connect else { return }
-            if case .signedIn = newState { coordinator.advance() }
+            if case .signedIn = newState {
+                coordinator.advance()
+            }
         }
         .sheet(isPresented: $showingAdd) { addAccountSheet }
     }
@@ -323,6 +343,7 @@ struct OnboardingConnectStep: View {
                 .font(.system(size: 17, weight: .semibold))
                 .tracking(-0.3)
                 .foregroundStyle(HubberDesign.text)
+                .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, 8)
             Text("Sign in with GitHub to start seeing the PRs waiting on you. Hubber only requests read-only access.")
                 .font(.system(size: 12.5))
@@ -348,6 +369,7 @@ struct OnboardingConnectStep: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
                 .foregroundStyle(HubberDesign.text2)
+                .accessibilityHint("Opens the add-account form")
                 .padding(.top, 12)
         }
     }
@@ -367,6 +389,7 @@ struct OnboardingConnectStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
             .disabled(isRestricted)
             .opacity(isRestricted ? 0.45 : 1)
 
@@ -403,6 +426,7 @@ struct OnboardingNotificationsStep: View {
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var requesting = false
+    @FocusState private var primaryFocused: Bool
 
     var body: some View {
         OnboardingScaffold(stepIndex: 3, stepCount: OnboardingCoordinator.Step.allCases.count) {
@@ -415,6 +439,7 @@ struct OnboardingNotificationsStep: View {
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
                 Text(
                     "Get a heads-up the moment a review is requested from you. "
@@ -435,6 +460,7 @@ struct OnboardingNotificationsStep: View {
                 }
             }
         }
+        .onAppear { primaryFocused = true }
     }
 
     private var choiceButtons: some View {
@@ -455,6 +481,7 @@ struct OnboardingNotificationsStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
             .disabled(requesting)
 
             OnboardingSecondaryButton(title: "Not now") {
@@ -482,6 +509,7 @@ struct OnboardingNotificationsStep: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .frame(maxWidth: 264)
+            .focused($primaryFocused)
         }
     }
 }
@@ -492,6 +520,7 @@ struct OnboardingLaunchAtLoginStep: View {
     @ObservedObject var coordinator: OnboardingCoordinator
     @ObservedObject var store: HubberStore
     @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var primaryFocused: Bool
 
     /// When MDM forces launchAtLogin, the user can't change it — show the managed state and
     /// let them continue (reconcileLaunchAtLogin already applied the forced value at launch).
@@ -510,6 +539,7 @@ struct OnboardingLaunchAtLoginStep: View {
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(HubberDesign.text)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.bottom, 8)
                 Text(
                     "Hubber works best running quietly in your menu bar. Open it automatically "
@@ -545,12 +575,18 @@ struct OnboardingLaunchAtLoginStep: View {
                         }
                         .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
                         .frame(maxWidth: 264)
+                        .focused($primaryFocused)
 
                         OnboardingSecondaryButton(title: "Not now") {
                             coordinator.advance()
                         }
                     }
                 }
+            }
+        }
+        .onAppear {
+            if !isManaged {
+                primaryFocused = true
             }
         }
     }

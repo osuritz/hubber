@@ -6,11 +6,15 @@ enum AccountHeaderLabel {
     static func text(ids: [ConnectionID], hidden: Set<ConnectionID>) -> String {
         let total = ids.count
         let visible = ids.filter { !hidden.contains($0) }
-        if total == 0 { return "All accounts" }
+        if total == 0 {
+            return "All accounts"
+        }
         if visible.count == 1, let only = visible.first {
             return "\(only.providerDisplayName) · @\(only.login)"
         }
-        if visible.count == total { return "All accounts" }
+        if visible.count == total {
+            return "All accounts"
+        }
         return "\(visible.count) of \(total) accounts"
     }
 }

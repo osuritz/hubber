@@ -4,10 +4,10 @@ import XCTest
 
 // MARK: - Spy token store
 
-/// A spy `GitHubTokenStoring` that loads a pre-configured token and records whether
+/// A spy `TokenStoring` that loads a pre-configured token and records whether
 /// `delete()` was ever called. All methods are safe to call from any thread.
-final class SpyTokenStore: GitHubTokenStoring, @unchecked Sendable {
-    private let storedToken: GitHubStoredToken?
+final class SpyTokenStore: TokenStoring, @unchecked Sendable {
+    private let storedToken: StoredToken?
     private let lock = NSLock()
     private var _deleteCallCount = 0
 
@@ -15,15 +15,15 @@ final class SpyTokenStore: GitHubTokenStoring, @unchecked Sendable {
         lock.withLock { _deleteCallCount }
     }
 
-    init(token: GitHubStoredToken?) {
+    init(token: StoredToken?) {
         storedToken = token
     }
 
-    func load() throws -> GitHubStoredToken? {
+    func load() throws -> StoredToken? {
         storedToken
     }
 
-    func save(_ token: GitHubStoredToken) throws {
+    func save(_ token: StoredToken) throws {
         // no-op: the test does not exercise save
     }
 
@@ -73,8 +73,8 @@ final class HubberStoreRestoreSessionTests: XCTestCase {
     /// Token with a fresh access token (no refresh needed) and a known login.
     /// `hasFreshAccessToken` is true when `accessTokenExpiresAt` is nil, so
     /// restoreSession skips refresh and goes straight to `fetchAuthenticatedUser`.
-    private func makeTokenWithKnownLogin(_ login: String) -> GitHubStoredToken {
-        GitHubStoredToken(
+    private func makeTokenWithKnownLogin(_ login: String) -> StoredToken {
+        StoredToken(
             accessToken: "fake-access-token",
             accessTokenExpiresAt: nil,
             refreshToken: nil,

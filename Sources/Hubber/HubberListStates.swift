@@ -4,19 +4,27 @@ import SwiftUI
 
 /// "All clear" — no reviews waiting. Green check icon + encouraging copy.
 struct AllClearState: View {
+    var showsAccessHint = false
     var title = "All clear"
     var message = "No reviews waiting on you. Enjoy the deep work."
 
     var body: some View {
         VStack(spacing: 10) {
-            // Green check circle (non-color cue: checkmark icon + green fill)
+            // Green check circle (non-color cue: checkmark icon + green fill).
+            // Fill/border are strengthened past the shared sloGreen tokens and the disc carries a
+            // soft shadow: as a large hero element on the Tahoe Liquid Glass background it needs
+            // more presence than the inline SLO pills do, or it washes out against the light glass.
             ZStack {
                 Circle()
-                    .fill(HubberDesign.sloGreen.bg)
+                    .fill(Color(light: "rgba(52,199,89,0.22)", dark: "rgba(48,209,88,0.20)"))
                     .overlay {
-                        Circle().stroke(HubberDesign.sloGreen.border, lineWidth: 0.5)
+                        Circle().stroke(
+                            Color(light: "rgba(52,199,89,0.55)", dark: "rgba(48,209,88,0.50)"),
+                            lineWidth: 1
+                        )
                     }
                     .frame(width: 54, height: 54)
+                    .shadow(color: .black.opacity(0.10), radius: 5, y: 1)
 
                 Image(systemName: "checkmark")
                     .font(.system(size: 22, weight: .bold))
@@ -32,6 +40,10 @@ struct AllClearState: View {
                 .foregroundStyle(HubberDesign.text2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if showsAccessHint {
+                EmptyResultsHintView()
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
@@ -62,7 +74,7 @@ struct ErrorState: View {
 
                 if let lastUpdated {
                     Text(lastUpdated)
-                        .font(HubberType.secondary)
+                        .hubberFont(.secondary)
                         .foregroundStyle(HubberDesign.text2)
                 }
             }
@@ -173,6 +185,8 @@ struct SkeletonRow: View {
 
 /// Empty state for the Drafts tab — "No drafts" with a generic icon.
 struct EmptyDraftsState: View {
+    var showsAccessHint = false
+
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "doc.badge.clock")
@@ -187,6 +201,10 @@ struct EmptyDraftsState: View {
                 .font(.system(size: 12))
                 .foregroundStyle(HubberDesign.text2)
                 .multilineTextAlignment(.center)
+
+            if showsAccessHint {
+                EmptyResultsHintView()
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
@@ -198,6 +216,8 @@ struct EmptyDraftsState: View {
 
 /// Empty state for the Outgoing tab.
 struct EmptyOutgoingState: View {
+    var showsAccessHint = false
+
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "arrow.up.doc")
@@ -212,9 +232,41 @@ struct EmptyOutgoingState: View {
                 .font(.system(size: 12))
                 .foregroundStyle(HubberDesign.text2)
                 .multilineTextAlignment(.center)
+
+            if showsAccessHint {
+                EmptyResultsHintView()
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
         .padding(.vertical, 40)
+    }
+}
+
+// MARK: - EmptyResultsHintView
+
+/// Shown inside the empty states when every list is empty after a successful refresh: the usual cause
+/// is missing organization access (see `EmptyResultsHint`).
+struct EmptyResultsHintView: View {
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("Not seeing your organization's pull requests?")
+                .hubberFont(.secondary)
+                .foregroundStyle(HubberDesign.text2)
+                .multilineTextAlignment(.center)
+
+            Button("Check access") {
+                if let url = EmptyResultsHint.helpURL {
+                    openURL(url)
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(HubberDesign.accent)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Check access to your organization's pull requests")
+        }
+        .padding(.top, 4)
     }
 }

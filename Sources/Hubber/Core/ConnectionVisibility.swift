@@ -16,7 +16,11 @@ struct ConnectionVisibility: Equatable, Codable {
     /// Returns a copy with `id` shown or hidden.
     func setting(_ id: ConnectionID, visible: Bool) -> ConnectionVisibility {
         var next = hidden
-        if visible { next.remove(id) } else { next.insert(id) }
+        if visible {
+            next.remove(id)
+        } else {
+            next.insert(id)
+        }
         return ConnectionVisibility(hidden: next)
     }
 }

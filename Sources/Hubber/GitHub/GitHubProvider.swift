@@ -31,7 +31,7 @@ final class GitHubProvider: CodeHostProvider {
         guard
             let search = payload["search"] as? [String: Any],
             let nodes = search["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap { node in
             Self.parseIncomingReview(node: node, viewerLogin: viewerLogin)
@@ -61,7 +61,7 @@ final class GitHubProvider: CodeHostProvider {
             viewerLogin: viewerLogin
         )
 
-        let author = GitHubUser(
+        let author = CodeHostUser(
             login: authorLogin,
             initials: String(authorLogin.prefix(2)).uppercased(),
             color: colorForLogin(authorLogin),
@@ -124,7 +124,9 @@ final class GitHubProvider: CodeHostProvider {
         // Accept explicit user request or team request (no login field on Team).
         if login == viewerLogin || login == nil {
             if let prev = current {
-                if date < prev { current = date }
+                if date < prev {
+                    current = date
+                }
             } else {
                 current = date
             }
@@ -141,7 +143,9 @@ final class GitHubProvider: CodeHostProvider {
             let date = iso.date(from: dateStr)
         else { return }
         if let prev = current {
-            if date > prev { current = date }
+            if date > prev {
+                current = date
+            }
         } else {
             current = date
         }
@@ -160,7 +164,7 @@ final class GitHubProvider: CodeHostProvider {
             let viewer = payload["viewer"] as? [String: Any],
             let prs = viewer["pullRequests"] as? [String: Any],
             let nodes = prs["nodes"] as? [[String: Any]]
-        else { throw GitHubAuthError.invalidResponse }
+        else { throw CodeHostAuthError.invalidResponse }
 
         let iso = ISO8601DateFormatter()
         return nodes.compactMap { node -> DraftReview? in
@@ -186,7 +190,10 @@ final class GitHubProvider: CodeHostProvider {
                 ci: .noChecks,
                 ciDetail: "No checks",
                 commits: commits,
-                updatedAt: updatedAt
+                updatedAt: updatedAt,
+                additions: node["additions"] as? Int ?? 0,
+                deletions: node["deletions"] as? Int ?? 0,
+                files: node["changedFiles"] as? Int ?? 0
             )
         }
     }
@@ -202,20 +209,24 @@ final class GitHubProvider: CodeHostProvider {
         request.httpBody = try JSONSerialization.data(withJSONObject: ["query": query, "variables": variables])
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw GitHubAuthError.invalidResponse }
-        if http.statusCode == 401 { throw GitHubAuthError.badCredentials }
+        guard let http = response as? HTTPURLResponse else { throw CodeHostAuthError.invalidResponse }
+        if let note = GraphQLDiagnostics.ssoNote(header: http.value(forHTTPHeaderField: "X-GitHub-SSO")) {
+            CrashReporter.note("GitHub GraphQL: \(note)")
+        }
+        if http.statusCode == 401 {
+            throw CodeHostAuthError.badCredentials
+        }
 
         // Rate-limit detection: 429, or 403 with x-ratelimit-remaining: 0
         let isRateLimitedByHeader =
             http.statusCode == 403 &&
             http.value(forHTTPHeaderField: "x-ratelimit-remaining").flatMap(Int.init) == 0
         if http.statusCode == 429 || isRateLimitedByHeader {
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
-            throw GitHubAuthError.rateLimited(retryAfter: retryAfter)
+            throw CodeHostAuthError.rateLimited(retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            throw GitHubAuthError.github("GitHub returned HTTP \(http.statusCode).")
+            throw CodeHostAuthError.providerMessage("GitHub returned HTTP \(http.statusCode).")
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -224,14 +235,17 @@ final class GitHubProvider: CodeHostProvider {
         // degrade gracefully on null fields (-> "No checks", 0 threads, etc.). Only throw when
         // there is no usable data dict at all.
         if let payload = json["data"] as? [String: Any] {
+            for note in GraphQLDiagnostics.errorNotes(from: json) {
+                CrashReporter.note("GitHub GraphQL partial error: \(note)")
+            }
             return payload
         }
         if
             let errors = json["errors"] as? [[String: Any]],
             let message = errors.first?["message"] as? String {
-            throw GitHubAuthError.github(message)
+            throw CodeHostAuthError.providerMessage(message)
         }
-        throw GitHubAuthError.invalidResponse
+        throw CodeHostAuthError.invalidResponse
     }
 
     // MARK: - Queries
@@ -286,6 +300,9 @@ final class GitHubProvider: CodeHostProvider {
             isDraft
             url
             updatedAt
+            additions
+            deletions
+            changedFiles
             repository { nameWithOwner }
             commits(last: 1) { totalCount }
           }

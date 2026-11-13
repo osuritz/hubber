@@ -16,7 +16,7 @@ struct AddAccountView: View {
     init(
         policy: ProviderAccessPolicy,
         isDuplicate: @escaping (ConnectionID) -> Bool,
-        addAccount: @escaping (ConnectionID, GitHubStoredToken, GitHubAuthenticatedUser) async throws -> Void,
+        addAccount: @escaping (ConnectionID, StoredToken, AuthenticatedUser) async throws -> Void,
         onActiveChange: @escaping (Bool) -> Void,
         onDone: @escaping () -> Void
     ) {
@@ -29,7 +29,6 @@ struct AddAccountView: View {
 
     @State private var serverURL = ""
     @State private var token = ""
-    @State private var usePATForGitHub = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -43,11 +42,13 @@ struct AddAccountView: View {
                 case .picker:
                     providerPicker
                 case let .form(provider):
-                    if provider == .gitHubDotCom, !usePATForGitHub {
+                    if provider == .gitHubDotCom {
                         gitHubDotComStart
                     } else {
                         patForm(provider: provider)
                     }
+                case .gitHubDotComToken:
+                    patForm(provider: .gitHubDotCom)
                 case .authenticating:
                     ProgressView("Connecting...")
                         .frame(maxWidth: .infinity)
@@ -93,7 +94,6 @@ struct AddAccountView: View {
         VStack(spacing: 8) {
             ForEach(AddAccountProvider.allCases) { provider in
                 Button {
-                    usePATForGitHub = false
                     serverURL = provider.defaultServerURL
                     token = ""
                     controller.choose(provider)
@@ -128,13 +128,14 @@ struct AddAccountView: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
 
-            Button("Use a token instead") {
-                usePATForGitHub = true
-                serverURL = AddAccountProvider.gitHubDotCom.defaultServerURL
+            Button("Use a personal access token instead") {
+                token = ""
+                controller.chooseGitHubDotComToken()
             }
             .buttonStyle(.plain)
             .font(.system(size: 12))
             .foregroundStyle(HubberDesign.text2)
+            .accessibilityLabel("Use a personal access token instead")
         }
     }
 
@@ -142,17 +143,18 @@ struct AddAccountView: View {
         VStack(alignment: .leading, spacing: 10) {
             if provider != .gitHubDotCom {
                 Text("Server URL")
-                    .font(HubberType.settingsSub)
+                    .hubberFont(.settingsSub)
                     .foregroundStyle(HubberDesign.text2)
                 TextField("https://...", text: $serverURL)
                     .textFieldStyle(.roundedBorder)
             }
 
             Text("Personal access token")
-                .font(HubberType.settingsSub)
+                .hubberFont(.settingsSub)
                 .foregroundStyle(HubberDesign.text2)
             SecureField("Paste your token", text: $token)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Personal access token")
 
             Link("Create a token", destination: tokenHelpURL(provider))
                 .font(.system(size: 11))
@@ -162,7 +164,7 @@ struct AddAccountView: View {
                 Task {
                     await controller.connectWithToken(
                         provider: provider,
-                        serverURL: serverURL,
+                        serverURL: provider == .gitHubDotCom ? "https://github.com" : serverURL,
                         token: token
                     )
                 }
@@ -174,6 +176,14 @@ struct AddAccountView: View {
             }
             .buttonStyle(SignInButtonStyle(colorScheme: colorScheme))
             .disabled(token.isEmpty || (provider != .gitHubDotCom && serverURL.isEmpty))
+
+            Button("Back") {
+                controller.back()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12))
+            .foregroundStyle(HubberDesign.text2)
+            .accessibilityLabel("Back")
         }
     }
 

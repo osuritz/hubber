@@ -1,0 +1,6 @@
+# Commits that only reformat code; `git blame` skips them.
+# Local use: run `make setup` once per clone.
+# (GitHub's blame view reads this file automatically.)
+
+# style: reformat with SwiftFormat 0.64.1 rules (#127)
+1037e0444ddc91693bac1985dbe95e1d13704d46

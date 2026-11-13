@@ -6,7 +6,7 @@ import XCTest
 
 //
 // Captures whether `startDeviceFlow()` was called, for use in policy-enforcement tests.
-// Throws `GitHubAuthError.deviceFlowDisabled` if actually called (so the Task in
+// Throws `CodeHostAuthError.deviceFlowDisabled` if actually called (so the Task in
 // startSignIn completes quickly rather than hanging). Thread-safe via NSLock.
 
 final class SpyGitHubAuthService: GitHubAuthServicing, @unchecked Sendable {
@@ -21,19 +21,19 @@ final class SpyGitHubAuthService: GitHubAuthServicing, @unchecked Sendable {
         lock.withLock { _startDeviceFlowCallCount += 1 }
         // Simulate an immediate failure so the Task inside startSignIn terminates
         // without blocking the test; the call-count check is what matters.
-        throw GitHubAuthError.deviceFlowDisabled
+        throw CodeHostAuthError.deviceFlowDisabled
     }
 
-    func pollForToken(deviceAuthorization: GitHubDeviceAuthorization) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.authorizationExpired
+    func pollForToken(deviceAuthorization: GitHubDeviceAuthorization) async throws -> StoredToken {
+        throw CodeHostAuthError.authorizationExpired
     }
 
-    func refresh(_ token: GitHubStoredToken) async throws -> GitHubStoredToken {
-        throw GitHubAuthError.missingRefreshToken
+    func refresh(_ token: StoredToken) async throws -> StoredToken {
+        throw CodeHostAuthError.missingRefreshToken
     }
 
-    func fetchAuthenticatedUser(accessToken: String) async throws -> GitHubAuthenticatedUser {
-        throw GitHubAuthError.badCredentials
+    func fetchAuthenticatedUser(accessToken: String) async throws -> AuthenticatedUser {
+        throw CodeHostAuthError.badCredentials
     }
 }
 

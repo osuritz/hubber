@@ -16,8 +16,11 @@ extension Color {
 
 enum HubberAppearance {
     static func panelFill(for colorScheme: ColorScheme) -> Color {
-        // Dark mode relies on the popover material alone; light mode needs a steadier backing for contrast.
-        colorScheme == .dark ? .clear : Color(nsColor: .windowBackgroundColor).opacity(0.78)
+        // Pre-Tahoe fallback only — macOS 26+ uses the system Liquid Glass backing instead, which
+        // earns its own legibility via adaptive shadows/vibrancy (no fill needed). On older systems
+        // light mode floats a light frost over the vibrancy for contrast; dark mode leans on the
+        // material alone.
+        colorScheme == .dark ? .clear : Color.white.opacity(0.25)
     }
 
     static func badgeFill(isActive: Bool, for colorScheme: ColorScheme) -> Color {

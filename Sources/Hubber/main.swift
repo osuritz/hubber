@@ -6,13 +6,18 @@ import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let panelSize = NSSize(width: 420, height: 540)
+    /// Initial allocation size only. The real frame is computed on every open (and on every
+    /// width change) from the width setting + the host screen — see `panelFrame(relativeTo:)`.
+    private static let initialPanelSize = NSSize(width: PanelWidth.normal.points, height: PanelGeometry.minHeight)
     private static let panelCornerRadius = 26.0
     private static let panelGap = 6.0
 
     private var statusItem: NSStatusItem?
+    /// The SwiftUI host for the popover content, retained so the panel's backing can be re-wrapped
+    /// (glass vs. plain) when Reduce Transparency toggles at runtime — see applyPanelBacking().
+    private var panelHostingView: NSView?
     private let panel = HubberMenuPanel(
-        contentRect: NSRect(origin: .zero, size: panelSize),
+        contentRect: NSRect(origin: .zero, size: initialPanelSize),
         styleMask: [.borderless, .nonactivatingPanel],
         backing: .buffered,
         defer: false
@@ -23,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let metricSubscriber = MetricSubscriber()
     private var appActivationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    private var a11yDisplayObserver: NSObjectProtocol?
     private var eventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
     private var pulseTimer: Timer?
@@ -83,8 +89,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         installEditMenu()
 
+        // No fixed size here: the content fills its hosting view, which the panel resizes
+        // (width from the setting, height from the screen). See applyPanelWidth() / panelFrame().
         let contentView = HubberPopoverView(store: store)
-            .frame(width: Self.panelSize.width, height: Self.panelSize.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         configurePanel(with: contentView)
 
@@ -98,11 +106,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
             button.action = #selector(togglePanel(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            button.setAccessibilityLabel("Hubber")
         }
 
         updateStatusItem()
         subscribeToStore()
-        store.restoreAllConnections()
+        configureInitialConnections()
         store.reconcileLaunchAtLogin()
 
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -141,17 +150,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.store.refreshPullRequests()
             }
         }
+
+        a11yDisplayObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                // Reduce Transparency changes which panel backing we use (glass vs. plain); the
+                // status-item glyph can also depend on Increased Contrast.
+                self?.updateStatusItem()
+                self?.applyPanelBacking()
+            }
+        }
+    }
+
+    private func configureInitialConnections() {
+        #if DEBUG
+            if MockMode.shared.isActive {
+                MockMode.shared.apply(MockMode.shared.scenario, to: store)
+            } else {
+                store.restoreAllConnections()
+            }
+        #else
+            store.restoreAllConnections()
+        #endif
     }
 
     // MARK: - Telemetry / crash reporting
 
-    /// Crash/hang diagnostics (MetricKit → local os_log only) are gated here at launch.
-    /// Analytics (TelemetryDeck) is gated LIVE by GatedTelemetrySink, so it is NOT started here.
+    /// Crash/hang diagnostics (MetricKit → local os_log, CrashReporter → ~/Library/Logs/Hubber) are
+    /// gated here at launch. Analytics (TelemetryDeck) is gated LIVE by GatedTelemetrySink, so it is
+    /// NOT started here — which also means the crash event below is dropped unless analytics is on.
     private func startTelemetry() {
-        if store.settings.crashReportingEnabled {
-            MXMetricManager.shared.add(metricSubscriber)
-            metricKitStarted = true
+        guard store.settings.crashReportingEnabled else { return }
+        MXMetricManager.shared.add(metricSubscriber)
+        metricKitStarted = true
+        if let previousCrash = CrashReporter.start() {
+            store.telemetry.crashDetected(previousCrash)
         }
+        CrashReporter.crashIfSelfTestRequested()
     }
 
     // MARK: - Status item badge + animation
@@ -168,6 +206,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.updateStatusItem() }
             .store(in: &cancellables)
+
+        // Live-resize the panel when the width setting changes (slider drag). The async hop
+        // ensures the stored property is updated before applyPanelWidth() reads it.
+        store.settings.$panelWidth
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyPanelWidth() }
+            .store(in: &cancellables)
+    }
+
+    /// Resizes the panel to the current width setting + screen-adaptive height. When the panel
+    /// is visible this re-anchors it under the menu-bar icon. Non-animated so it tracks the
+    /// width slider smoothly.
+    private func applyPanelWidth() {
+        guard let button = statusItem?.button else { return }
+        panel.setFrame(panelFrame(relativeTo: button), display: true, animate: false)
     }
 
     private func updateStatusItem() {
@@ -197,7 +250,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
 
-        if state.isRefreshing {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if state.isRefreshing, AccessibilityGates.pulseEnabled(reduceMotion: reduceMotion) {
             startPulse(on: button)
         } else {
             stopPulse(on: button)
@@ -229,13 +283,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configurePanel(with contentView: some View) {
         let hostingView = NSHostingView(rootView: contentView)
-        hostingView.frame = NSRect(origin: .zero, size: Self.panelSize)
-        hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = Self.panelCornerRadius
-        hostingView.layer?.cornerCurve = .continuous
-        hostingView.layer?.masksToBounds = true
+        hostingView.frame = NSRect(origin: .zero, size: Self.initialPanelSize)
+        // Reflow with the panel as it resizes (width setting / screen-adaptive height).
+        hostingView.autoresizingMask = [.width, .height]
+        // The panel frame is owned by panelFrame(); don't let SwiftUI's ideal size resize the window
+        // (the signed-out screens otherwise balloon the panel past the screen height).
+        hostingView.sizingOptions = []
+        panelHostingView = hostingView
+        applyPanelBacking()
 
-        panel.contentView = hostingView
         panel.delegate = self
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.fullScreenAuxiliary, .transient]
@@ -246,6 +302,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isOpaque = false
         panel.isReleasedWhenClosed = false
         panel.level = .popUpMenu
+    }
+
+    /// Installs the panel's content backing; safe to call repeatedly. On macOS 26+ the panel is
+    /// backed by the system Liquid Glass material (NSGlassEffectView, Regular) so it matches the
+    /// Wi-Fi/Bluetooth/Control Center menus — UNLESS Reduce Transparency is on, in which case we
+    /// skip the glass entirely (rather than hide it under an opaque fill) so no glass rim or
+    /// lensing leaks for that accessibility setting. Older systems use the plain clipped host with
+    /// the in-SwiftUI vibrancy material. Re-invoked from the accessibility-display observer so a
+    /// runtime Reduce Transparency toggle takes effect immediately.
+    private func applyPanelBacking() {
+        guard let hostingView = panelHostingView else { return }
+        let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+
+        if #available(macOS 26, *), !reduceTransparency {
+            let glass = NSGlassEffectView()
+            glass.frame = NSRect(origin: .zero, size: Self.initialPanelSize)
+            glass.autoresizingMask = [.width, .height]
+            glass.style = .regular
+            glass.cornerRadius = Self.panelCornerRadius
+            glass.contentView = hostingView
+            panel.contentView = glass
+        } else {
+            hostingView.wantsLayer = true
+            hostingView.layer?.cornerRadius = Self.panelCornerRadius
+            hostingView.layer?.cornerCurve = .continuous
+            hostingView.layer?.masksToBounds = true
+            panel.contentView = hostingView
+        }
     }
 
     private func configureStatusMenu() {
@@ -297,7 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if panel.isVisible {
             closePanel()
         } else {
-            panel.setFrameOrigin(panelOrigin(relativeTo: sender))
+            panel.setFrame(panelFrame(relativeTo: sender), display: true)
             panel.orderFrontRegardless()
             // Don't let AppKit focus-ring the first control (the Refresh button) on open;
             // the key-view loop still engages the moment the user tabs.
@@ -341,7 +425,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closePanelForOutsideClick() {
         // Keep the panel pinned during device-flow sign-in or while the add-account sheet is
         // open, so clicking into the browser (enter the code / create a token) doesn't dismiss it.
-        if store.shouldPinPanel { return }
+        if store.shouldPinPanel {
+            return
+        }
         let clickLocation = NSEvent.mouseLocation
         if panel.frame.contains(clickLocation) || statusButtonFrame()?.contains(clickLocation) == true {
             return
@@ -349,21 +435,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         closePanel()
     }
 
-    private func panelOrigin(relativeTo sender: NSStatusBarButton) -> NSPoint {
+    /// Computes the panel's full frame for the screen hosting the menu-bar item: width from
+    /// the user setting, height adaptive to the screen (see PanelGeometry), right/left-aligned
+    /// under the button and clamped to the visible frame.
+    private func panelFrame(relativeTo sender: NSStatusBarButton) -> NSRect {
+        let width = store.settings.panelWidth.points
+
         guard let buttonFrame = screenFrame(of: sender) else {
-            return .zero
+            return NSRect(origin: .zero, size: NSSize(width: width, height: PanelGeometry.minHeight))
         }
 
         let visibleFrame = sender.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        let preferredLeftAlignedX = buttonFrame.minX
-        let preferredRightAlignedX = buttonFrame.maxX - Self.panelSize.width
-        let unclampedX = preferredLeftAlignedX + Self.panelSize.width <= visibleFrame.maxX
-            ? preferredLeftAlignedX
-            : preferredRightAlignedX
-        let x = min(max(unclampedX, visibleFrame.minX), visibleFrame.maxX - Self.panelSize.width)
-        let y = buttonFrame.minY - Self.panelSize.height - Self.panelGap
+        let height = PanelGeometry.height(
+            screenVisibleHeight: visibleFrame.height,
+            screenVisibleMinY: visibleFrame.minY,
+            buttonMinY: buttonFrame.minY,
+            gap: Self.panelGap
+        )
 
-        return NSPoint(x: x, y: y)
+        let x = PanelGeometry.originX(
+            buttonMinX: buttonFrame.minX,
+            buttonMaxX: buttonFrame.maxX,
+            width: width,
+            visibleMinX: visibleFrame.minX,
+            visibleMaxX: visibleFrame.maxX
+        )
+        let y = buttonFrame.minY - height - Self.panelGap
+
+        return NSRect(x: x, y: y, width: width, height: height)
     }
 
     private func screenFrame(of sender: NSStatusBarButton) -> NSRect? {
@@ -406,6 +505,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
+        if let a11yDisplayObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(a11yDisplayObserver)
         }
     }
 }

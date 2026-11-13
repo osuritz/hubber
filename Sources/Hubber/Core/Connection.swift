@@ -23,8 +23,8 @@ final class Connection: ObservableObject, Identifiable {
     var onSignedIn: (() async -> Void)?
 
     let provider: any CodeHostProvider
-    let authService: any GitHubDeviceFlowServicing
-    let tokenStore: any GitHubTokenStoring
+    let authService: any CodeHostAuthServicing
+    let tokenStore: any TokenStoring
     let snapshotStore: SnapshotStore
     let scheduler: RefreshScheduler
     let settings: SettingsStore
@@ -35,8 +35,8 @@ final class Connection: ObservableObject, Identifiable {
     init(
         id: ConnectionID,
         provider: any CodeHostProvider,
-        authService: any GitHubDeviceFlowServicing,
-        tokenStore: any GitHubTokenStoring,
+        authService: any CodeHostAuthServicing,
+        tokenStore: any TokenStoring,
         snapshotStore: SnapshotStore,
         scheduler: RefreshScheduler,
         settings: SettingsStore
@@ -77,10 +77,10 @@ final class Connection: ObservableObject, Identifiable {
                     token = try await authService.refresh(token)
                 }
 
-                let user: GitHubAuthenticatedUser
+                let user: AuthenticatedUser
                 do {
                     user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
-                } catch GitHubAuthError.badCredentials where token.canRefresh {
+                } catch CodeHostAuthError.badCredentials where token.canRefresh {
                     token = try await authService.refresh(token)
                     user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
                 }
@@ -88,7 +88,7 @@ final class Connection: ObservableObject, Identifiable {
                 token.login = user.login
                 try await saveStoredToken(token)
                 finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
-            } catch GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken {
+            } catch CodeHostAuthError.badCredentials, CodeHostAuthError.missingRefreshToken {
                 await handleRestoreCredentialError(cachedLogin: cachedLogin)
             } catch {
                 handleRestoreGenericError(error, cachedLogin: cachedLogin)
@@ -110,13 +110,19 @@ final class Connection: ObservableObject, Identifiable {
         authTask?.cancel()
         authTask = Task {
             do {
+                guard let deviceFlow = authService as? GitHubDeviceFlowServicing else {
+                    authState = .error("This account type doesn't support device sign-in.")
+                    appendDeveloperLog("Device sign-in unavailable for this provider")
+                    stopPullRequestRefreshLoop()
+                    return
+                }
                 authState = .restoring
-                let deviceAuthorization = try await authService.startDeviceFlow()
+                let deviceAuthorization = try await deviceFlow.startDeviceFlow()
                 authState = .waitingForUser(deviceAuthorization)
                 appendDeveloperLog("Waiting for GitHub device authorization")
 
-                var token = try await authService.pollForToken(deviceAuthorization: deviceAuthorization)
-                let user = try await authService.fetchAuthenticatedUser(accessToken: token.accessToken)
+                var token = try await deviceFlow.pollForToken(deviceAuthorization: deviceAuthorization)
+                let user = try await deviceFlow.fetchAuthenticatedUser(accessToken: token.accessToken)
                 token.login = user.login
                 try await saveStoredToken(token)
                 finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
@@ -147,7 +153,7 @@ final class Connection: ObservableObject, Identifiable {
         authState = .restoring
         do {
             let user = try await authService.fetchAuthenticatedUser(accessToken: token)
-            let stored = GitHubStoredToken(
+            let stored = StoredToken(
                 accessToken: token,
                 accessTokenExpiresAt: nil,
                 refreshToken: nil,
@@ -157,7 +163,7 @@ final class Connection: ObservableObject, Identifiable {
             )
             try await saveStoredToken(stored)
             finishSignedInSession(login: user.login, name: user.name, avatarUrl: user.avatarUrl)
-        } catch GitHubAuthError.badCredentials {
+        } catch CodeHostAuthError.badCredentials {
             authState = .error("That token was rejected. Check the token and its scopes.")
             appendDeveloperLog("Token sign-in rejected (bad credentials)")
         } catch {
@@ -169,7 +175,7 @@ final class Connection: ObservableObject, Identifiable {
     /// Adopts an already-validated token + resolved user from an external auth flow (multi-account
     /// add, where the login was resolved before this Connection existed). Stores the token as-is,
     /// preserving a device-flow refresh token, and finishes the session without re-fetching.
-    func adopt(token: GitHubStoredToken, user: GitHubAuthenticatedUser) async {
+    func adopt(token: StoredToken, user: AuthenticatedUser) async {
         authState = .restoring
         do {
             try await saveStoredToken(token)
@@ -259,7 +265,7 @@ final class Connection: ObservableObject, Identifiable {
         isRefreshingPullRequests = true
         defer { isRefreshingPullRequests = false }
 
-        let token: GitHubStoredToken
+        let token: StoredToken
         do {
             token = try await freshStoredToken()
         } catch is CancellationError {
@@ -287,7 +293,7 @@ final class Connection: ObservableObject, Identifiable {
 
     @discardableResult
     func handleRefreshError(_ error: Error, settingGlobalError: Bool = true) async -> Bool {
-        if case let GitHubAuthError.rateLimited(retryAfter) = error {
+        if case let CodeHostAuthError.rateLimited(retryAfter) = error {
             let delay = retryAfter ?? (15 * 60)
             rateLimitedUntil = Date().addingTimeInterval(delay)
             let minutes = Int((delay / 60).rounded(.up))
@@ -380,9 +386,9 @@ final class Connection: ObservableObject, Identifiable {
         Task { await onSignedIn?() }
     }
 
-    private func freshStoredToken() async throws -> GitHubStoredToken {
+    private func freshStoredToken() async throws -> StoredToken {
         guard var token = try await loadStoredToken() else {
-            throw GitHubAuthError.badCredentials
+            throw CodeHostAuthError.badCredentials
         }
 
         if !token.hasFreshAccessToken {
@@ -401,14 +407,14 @@ final class Connection: ObservableObject, Identifiable {
         #endif
     }
 
-    private func loadStoredToken() async throws -> GitHubStoredToken? {
+    private func loadStoredToken() async throws -> StoredToken? {
         let tokenStore = tokenStore
         return try await Task.detached(priority: .utility) {
             try tokenStore.load()
         }.value
     }
 
-    private func saveStoredToken(_ token: GitHubStoredToken) async throws {
+    private func saveStoredToken(_ token: StoredToken) async throws {
         let tokenStore = tokenStore
         try await Task.detached(priority: .utility) {
             try tokenStore.save(token)
@@ -468,7 +474,7 @@ extension Connection {
         signedInLogin login: String?
     ) -> HubberAuthState? {
         switch error {
-        case GitHubAuthError.badCredentials, GitHubAuthError.missingRefreshToken:
+        case CodeHostAuthError.badCredentials, CodeHostAuthError.missingRefreshToken:
             if let login {
                 .sessionExpired(login: login)
             } else {
@@ -486,6 +492,7 @@ extension Connection {
     }
 
     func appendDeveloperLog(_ message: String) {
+        CrashReporter.note(message)
         developerLog.insert(DeveloperLogEntry(timestamp: Date(), message: message), at: 0)
         if developerLog.count > 80 {
             developerLog.removeLast(developerLog.count - 80)

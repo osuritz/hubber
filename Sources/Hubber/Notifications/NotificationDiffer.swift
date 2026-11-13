@@ -14,7 +14,7 @@ enum NotificationDiffer {
         enabled: Set<NotificationEventType>
     ) -> [NotificationEvent] {
         guard let previous else { return [] }
-        let currentOutgoing = Dictionary(uniqueKeysWithValues: current.outgoing.map { ($0.id, $0) })
+        let currentOutgoing = Dictionary(current.outgoing.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         return newReviewEvents(previous: previous, current: current, enabled: enabled)
             + outgoingChangeEvents(previous: previous, currentOutgoing: currentOutgoing, enabled: enabled)
             + prMergedEvents(previous: previous, currentOutgoing: currentOutgoing, enabled: enabled)
@@ -26,9 +26,10 @@ enum NotificationDiffer {
     static func snapshot(from data: HubberData) -> ReviewSnapshot {
         let incomingIDs = Set(data.incoming.map(\.id))
         let outgoingSnaps = Dictionary(
-            uniqueKeysWithValues: data.outgoing.map { pr -> (String, OutgoingSnapshot) in
+            data.outgoing.map { pr -> (String, OutgoingSnapshot) in
                 (pr.id, OutgoingSnapshot(from: pr))
-            }
+            },
+            uniquingKeysWith: { _, latest in latest }
         )
         return ReviewSnapshot(incomingIDs: incomingIDs, outgoing: outgoingSnaps)
     }
@@ -128,8 +129,7 @@ enum NotificationDiffer {
         currentPR: OutgoingReview,
         enabled: Set<NotificationEventType>
     ) -> NotificationEvent? {
-        guard enabled.contains(.ciFailed) else { return nil }
-        guard currentPR.ci == .failing, prevSnap.ci != PullRequestCI.failing.rawValue else { return nil }
+        guard enabled.contains(.ciFailed), currentPR.ci == .failing, prevSnap.ci != PullRequestCI.failing.rawValue else { return nil }
         return NotificationEvent(
             type: .ciFailed,
             prID: prID,
@@ -167,7 +167,11 @@ enum NotificationDiffer {
 
 private extension OutgoingSnapshot {
     init(from pr: OutgoingReview) {
-        let reviewerStates = Dictionary(uniqueKeysWithValues: pr.reviewers.map { ($0.user.login, $0.state.rawValue) })
+        // Never trap on a repeated reviewer login (one person can appear more than once); keep the last.
+        let reviewerStates = Dictionary(
+            pr.reviewers.map { ($0.user.login, $0.state.rawValue) },
+            uniquingKeysWith: { _, latest in latest }
+        )
         self.init(
             reviewerStates: reviewerStates,
             ci: pr.ci.rawValue,

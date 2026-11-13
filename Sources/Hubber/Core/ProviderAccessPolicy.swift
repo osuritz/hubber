@@ -41,10 +41,14 @@ struct ProviderAccessPolicy {
     ///   every other host is permitted.
     func canConnect(host: String) -> Bool {
         if !allowlist.isEmpty {
-            if allowlist.contains(host) { return true }
+            if allowlist.contains(host) {
+                return true
+            }
             return host == "github.com" && allowPersonalGitHub
         }
-        if host == "github.com" { return allowPersonalGitHub }
+        if host == "github.com" {
+            return allowPersonalGitHub
+        }
         return true
     }
 

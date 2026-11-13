@@ -21,9 +21,11 @@ final class SpyTelemetrySink: TelemetrySink, @unchecked Sendable {
 // MARK: - Structural allow-list
 
 /// The complete set of values that are ALLOWED in any telemetry param.
-/// Every param value must be either an integer string (counts) or a WorkTab raw value.
+/// Every param value must be an integer string (counts), a WorkTab raw value, a CrashReason raw
+/// value, or — only for `app.crashed`'s `frame` — a symbol name from Hubber's own binary.
 /// Any other string indicates either PII leakage or an unapproved free-form value.
 private let allowedTabRawValues: Set<String> = Set(WorkTab.allCases.map(\.rawValue))
+private let allowedCrashReasons: Set<String> = Set(CrashReason.allCases.map(\.rawValue))
 
 // MARK: - Tests
 
@@ -136,6 +138,15 @@ final class TelemetryTests: XCTestCase {
         telemetry.manualRefresh()
         telemetry.sessionCounts(incoming: 3, outgoing: 1, drafts: 5)
         telemetry.sloDistribution(green: 2, amber: 1, red: 0)
+        telemetry.crashDetected(CrashReport(
+            appVersion: "0.1.1",
+            osVersion: "Version 26.7.1",
+            signal: SIGTRAP,
+            exceptionName: nil,
+            message: "Fatal error: Duplicate values for key: 'octo-reviewer'",
+            frames: [],
+            topAppSymbol: "$s6Hubber18NotificationDifferO8snapshot4fromAA14ReviewSnapshotVAA0A4DataV_tFZ"
+        ))
 
         XCTAssertGreaterThan(spy.calls.count, 0, "Expected at least one telemetry call")
 
@@ -144,8 +155,8 @@ final class TelemetryTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Asserts that every param value across all calls is either an integer string
-    /// or a WorkTab raw value — the complete structural allow-list for Telemetry params.
+    /// Asserts that every param value across all calls is on the structural allow-list for
+    /// Telemetry params (see `allowedTabRawValues` above).
     private func assertAllParamValuesAllowed(
         in calls: [(event: String, params: [String: String])],
         file: StaticString = #filePath,
@@ -155,10 +166,12 @@ final class TelemetryTests: XCTestCase {
             for (key, value) in params {
                 let isIntegerValue = Int(value) != nil
                 let isTabRawValue = allowedTabRawValues.contains(value)
+                let isCrashReason = allowedCrashReasons.contains(value)
+                let isCrashFrameSymbol = event == "app.crashed" && key == "frame" && CrashReport.isSymbolName(value)
                 XCTAssertTrue(
-                    isIntegerValue || isTabRawValue,
+                    isIntegerValue || isTabRawValue || isCrashReason || isCrashFrameSymbol,
                     "Param value '\(value)' in event '\(event)' key '\(key)' "
-                        + "is not an integer nor a WorkTab raw value — "
+                        + "is not on the telemetry allow-list — "
                         + "possible PII or unapproved free-form string",
                     file: file,
                     line: line

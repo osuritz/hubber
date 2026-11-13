@@ -4,6 +4,7 @@ import SwiftUI
 struct AccountsSettingsSection: View {
     @ObservedObject var store: HubberStore
     @ObservedObject var settings: SettingsStore
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var diffWithoutColor
 
     @State private var showingAdd = false
     @State private var reauthToken: [ConnectionID: String] = [:]
@@ -27,10 +28,10 @@ struct AccountsSettingsSection: View {
             SettingsRow(isLast: true) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Notify for hidden accounts")
-                        .font(HubberType.settingsLabel)
+                        .hubberFont(.settingsLabel)
                         .foregroundStyle(HubberDesign.text)
                     Text("Hidden accounts still alert on new activity.")
-                        .font(HubberType.settingsSub)
+                        .hubberFont(.settingsSub)
                         .foregroundStyle(HubberDesign.text2)
                 }
 
@@ -39,6 +40,7 @@ struct AccountsSettingsSection: View {
                 Toggle("", isOn: $settings.notifyHiddenAccounts)
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .accessibilityLabel("Notify for hidden accounts")
             }
         }
         .sheet(isPresented: $showingAdd) {
@@ -58,18 +60,19 @@ struct AccountsSettingsSection: View {
         SettingsRow(isStack: true, isLast: isLast) {
             HStack(spacing: 10) {
                 AvatarView(
-                    user: GitHubUser(
+                    user: CodeHostUser(
                         login: connection.id.login,
                         initials: initials(for: connection.viewerName ?? connection.id.login),
                         color: avatarColor(for: connection.id.login),
                         avatarURL: connection.viewerAvatarURL
                     ),
-                    size: AvatarSize.row.rawValue
+                    size: AvatarSize.row.rawValue,
+                    accessibilityRole: "account"
                 )
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("\(connection.id.providerDisplayName) · @\(connection.id.login)")
-                        .font(HubberType.title)
+                        .hubberFont(.title)
                         .foregroundStyle(HubberDesign.text)
 
                     accountStatus(connection)
@@ -77,6 +80,7 @@ struct AccountsSettingsSection: View {
 
                 Spacer()
             }
+            .accessibilityElement(children: .combine)
 
             switch connection.authState {
             case let .waitingForUser(authorization):
@@ -91,24 +95,32 @@ struct AccountsSettingsSection: View {
     private func accountStatus(_ connection: Connection) -> some View {
         switch connection.authState {
         case .error:
+            // "⚠" glyph is always present — satisfies Differentiate Without Color.
             Text("⚠ Needs attention")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.sloAmber.fg)
         case .sessionExpired:
-            Text("Session expired")
-                .font(HubberType.secondary)
-                .foregroundStyle(HubberDesign.sloAmber.fg)
+            // Color-only under normal prefs; add a glyph when Differentiate Without Color is on.
+            HStack(spacing: 3) {
+                if diffWithoutColor {
+                    Image(systemName: "exclamationmark.circle")
+                        .hubberFont(.secondary)
+                }
+                Text("Session expired")
+                    .hubberFont(.secondary)
+            }
+            .foregroundStyle(HubberDesign.sloAmber.fg)
         case .waitingForUser:
             Text("Waiting for device authorization")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.text2)
         case .restoring:
             Text("Checking sign-in")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.text2)
         case .signedOut:
             Text("Signed out")
-                .font(HubberType.secondary)
+                .hubberFont(.secondary)
                 .foregroundStyle(HubberDesign.text2)
         case .signedIn:
             EmptyView()
@@ -203,7 +215,7 @@ struct AccountsSettingsSection: View {
     }
 
     private func avatarColor(for login: String) -> Color {
-        let hue = Double(abs(login.hashValue) % 360) / 360.0
+        let hue = Double(login.hashValue.magnitude % 360) / 360.0
         return Color(hue: hue, saturation: 0.55, brightness: 0.70)
     }
 }
