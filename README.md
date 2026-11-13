@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | ba
 
 The [installer](install.sh) downloads `Hubber.zip` from the latest release, verifies its SHA-256 and code signature, installs `Hubber.app` to `/Applications` (replacing any existing copy), and launches it. Run it again to update.
 
-Hubber is ad-hoc-signed but not notarized. A copy fetched with `curl` is not quarantined, so it opens without a Gatekeeper prompt; that is why this is the recommended path.
+Hubber is signed with a self-signed certificate and is not notarized. A copy fetched with `curl` is not quarantined, so it opens without a Gatekeeper prompt; that is why this is the recommended path.
 
 Options, set as environment variables before `bash`:
 
@@ -58,7 +58,9 @@ When Hubber asks for notification permission, click **Allow** so review banners 
 
 ### Updates
 
-Release builds do not currently ship an update feed, so there is no in-app auto-update yet. To update, re-run the installer or re-download the latest release. The Sparkle updater is wired in and activates only when a build is made with a feed URL and public key (`SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`); the release workflow does not set them.
+Release builds update themselves with [Sparkle](https://sparkle-project.org): Hubber checks the [appcast](https://osuritz.github.io/hubber/appcast.xml) and offers new versions in place, and **Check for Updates…** in the status-item menu checks on demand. Updates are verified against an EdDSA key embedded in the app.
+
+Releases up to v0.1.2 have no update feed. To move off one of those, re-run the installer once. Local builds (`make app`) carry no feed unless `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY` are set.
 
 ## Signing in and access problems
 
@@ -103,8 +105,7 @@ macOS's own report (`~/Library/Logs/DiagnosticReports/Hubber-*.ips`) is still pr
 
 ## Not done yet
 
-- Notarization, which needs a paid Apple Developer account. Builds are ad-hoc-signed.
-- A published update feed for in-app updates (see Updates above).
+- Notarization, which needs a paid Apple Developer account. Release builds are signed with a self-signed certificate; local builds are ad-hoc-signed.
 
 ## Contributing
 
