@@ -210,6 +210,9 @@ final class GitHubProvider: CodeHostProvider {
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw CodeHostAuthError.invalidResponse }
+        if let note = GraphQLDiagnostics.ssoNote(header: http.value(forHTTPHeaderField: "X-GitHub-SSO")) {
+            CrashReporter.note("GitHub GraphQL: \(note)")
+        }
         if http.statusCode == 401 {
             throw CodeHostAuthError.badCredentials
         }
@@ -232,6 +235,9 @@ final class GitHubProvider: CodeHostProvider {
         // degrade gracefully on null fields (-> "No checks", 0 threads, etc.). Only throw when
         // there is no usable data dict at all.
         if let payload = json["data"] as? [String: Any] {
+            for note in GraphQLDiagnostics.errorNotes(from: json) {
+                CrashReporter.note("GitHub GraphQL partial error: \(note)")
+            }
             return payload
         }
         if

@@ -87,6 +87,9 @@ final class GitLabProvider: CodeHostProvider {
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         if let payload = json["data"] as? [String: Any] {
+            for note in GraphQLDiagnostics.errorNotes(from: json) {
+                CrashReporter.note("GitLab GraphQL partial error: \(note)")
+            }
             return payload
         }
         if
