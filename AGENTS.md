@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Hubber is a macOS menu-bar prototype for keeping GitHub review work visible at a glance. It shows mock data for three work streams:
+Hubber is a macOS menu-bar app that keeps code-review work visible at a glance. It shows live data for three work streams:
 
 - Incoming PR reviews assigned to the user, including review SLO status
 - Outgoing PRs, including CI state, unresolved comments, and reviewer state
 - Draft PRs, including CI state and freshness
 
-The app currently focuses on the Direction A native macOS popover concept. GitHub API integration is not implemented yet.
+Supported hosts are github.com, GitHub Enterprise Server, and GitLab, with multiple accounts at once. See `PRODUCT.md` for the product statement and decision rules, and `PRIVACY.md` for what data is handled.
 
 ## Commits
 
@@ -101,13 +101,25 @@ this check with `SKIP_CI_HOOK=1 git push`.
 
 ## Project Layout
 
-- `Package.swift`: Swift Package Manager executable target definition
-- `Sources/Hubber/main.swift`: AppKit app delegate, status item, popover, and quit menu wiring
-- `Sources/Hubber/HubberPopoverView.swift`: SwiftUI popover UI, tabs, rows, SLO pills, CI badges, and settings view
-- `Sources/Hubber/Models.swift`: mock GitHub data and lightweight view models
-- `Sources/Hubber/VisualEffectView.swift`: SwiftUI wrapper for `NSVisualEffectView`
-- `README.md`: human-facing overview and run instructions
+- `Package.swift`: SPM manifest (macOS 14+, Swift 6; depends on Sparkle and TelemetryDeck)
+- `Sources/Hubber/`: the app. `main.swift` is the AppKit entry point (status item, panel, menu); the popover, rows, and settings SwiftUI views sit at the top level. Subdirectories:
+  - `Core/`: provider-neutral domain: `CodeHostProvider`, connections and registry, refresh scheduling, `SettingsStore`, managed (MDM) preferences, token storage
+  - `GitHub/`, `GitLab/`: provider implementations and auth
+  - `Notifications/`: change detection, batching, and delivery of user notifications
+  - `AddAccount/`, `Account/`, `Settings/`, `Onboarding/`: account management and first-run UI
+  - `Diagnostics/`, `Telemetry/`: crash capture and logging; opt-in analytics
+  - `Updates/`: Sparkle updater wiring
+  - `Accessibility/`, `Design/`, `Resources/`: accessibility helpers, design tokens and controls, bundled assets
+  - `Debug/`: mock providers, compiled only in DEBUG builds
+- `Tests/HubberTests/`: test target
+- `Scripts/`: `make-app.sh` (assembles the `.app`), `make-dmg.sh`, `make-pkg.sh`, lint-tool installer
+- `docs/`: design notes, enterprise/MDM guides, runbooks, `token-permissions.md`
+- `.github/workflows/`: CI and the tag-triggered release workflow
+- `README.md`: human-facing overview and install instructions
+- `PRODUCT.md`, `PRIVACY.md`: product statement and privacy notice
 
 ## Current Shape
 
-This is an SPM executable prototype, not a bundled `.app` target yet. Future production work should add a real macOS app target with an `Info.plist`, `LSUIElement`, signing/notarization, app icon, login item support, and real GitHub data plumbing.
+Hubber is built as an SPM executable and packaged into a bundled `.app` by `make app` (`Scripts/make-app.sh`): a universal binary with an `Info.plist` (`LSUIElement`), embedded Sparkle framework, inside-out ad-hoc code signing (override with `HUBBER_SIGN_IDENTITY`). `make app-dev` builds a DEBUG `.app` that uses the file token store instead of the Keychain. `make dist` adds `dist/Hubber.dmg` and `dist/Hubber.zip`; `make pkg` builds an MDM-oriented installer. Pushing a `v*` tag runs `.github/workflows/release.yml`, which runs `make dist` and creates a GitHub release.
+
+Not done: notarization (builds are ad-hoc-signed), and an update feed. Sparkle only activates when `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY` are set at build time, and the release workflow does not set them.
