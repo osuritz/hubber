@@ -45,6 +45,8 @@ final class AddAccountController: ObservableObject {
     enum Stage: Equatable {
         case picker
         case form(AddAccountProvider)
+        /// github.com personal-access-token form (reached from the device-flow start screen).
+        case gitHubDotComToken
         case authenticating
         case deviceCode(GitHubDeviceAuthorization)
         case failed(String)
@@ -98,6 +100,21 @@ final class AddAccountController: ObservableObject {
     func choose(_ provider: AddAccountProvider) {
         selectedProvider = provider
         stage = .form(provider)
+    }
+
+    func chooseGitHubDotComToken() {
+        selectedProvider = .gitHubDotCom
+        stage = .gitHubDotComToken
+    }
+
+    /// One step back: the github.com token form returns to its device-flow start screen; any other
+    /// form returns to the picker.
+    func back() {
+        if stage == .gitHubDotComToken {
+            stage = .form(.gitHubDotCom)
+        } else {
+            stage = .picker
+        }
     }
 
     func reset() {
