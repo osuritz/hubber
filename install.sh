@@ -1,117 +1,124 @@
 #!/usr/bin/env bash
-# install.sh — Download and install the latest Hubber release.
-# Usage: curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | bash
+# install.sh — download and install Hubber.
 #
-# This script:
-#  1. Finds the latest GitHub release for Hubber
-#  2. Downloads Hubber.zip
-#  3. Extracts it to a temp directory
-#  4. Removes the macOS quarantine attribute (no Gatekeeper prompt needed)
-#  5. Installs to /Applications/Hubber.app
-#  6. Launches Hubber
+#   curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | bash
 #
-# Note: Hubber is ad-hoc-signed, NOT notarized (notarization requires a
-# paid Apple Developer account). The quarantine attribute is stripped here
-# so that curl-downloaded builds launch without a Gatekeeper warning.
-# If you downloaded the DMG/zip manually from a browser, right-click →
-# Open on first launch, or go to System Settings → Privacy & Security →
-# "Open Anyway".
+# What it does:
+#   1. Downloads Hubber.zip from the GitHub release (latest, or HUBBER_VERSION).
+#   2. Verifies it against the release's published SHA-256 and the app's code signature.
+#   3. Installs Hubber.app to /Applications (or ~/Applications if that is not writable),
+#      replacing any existing copy.
+#   4. Launches it.
+#
+# Why a script: Hubber is ad-hoc-signed, not notarized. A copy downloaded with a browser is
+# quarantined and blocked by Gatekeeper on first launch; a copy fetched with curl is not.
+#
+# Options (environment variables):
+#   HUBBER_VERSION=0.1.2        install a specific release instead of the latest
+#   HUBBER_INSTALL_DIR=<dir>    install somewhere other than /Applications
+#   HUBBER_NO_OPEN=1            do not launch Hubber after installing
+#   HUBBER_DOWNLOAD_BASE=<url>  fetch Hubber.zip (+ .sha256) from another location
 set -euo pipefail
 
-GITHUB_REPO="osuritz/hubber"
-ASSET_NAME="Hubber.zip"
-INSTALL_DIR="/Applications"
+REPO="osuritz/hubber"
 APP_NAME="Hubber.app"
+ASSET="Hubber.zip"
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-info()  { printf '  \033[34m•\033[0m %s\n' "$*"; }
-ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
-err()   { printf '  \033[31m✗\033[0m %s\n' "$*" >&2; }
-die()   { err "$*"; exit 1; }
+info() { printf '  \033[34m•\033[0m %s\n' "$*"; }
+ok() { printf '  \033[32m✓\033[0m %s\n' "$*"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$*" >&2; }
+die() {
+  printf '  \033[31m✗\033[0m %s\n' "$*" >&2
+  exit 1
+}
 
-# ---------------------------------------------------------------------------
-# 1. Resolve latest release asset URL
-# ---------------------------------------------------------------------------
-info "Fetching latest Hubber release from GitHub…"
+download_base() {
+  if [[ -n "${HUBBER_DOWNLOAD_BASE:-}" ]]; then
+    printf '%s' "${HUBBER_DOWNLOAD_BASE%/}"
+  elif [[ -n "${HUBBER_VERSION:-}" ]]; then
+    printf 'https://github.com/%s/releases/download/v%s' "$REPO" "${HUBBER_VERSION#v}"
+  else
+    printf 'https://github.com/%s/releases/latest/download' "$REPO"
+  fi
+}
 
-if command -v gh &>/dev/null; then
-  ASSET_URL="$(gh release view --repo "$GITHUB_REPO" --json assets \
-    --jq ".assets[] | select(.name == \"$ASSET_NAME\") | .url" 2>/dev/null || true)"
-fi
+install_dir() {
+  if [[ -n "${HUBBER_INSTALL_DIR:-}" ]]; then
+    printf '%s' "$HUBBER_INSTALL_DIR"
+  elif [[ -w /Applications ]]; then
+    printf '/Applications'
+  else
+    printf '%s/Applications' "$HOME"
+  fi
+}
 
-if [[ -z "${ASSET_URL:-}" ]]; then
-  # Fall back to the public GitHub API (no auth required for public repos)
-  RELEASES_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
-  ASSET_URL="$(curl -fsSL "$RELEASES_URL" \
-    | grep -o '"browser_download_url": *"[^"]*Hubber\.zip"' \
-    | head -1 \
-    | sed 's/.*: *"\(.*\)"/\1/')"
-fi
+verify_checksum() {
+  local zip="$1" base="$2" expected actual
+  if ! expected="$(curl -fsSL "$base/$ASSET.sha256" 2>/dev/null | awk '{print $1; exit}')" || [[ -z "$expected" ]]; then
+    warn "This release publishes no checksum; skipping the SHA-256 check."
+    return
+  fi
+  actual="$(shasum -a 256 "$zip" | awk '{print $1}')"
+  [[ "$actual" == "$expected" ]] || die "Checksum mismatch for $ASSET (expected $expected, got $actual)."
+  ok "SHA-256 verified"
+}
 
-if [[ -z "${ASSET_URL:-}" ]]; then
-  die "Could not resolve download URL for $ASSET_NAME.
-  Manual fallback: go to https://github.com/${GITHUB_REPO}/releases/latest,
-  download $ASSET_NAME, double-click to extract, drag Hubber to /Applications."
-fi
+check_macos_version() {
+  local app="$1" required current
+  required="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist" 2>/dev/null || true)"
+  current="$(sw_vers -productVersion)"
+  if [[ -n "$required" && "${current%%.*}" -lt "${required%%.*}" ]]; then
+    die "Hubber requires macOS $required or newer (this Mac runs $current)."
+  fi
+}
 
-info "Download URL: $ASSET_URL"
+main() {
+  [[ "$(uname -s)" == "Darwin" ]] || die "Hubber is a macOS app; this installer only runs on macOS."
 
-# ---------------------------------------------------------------------------
-# 2. Download into a temp directory
-# ---------------------------------------------------------------------------
-TMPDIR_WORK="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_WORK"' EXIT
+  local base work zip app dest target
+  base="$(download_base)"
+  work="$(mktemp -d)"
+  # shellcheck disable=SC2064 # expand now: `work` is local and gone by the time EXIT fires
+  trap "rm -rf '$work'" EXIT
+  zip="$work/$ASSET"
 
-ZIP_PATH="$TMPDIR_WORK/$ASSET_NAME"
-info "Downloading $ASSET_NAME…"
-curl -fSL --progress-bar "$ASSET_URL" -o "$ZIP_PATH"
-ok "Downloaded $ASSET_NAME"
+  info "Downloading $base/$ASSET"
+  curl -fSL --progress-bar "$base/$ASSET" -o "$zip" ||
+    die "Download failed. Releases: https://github.com/$REPO/releases"
+  verify_checksum "$zip" "$base"
 
-# ---------------------------------------------------------------------------
-# 3. Extract
-# ---------------------------------------------------------------------------
-info "Extracting…"
-ditto -x -k "$ZIP_PATH" "$TMPDIR_WORK/"
-ok "Extracted"
+  ditto -x -k "$zip" "$work/extracted"
+  app="$work/extracted/$APP_NAME"
+  [[ -d "$app" ]] || die "$APP_NAME not found in $ASSET."
+  codesign --verify --deep --strict "$app" 2>/dev/null || die "$APP_NAME failed code-signature verification."
+  check_macos_version "$app"
 
-EXTRACTED_APP="$TMPDIR_WORK/$APP_NAME"
-if [[ ! -d "$EXTRACTED_APP" ]]; then
-  die "$APP_NAME not found in archive."
-fi
+  dest="$(install_dir)"
+  target="$dest/$APP_NAME"
+  mkdir -p "$dest" || die "Cannot create $dest."
+  [[ -w "$dest" ]] || die "Cannot write to $dest. Set HUBBER_INSTALL_DIR to a writable folder."
 
-# ---------------------------------------------------------------------------
-# 4. Strip quarantine attribute
-# ---------------------------------------------------------------------------
-info "Removing macOS quarantine attribute…"
-xattr -dr com.apple.quarantine "$EXTRACTED_APP" 2>/dev/null || true
-ok "Quarantine attribute removed"
+  if [[ -e "$target" ]]; then
+    info "Replacing existing $target"
+    if pkill -x Hubber 2>/dev/null; then
+      sleep 1
+    fi
+    rm -rf "$target"
+  fi
+  ditto "$app" "$target"
+  # curl does not quarantine downloads; this only matters if the zip came from elsewhere.
+  xattr -dr com.apple.quarantine "$target" 2>/dev/null || true
 
-# ---------------------------------------------------------------------------
-# 5. Install to /Applications
-# ---------------------------------------------------------------------------
-TARGET="$INSTALL_DIR/$APP_NAME"
-if [[ -d "$TARGET" ]]; then
-  info "Replacing existing $TARGET"
-  rm -rf "$TARGET"
-fi
+  local version
+  version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$target/Contents/Info.plist" 2>/dev/null || true)"
+  ok "Installed Hubber ${version:-} to $target"
 
-info "Installing to $TARGET…"
-cp -R "$EXTRACTED_APP" "$TARGET"
-ok "Installed $TARGET"
+  if [[ -z "${HUBBER_NO_OPEN:-}" ]]; then
+    open "$target" || warn "Could not launch Hubber; open $target manually."
+    echo "  Look for the Hubber icon in the menu bar. Allow notifications when asked."
+  fi
+  echo "  To update later, run this installer again. To uninstall, delete $target."
+}
 
-# ---------------------------------------------------------------------------
-# 6. Launch
-# ---------------------------------------------------------------------------
-info "Launching Hubber…"
-open -a Hubber || true
-
-echo ""
-ok "Hubber installed successfully!"
-echo ""
-echo "  If Hubber doesn't appear in the menu bar, open $TARGET manually."
-echo "  On first launch you may need to grant notification permission."
-echo ""
-echo "  Note: Hubber is ad-hoc-signed, not notarized."
-echo "  If Gatekeeper blocks it: System Settings → Privacy & Security → 'Open Anyway'."
+# Everything runs from main so a truncated download of this script cannot execute half of it.
+main "$@"
