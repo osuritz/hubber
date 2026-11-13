@@ -24,30 +24,41 @@ Hubber surfaces work and opens it in your browser. It does not show diffs, write
 
 ## Install
 
-### Download (DMG or zip)
-
-1. Go to the [latest release](https://github.com/osuritz/hubber/releases/latest) and download `Hubber.dmg` or `Hubber.zip`.
-2. Open the DMG and drag **Hubber** to your **Applications** folder (or unzip and move `Hubber.app` to `/Applications`).
-3. Try to open Hubber once. macOS will block it. Then go to **System Settings → Privacy & Security** and click **Open Anyway**. Alternatively, remove the quarantine attribute:
-
-   ```sh
-   xattr -dr com.apple.quarantine /Applications/Hubber.app
-   ```
-
-   Hubber is ad-hoc-signed but not notarized, so Gatekeeper blocks the first launch of a browser-downloaded copy.
-4. When Hubber asks for notification permission, click **Allow** so review banners can appear.
-
-### One-liner installer
+### Quick install (recommended)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | bash
 ```
 
-The script looks up the latest release (using `gh` if installed, otherwise the GitHub API), downloads `Hubber.zip` with `curl`, strips the quarantine attribute, replaces any existing `/Applications/Hubber.app`, and launches the app.
+The [installer](install.sh) downloads `Hubber.zip` from the latest release, verifies its SHA-256 and code signature, installs `Hubber.app` to `/Applications` (replacing any existing copy), and launches it. Run it again to update.
+
+Hubber is ad-hoc-signed but not notarized. A copy fetched with `curl` is not quarantined, so it opens without a Gatekeeper prompt; that is why this is the recommended path.
+
+Options, set as environment variables before `bash`:
+
+| Variable | Effect |
+| --- | --- |
+| `HUBBER_VERSION=0.1.2` | Install a specific release instead of the latest. |
+| `HUBBER_INSTALL_DIR=~/Applications` | Install somewhere other than `/Applications`. |
+| `HUBBER_NO_OPEN=1` | Do not launch Hubber after installing. |
+
+For example: `curl -fsSL https://raw.githubusercontent.com/osuritz/hubber/main/install.sh | HUBBER_VERSION=0.1.2 bash`
+
+When Hubber asks for notification permission, click **Allow** so review banners can appear.
+
+### Manual download (DMG or zip)
+
+1. Go to the [latest release](https://github.com/osuritz/hubber/releases/latest) and download `Hubber.dmg` or `Hubber.zip`.
+2. Open the DMG and drag **Hubber** to your **Applications** folder (or unzip and move `Hubber.app` to `/Applications`).
+3. Try to open Hubber once. macOS will block it, because a browser-downloaded copy is quarantined. Then go to **System Settings → Privacy & Security** and click **Open Anyway**. Alternatively, remove the quarantine attribute:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Hubber.app
+   ```
 
 ### Updates
 
-Release builds do not currently ship an update feed, so there is no in-app auto-update yet. To update, re-download the latest release or re-run the installer. The Sparkle updater is wired in and activates only when a build is made with a feed URL and public key (`SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`); the release workflow does not set them.
+Release builds do not currently ship an update feed, so there is no in-app auto-update yet. To update, re-run the installer or re-download the latest release. The Sparkle updater is wired in and activates only when a build is made with a feed URL and public key (`SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`); the release workflow does not set them.
 
 ## Signing in and access problems
 
