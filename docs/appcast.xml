@@ -1,17 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-  Sparkle appcast for Hubber. Served via GitHub Pages at
-  https://osuritz.github.io/hubber/appcast.xml (this file's SUFeedURL).
-
-  This is the initial placeholder: no <item> entries yet, so a running app sees
-  "you're up to date". The Release workflow regenerates this file with a signed
-  <item> on every tagged release (see .github/workflows/release.yml).
--->
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Hubber</title>
-    <link>https://osuritz.github.io/hubber/appcast.xml</link>
-    <description>Most recent updates to Hubber</description>
-    <language>en</language>
-  </channel>
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Hubber</title>
+        <item>
+            <title>0.1.3</title>
+            <pubDate>Fri, 13 Nov 2026 21:55:32 +0000</pubDate>
+            <link>https://github.com/osuritz/hubber</link>
+            <sparkle:version>0.1.3</sparkle:version>
+            <sparkle:shortVersionString>0.1.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/osuritz/hubber/releases/download/v0.1.3/Hubber.zip" length="6544775" type="application/octet-stream" sparkle:edSignature="dg0kRut2YHfH1Ur1IS5dNzIAtmf1Up1Zf0DkXiHK4KlR/i3k5MuswV0M/EoDObsKZafSTeEyGsaF1x64CGNFCQ=="/>
+        </item>
+    </channel>
 </rss>
