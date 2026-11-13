@@ -4,6 +4,7 @@ import SwiftUI
 
 /// "All clear" — no reviews waiting. Green check icon + encouraging copy.
 struct AllClearState: View {
+    var showsAccessHint = false
     var title = "All clear"
     var message = "No reviews waiting on you. Enjoy the deep work."
 
@@ -39,6 +40,10 @@ struct AllClearState: View {
                 .foregroundStyle(HubberDesign.text2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if showsAccessHint {
+                EmptyResultsHintView()
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
@@ -180,6 +185,8 @@ struct SkeletonRow: View {
 
 /// Empty state for the Drafts tab — "No drafts" with a generic icon.
 struct EmptyDraftsState: View {
+    var showsAccessHint = false
+
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "doc.badge.clock")
@@ -194,6 +201,10 @@ struct EmptyDraftsState: View {
                 .font(.system(size: 12))
                 .foregroundStyle(HubberDesign.text2)
                 .multilineTextAlignment(.center)
+
+            if showsAccessHint {
+                EmptyResultsHintView()
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
@@ -205,6 +216,8 @@ struct EmptyDraftsState: View {
 
 /// Empty state for the Outgoing tab.
 struct EmptyOutgoingState: View {
+    var showsAccessHint = false
+
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "arrow.up.doc")
@@ -219,9 +232,41 @@ struct EmptyOutgoingState: View {
                 .font(.system(size: 12))
                 .foregroundStyle(HubberDesign.text2)
                 .multilineTextAlignment(.center)
+
+            if showsAccessHint {
+                EmptyResultsHintView()
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
         .padding(.vertical, 40)
+    }
+}
+
+// MARK: - EmptyResultsHintView
+
+/// Shown inside the empty states when every list is empty after a successful refresh: the usual cause
+/// is missing organization access (see `EmptyResultsHint`).
+struct EmptyResultsHintView: View {
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("Not seeing your organization's pull requests?")
+                .hubberFont(.secondary)
+                .foregroundStyle(HubberDesign.text2)
+                .multilineTextAlignment(.center)
+
+            Button("Check access") {
+                if let url = EmptyResultsHint.helpURL {
+                    openURL(url)
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(HubberDesign.accent)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Check access to your organization's pull requests")
+        }
+        .padding(.top, 4)
     }
 }

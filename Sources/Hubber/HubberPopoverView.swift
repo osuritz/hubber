@@ -257,7 +257,7 @@ struct HubberPopoverView: View {
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.incoming.isEmpty {
-            AllClearState()
+            AllClearState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
         } else {
             if let error = store.incomingError {
                 ErrorState(
@@ -297,7 +297,7 @@ struct HubberPopoverView: View {
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.outgoing.isEmpty {
-            EmptyOutgoingState()
+            EmptyOutgoingState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
         } else {
             if let error = store.outgoingError {
                 ErrorState(
@@ -335,7 +335,7 @@ struct HubberPopoverView: View {
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.drafts.isEmpty {
-            EmptyDraftsState()
+            EmptyDraftsState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
         } else {
             if let error = store.draftsError {
                 ErrorState(

@@ -4,6 +4,29 @@ Hubber is **read-only** — it never writes, comments, merges, or pushes. These 
 
 ---
 
+## Not seeing your organization's pull requests?
+
+If you signed in and every tab is empty, the cause is usually access, not a bug. GitHub returns empty results (not an error) for repositories your token cannot see.
+
+1. **"Sign in with GitHub" only sees repositories where the Hubber GitHub App is installed.** For an organization's repositories, an organization owner must install or approve the Hubber GitHub App for that organization and grant it access to those repositories. Until then the lists stay empty instead of showing an error.
+2. **Alternative that needs no organization-owner action: a personal access token.**
+   - **Fine-grained token:** set **Resource owner** to the organization (not your personal account), make sure **Repository access** includes the repositories, and note that if the organization requires approval for tokens, the token has no access until an owner approves it.
+   - **Classic token:** it needs the `repo` scope. If the organization uses SAML SSO, open the token in GitHub settings and choose **Configure SSO → Authorize** for that organization.
+3. **Add the token in Hubber:** **Add account → GitHub.com → "Use a personal access token instead"**.
+4. **Quick self-check** (replace `$TOKEN` with your token):
+
+   ```sh
+   curl -s -H "Authorization: Bearer $TOKEN" "https://api.github.com/search/issues?q=is:pr+is:open+review-requested:@me" | head -c 300
+   ```
+
+   A `total_count` of 0 when you know you have review requests confirms an access problem. To check the token's scopes and SSO status:
+
+   ```sh
+   curl -sI -H "Authorization: Bearer $TOKEN" https://api.github.com/user | grep -i -E 'x-oauth-scopes|x-github-sso'
+   ```
+
+---
+
 ## GitHub.com
 
 GitHub offers two token types. Either works; fine-grained PATs are the better choice for new tokens.
@@ -27,7 +50,7 @@ Fine-grained PATs scope permissions per repository, which makes them the tightes
 1. Go to **github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens**
    (direct link: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new))
 2. Give it a name (e.g. "Hubber") and an expiration.
-3. Under **Repository access**, choose *All repositories* or select specific repos.
+3. Set **Resource owner** to the account or organization whose pull requests you want to track (for an organization's repos it must be the organization, not your personal account; if the organization requires approval, an owner must approve the token first). Under **Repository access**, choose *All repositories* or select specific repos.
 4. Under **Permissions**, expand **Repository permissions** and set:
    - Pull requests → Read-only
    - Commit statuses → Read-only
