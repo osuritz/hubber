@@ -9,7 +9,6 @@ struct HubberPopoverView: View {
     @ObservedObject var store: HubberStore
 
     @State private var selectedTab: WorkTab = .incoming
-    @State private var showSettings = false
     @State private var showSignInSuccess = false
     @State private var showingAdd = false
     @StateObject private var onboarding = OnboardingCoordinator()
@@ -156,7 +155,7 @@ struct HubberPopoverView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    if showSettings {
+                    if store.showSettings {
                         SettingsView(store: store, settings: store.settings)
                     } else {
                         content
@@ -173,6 +172,21 @@ struct HubberPopoverView: View {
     private var header: some View {
         VStack(spacing: 11) {
             HStack(spacing: 0) {
+                if store.showSettings {
+                    Button {
+                        store.showSettings = false
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(HubberDesign.text2)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+                    .help("Back to pull requests (Esc)")
+                    .accessibilityLabel("Back to pull requests")
+                }
+
                 AccountMenuView(store: store)
 
                 Spacer()
@@ -198,23 +212,23 @@ struct HubberPopoverView: View {
                 .accessibilityLabel("Refresh")
 
                 Button {
-                    showSettings.toggle()
+                    store.showSettings.toggle()
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13, weight: .medium))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(showSettings ? HubberDesign.accent : HubberDesign.text2)
+                .foregroundStyle(store.showSettings ? HubberDesign.accent : HubberDesign.text2)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
-                .help("Settings (⌘,)")
+                .help(store.showSettings ? "Close settings (⌘,)" : "Settings (⌘,)")
                 .keyboardShortcut(",", modifiers: .command)
-                .accessibilityLabel("Settings")
+                .accessibilityLabel(store.showSettings ? "Close settings" : "Settings")
             }
 
             HubberTabBar(
                 selectedTab: $selectedTab,
-                showSettings: $showSettings,
+                showSettings: $store.showSettings,
                 counts: TabBadgePresentation.counts(
                     data: store.data,
                     mode: store.settings.tabBadgeMode
