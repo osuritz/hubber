@@ -63,23 +63,56 @@ final class GitHubProviderTests: XCTestCase {
         XCTAssertEqual(reviews[0].sloClockStart, expected)
     }
 
-    func testFetchIncomingReviewsIncludesTeamSearchQueryForTeamMode() async throws {
+    func testIncomingSearchQueryPinsStringPerMode() {
+        XCTAssertEqual(
+            GitHubProvider.incomingSearchQuery(for: .explicit),
+            "is:pr is:open user-review-requested:@me"
+        )
+        XCTAssertEqual(
+            GitHubProvider.incomingSearchQuery(for: .team),
+            "is:pr is:open review-requested:@me"
+        )
+    }
+
+    func testFetchIncomingReviewsSendsModeSearchQuery() async throws {
         MockURLProtocol.handler = { request in
             MockURLProtocol.lastRequest = request
             return try (Self.response(for: request), Self.emptySearchResponse)
         }
 
-        _ = try await provider.fetchIncomingReviews(
-            accessToken: "tok",
-            viewerLogin: "osuritz",
-            mode: .team
-        )
+        _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .team)
 
         let body = try XCTUnwrap(MockURLProtocol.lastRequest?.httpBody)
         let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         let variables = json?["variables"] as? [String: Any]
-        let query = variables?["searchQuery"] as? String ?? ""
-        XCTAssertTrue(query.contains("team-review-requested:@me"), "Team mode should include team-review-requested")
+        XCTAssertEqual(variables?["searchQuery"] as? String, GitHubProvider.incomingSearchQuery(for: .team))
+    }
+
+    func testSLOClockIgnoresTeamRequestsInExplicitMode() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.incomingWithTeamAndUserRequestResponse)
+        }
+
+        let reviews = try await provider.fetchIncomingReviews(
+            accessToken: "tok", viewerLogin: "osuritz", mode: .explicit
+        )
+
+        // Team request at 08:00 is ignored; the direct request at 09:00 starts the clock.
+        let expected = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-15T09:00:00Z"))
+        XCTAssertEqual(reviews.first?.sloClockStart, expected)
+    }
+
+    func testSLOClockCountsTeamRequestsInTeamMode() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request), Self.incomingWithTeamAndUserRequestResponse)
+        }
+
+        let reviews = try await provider.fetchIncomingReviews(
+            accessToken: "tok", viewerLogin: "osuritz", mode: .team
+        )
+
+        let expected = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-15T08:00:00Z"))
+        XCTAssertEqual(reviews.first?.sloClockStart, expected)
     }
 
     func testFetchIncomingReviewsThrowsBadCredentialsOn401() async throws {
@@ -171,6 +204,42 @@ final class GitHubProviderTests: XCTestCase {
                 {
                   "__typename": "ReadyForReviewEvent",
                   "createdAt": "2026-06-15T10:00:00Z"
+                }
+              ]
+            }
+          }]
+        }
+      }
+    }
+    """.utf8)
+
+    static let incomingWithTeamAndUserRequestResponse = Data("""
+    {
+      "data": {
+        "search": {
+          "nodes": [{
+            "__typename": "PullRequest",
+            "id": "PR_kw3",
+            "number": 7,
+            "title": "Team then user request",
+            "url": "https://github.com/acme/web/pull/7",
+            "isDraft": false,
+            "additions": 1,
+            "deletions": 1,
+            "changedFiles": 1,
+            "repository": { "nameWithOwner": "acme/web" },
+            "author": { "login": "tobi", "avatarUrl": null },
+            "timelineItems": {
+              "nodes": [
+                {
+                  "__typename": "ReviewRequestedEvent",
+                  "createdAt": "2026-06-15T08:00:00Z",
+                  "requestedReviewer": { "__typename": "Team", "name": "core" }
+                },
+                {
+                  "__typename": "ReviewRequestedEvent",
+                  "createdAt": "2026-06-15T09:00:00Z",
+                  "requestedReviewer": { "__typename": "User", "login": "osuritz" }
                 }
               ]
             }

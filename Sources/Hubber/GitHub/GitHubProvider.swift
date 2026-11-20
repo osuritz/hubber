@@ -17,10 +17,7 @@ final class GitHubProvider: CodeHostProvider {
         viewerLogin: String,
         mode: IncomingReviewMode
     ) async throws -> [IncomingReview] {
-        var searchQuery = "is:pr is:open review-requested:@me"
-        if mode == .team {
-            searchQuery += " team-review-requested:@me"
-        }
+        let searchQuery = Self.incomingSearchQuery(for: mode)
 
         let payload = try await graphQL(
             query: Self.incomingReviewsQuery,
@@ -34,11 +31,23 @@ final class GitHubProvider: CodeHostProvider {
         else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap { node in
-            Self.parseIncomingReview(node: node, viewerLogin: viewerLogin)
+            Self.parseIncomingReview(node: node, viewerLogin: viewerLogin, mode: mode)
         }
     }
 
-    private static func parseIncomingReview(node: [String: Any], viewerLogin: String) -> IncomingReview? {
+    /// `review-requested:` matches direct and team requests; `user-review-requested:` only direct ones.
+    static func incomingSearchQuery(for mode: IncomingReviewMode) -> String {
+        switch mode {
+        case .explicit: "is:pr is:open user-review-requested:@me"
+        case .team: "is:pr is:open review-requested:@me"
+        }
+    }
+
+    private static func parseIncomingReview(
+        node: [String: Any],
+        viewerLogin: String,
+        mode: IncomingReviewMode
+    ) -> IncomingReview? {
         guard
             node["__typename"] as? String == "PullRequest",
             node["isDraft"] as? Bool == false,
@@ -58,7 +67,8 @@ final class GitHubProvider: CodeHostProvider {
 
         let sloStart = parseSLOClockStart(
             timelineNodes: (node["timelineItems"] as? [String: Any])?["nodes"] as? [[String: Any]] ?? [],
-            viewerLogin: viewerLogin
+            viewerLogin: viewerLogin,
+            mode: mode
         )
 
         let author = CodeHostUser(
@@ -85,7 +95,8 @@ final class GitHubProvider: CodeHostProvider {
     /// SLO clock = max(earliest ReviewRequestedEvent for viewer, latest ReadyForReviewEvent).
     private static func parseSLOClockStart(
         timelineNodes: [[String: Any]],
-        viewerLogin: String
+        viewerLogin: String,
+        mode: IncomingReviewMode
     ) -> Date {
         let iso = ISO8601DateFormatter()
         var reviewRequestedAt: Date?
@@ -94,7 +105,9 @@ final class GitHubProvider: CodeHostProvider {
         for item in timelineNodes {
             switch item["__typename"] as? String {
             case "ReviewRequestedEvent":
-                applyReviewRequested(item, iso: iso, viewerLogin: viewerLogin, into: &reviewRequestedAt)
+                applyReviewRequested(
+                    item, iso: iso, viewerLogin: viewerLogin, mode: mode, into: &reviewRequestedAt
+                )
             case "ReadyForReviewEvent":
                 applyReadyForReview(item, iso: iso, into: &readyForReviewAt)
             default:
@@ -113,6 +126,7 @@ final class GitHubProvider: CodeHostProvider {
         _ item: [String: Any],
         iso: ISO8601DateFormatter,
         viewerLogin: String,
+        mode: IncomingReviewMode,
         into current: inout Date?
     ) {
         guard
@@ -121,8 +135,8 @@ final class GitHubProvider: CodeHostProvider {
         else { return }
         let reviewer = item["requestedReviewer"] as? [String: Any]
         let login = reviewer?["login"] as? String
-        // Accept explicit user request or team request (no login field on Team).
-        if login == viewerLogin || login == nil {
+        // Team reviewers have no login field; they only count in team mode.
+        if login == viewerLogin || (login == nil && mode == .team) {
             if let prev = current {
                 if date < prev {
                     current = date
