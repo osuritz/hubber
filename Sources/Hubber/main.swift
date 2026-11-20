@@ -293,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyPanelBacking()
 
         panel.delegate = self
+        panel.onCancel = { [weak self] in self?.store.handleEscape() ?? false }
         panel.backgroundColor = .clear
         panel.collectionBehavior = [.fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
@@ -513,6 +514,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 private final class HubberMenuPanel: NSPanel {
+    /// Set by the app delegate. Returns true when Escape was consumed (e.g. it left Settings).
+    var onCancel: (() -> Bool)?
+
+    /// Escape arrives here via the responder chain (interpretKeyEvents -> cancelOperation:) when
+    /// no focused control handles it. Deciding here, in one place, avoids racing a SwiftUI
+    /// `.onExitCommand` against AppKit.
+    override func cancelOperation(_ sender: Any?) {
+        if onCancel?() == true {
+            return
+        }
+        super.cancelOperation(sender)
+    }
+
     override var canBecomeKey: Bool {
         true
     }

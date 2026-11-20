@@ -22,6 +22,8 @@ final class HubberStore: ObservableObject {
     @Published var data = HubberData(incoming: [], outgoing: [], drafts: [])
     @Published private(set) var isRefreshingPullRequests = false
     @Published private(set) var isPopoverOpen = false
+    /// True while the Settings screen replaces the PR lists in the popover.
+    @Published var showSettings = false
     /// True when the user has denied notification authorization.
     @Published var notificationsDenied = false
 
@@ -390,6 +392,15 @@ final class HubberStore: ObservableObject {
     /// Applies the resolved (incl. MDM-forced) desired launch-at-login state to the system at launch.
     func reconcileLaunchAtLogin() {
         try? launchAtLogin.setEnabled(settings.launchAtLoginEnabled)
+    }
+
+    /// Escape routing for the panel. Returns true when Escape was consumed (it left Settings);
+    /// false means the caller should fall through to the default Escape behavior.
+    @discardableResult
+    func handleEscape() -> Bool {
+        guard showSettings else { return false }
+        showSettings = false
+        return true
     }
 
     func setPopoverOpen(_ open: Bool) {
