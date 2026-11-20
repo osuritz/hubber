@@ -18,7 +18,7 @@ extension Connection {
         let outgoingResult = await outgoing
         let draftsResult = await drafts
         let errs = [incomingResult.failureError, outgoingResult.failureError, draftsResult.failureError]
-        if errs.compactMap(\.self).contains(where: { $0 is CancellationError }) {
+        if errs.compactMap(\.self).contains(where: CodeHostAuthError.isCancellation) {
             appendDeveloperLog("Pull request refresh cancelled")
             return (true, TabSuccesses(incoming: false, outgoing: false))
         }
@@ -36,6 +36,15 @@ extension Connection {
             outgoing: outgoingResult.failureError == nil
         )
         replaceData(HubberData(incoming: newIncoming, outgoing: newOutgoing, drafts: newDrafts))
+        // A transient failure on a single tab (e.g. one heavy query timing out with a 502) is an ordinary
+        // tab error. Only when every tab failed, and every failure was transient, is the host considered
+        // down and the connection backed off. A mix of transient and non-transient failures is not an outage.
+        let failures = [incomingResult.failureError, outgoingResult.failureError, draftsResult.failureError]
+            .compactMap(\.self)
+        if failures.count == 3, failures.allSatisfy(CodeHostAuthError.isTransient), let first = failures.first {
+            await handleRefreshError(first, settingGlobalError: false)
+            return (true, tabSuccesses)
+        }
         if let globalError = incomingGlobal ?? outgoingGlobal ?? draftsGlobal {
             await handleRefreshError(globalError, settingGlobalError: false)
             return (true, tabSuccesses)

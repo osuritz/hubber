@@ -384,6 +384,8 @@ struct HubberPopoverView: View {
             // Last-refresh status (per popover.jsx footer)
             if let rateLimitMessage = store.rateLimitMessage {
                 Text(rateLimitMessage).lineLimit(1)
+            } else if let outageMessage = store.outageMessage {
+                Text(outageMessage).lineLimit(1)
             } else {
                 Text(refreshStatusText).lineLimit(1)
             }

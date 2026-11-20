@@ -52,6 +52,43 @@ final class GitLabProviderTests: XCTestCase {
         }
     }
 
+    func testGraphQL429UsesRetryAfterThenRateLimitReset() async throws {
+        let reset = Int(Date().timeIntervalSince1970) + 120
+        let cases: [([String: String], TimeInterval)] = [
+            (["Retry-After": "30", "RateLimit-Reset": String(reset)], 30),
+            (["RateLimit-Reset": String(reset)], 120),
+        ]
+        for (headers, expected) in cases {
+            MockURLProtocol.handler = { request in
+                try (Self.response(for: request, statusCode: 429, headerFields: headers), Data())
+            }
+            let provider = try GitLabProvider(
+                baseURL: XCTUnwrap(URL(string: "https://gitlab.com")),
+                session: makeSession()
+            )
+            do {
+                _ = try await provider.graphQL(query: "query Test { x }", variables: [:], accessToken: "t")
+                XCTFail("Expected rateLimited")
+            } catch let CodeHostAuthError.rateLimited(retryAfter) {
+                XCTAssertEqual(try XCTUnwrap(retryAfter), expected, accuracy: 5)
+            }
+        }
+    }
+
+    func testGraphQL5xxThrowsServiceUnavailable() async throws {
+        MockURLProtocol.handler = { request in
+            try (Self.response(for: request, statusCode: 503), Data())
+        }
+        let provider = try GitLabProvider(baseURL: XCTUnwrap(URL(string: "https://gitlab.com")), session: makeSession())
+
+        do {
+            _ = try await provider.graphQL(query: "query Test { x }", variables: [:], accessToken: "t")
+            XCTFail("Expected serviceUnavailable")
+        } catch let error as CodeHostAuthError {
+            XCTAssertEqual(error, .serviceUnavailable(statusCode: 503))
+        }
+    }
+
     func testGraphQL200WithErrorsAndNoDataThrowsGitHubMessage() async throws {
         MockURLProtocol.handler = { request in
             try (Self.response(for: request), Self.errorsResponse)
@@ -317,10 +354,14 @@ final class GitLabProviderTests: XCTestCase {
         return URLSession(configuration: config)
     }
 
-    private static func response(for request: URLRequest, statusCode: Int = 200) throws -> HTTPURLResponse {
+    private static func response(
+        for request: URLRequest,
+        statusCode: Int = 200,
+        headerFields: [String: String]? = nil
+    ) throws -> HTTPURLResponse {
         guard let url = request.url else { throw URLError(.badURL) }
         guard
-            let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)
+            let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: headerFields)
         else { throw URLError(.badServerResponse) }
         return response
     }

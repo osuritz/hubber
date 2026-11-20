@@ -10,6 +10,12 @@ final class RefreshCadenceTests: XCTestCase {
         XCTAssertEqual(RefreshCadence.interval(for: ctx), 15 * 60)
     }
 
+    func testOutageBackoffOverridesCadenceWithRemainingTime() {
+        let ctx = RefreshContext(unavailableRemaining: 240, hasUrgentSLO: true, isPopoverOpen: true)
+        XCTAssertEqual(RefreshCadence.interval(for: ctx), 240)
+        XCTAssertEqual(RefreshCadence.interval(for: RefreshContext(unavailableRemaining: 0.1)), 1)
+    }
+
     func testUrgentSLOReturns30() {
         let ctx = RefreshContext(hasUrgentSLO: true)
         XCTAssertEqual(RefreshCadence.interval(for: ctx), 30)

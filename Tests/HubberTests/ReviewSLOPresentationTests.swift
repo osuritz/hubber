@@ -25,4 +25,19 @@ final class ReviewSLOPresentationTests: XCTestCase {
             "Rate limited — next refresh in 2m"
         )
     }
+
+    func testOutageFooterShowsMinutesOrSeconds() {
+        XCTAssertEqual(
+            ReviewSLOPresentation.outageFooter(providerName: "GitHub", secondsRemaining: 300),
+            "GitHub unavailable — retrying in 5m"
+        )
+        XCTAssertEqual(
+            ReviewSLOPresentation.outageFooter(providerName: "GitLab", secondsRemaining: 61),
+            "GitLab unavailable — retrying in 2m"
+        )
+        XCTAssertEqual(
+            ReviewSLOPresentation.outageFooter(providerName: "GitHub", secondsRemaining: 20),
+            "GitHub unavailable — retrying in 20s"
+        )
+    }
 }
