@@ -3,13 +3,13 @@
     <channel>
         <title>Hubber</title>
         <item>
-            <title>0.1.3</title>
-            <pubDate>Fri, 13 Nov 2026 21:55:32 +0000</pubDate>
+            <title>0.1.4</title>
+            <pubDate>Fri, 20 Nov 2026 18:14:32 +0000</pubDate>
             <link>https://github.com/osuritz/hubber</link>
-            <sparkle:version>0.1.3</sparkle:version>
-            <sparkle:shortVersionString>0.1.3</sparkle:shortVersionString>
+            <sparkle:version>0.1.4</sparkle:version>
+            <sparkle:shortVersionString>0.1.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/osuritz/hubber/releases/download/v0.1.3/Hubber.zip" length="6544775" type="application/octet-stream" sparkle:edSignature="dg0kRut2YHfH1Ur1IS5dNzIAtmf1Up1Zf0DkXiHK4KlR/i3k5MuswV0M/EoDObsKZafSTeEyGsaF1x64CGNFCQ=="/>
+            <enclosure url="https://github.com/osuritz/hubber/releases/download/v0.1.4/Hubber.zip" length="6591501" type="application/octet-stream" sparkle:edSignature="To2ll7XlG+BwbgVfGpvJL+JxXE4sxYPbTRBYZB3ey/rsCShLBfcO8gTdlf/PitlAEj6cw9oUZFO1g0aJxrArDA=="/>
         </item>
     </channel>
 </rss>
