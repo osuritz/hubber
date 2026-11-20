@@ -472,16 +472,21 @@ final class HubberStore: ObservableObject {
         primaryConnection?.copyDeviceCode()
     }
 
-    /// `userInitiated` (the default) bypasses the response cache; pass `false` for automatic refreshes
-    /// (e.g. wake from sleep) so they keep using it.
+    /// `userInitiated` (the default) marks a user-triggered refresh (⌘R, footer button, retry): it is logged
+    /// as manual, emits the `refresh.manual` telemetry event, and bypasses the response cache. Pass `false` for
+    /// automatic refreshes (e.g. wake from sleep): they are logged as automatic, send no telemetry, and keep
+    /// using the cache.
     func refreshPullRequests(userInitiated: Bool = true) {
+        let kind = userInitiated ? "manual" : "automatic"
         guard canRefreshPullRequests, !isRefreshingPullRequests else {
-            appendDeveloperLog("Ignored manual refresh request")
+            appendDeveloperLog("Ignored \(kind) refresh request")
             return
         }
 
-        appendDeveloperLog("Manual pull request refresh requested")
-        telemetry.manualRefresh()
+        appendDeveloperLog("\(kind.capitalized) pull request refresh requested")
+        if userInitiated {
+            telemetry.manualRefresh()
+        }
         primaryConnection?.refreshNow(invalidatingCache: userInitiated)
     }
 
