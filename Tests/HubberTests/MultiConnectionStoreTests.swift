@@ -173,6 +173,32 @@ private actor InvalidatingMultiConnectionProvider: CodeHostProvider, CodeHostCac
     }
 }
 
+/// Counts real incoming-review fetches so cache hits and misses are observable.
+private actor CountingIncomingProvider: CodeHostProvider {
+    private(set) var incomingFetchCount = 0
+
+    func fetchIncomingReviews(
+        accessToken _: String,
+        viewerLogin _: String,
+        mode _: IncomingReviewMode
+    ) async throws -> [IncomingReview] {
+        incomingFetchCount += 1
+        return []
+    }
+
+    func fetchOutgoingPullRequests(
+        accessToken _: String,
+        viewerLogin _: String,
+        unresolvedMode _: UnresolvedThreadMode
+    ) async throws -> [OutgoingReview] {
+        []
+    }
+
+    func fetchDraftPullRequests(accessToken _: String, limit _: Int) async throws -> [DraftReview] {
+        []
+    }
+}
+
 private actor MultiConnectionSleeper {
     private(set) var requestedIntervals: [TimeInterval] = []
     private(set) var cancellationCount = 0
@@ -590,10 +616,48 @@ final class MultiConnectionStoreTests: XCTestCase {
         XCTAssertTrue(store.connections.allSatisfy(\.isPopoverOpen))
     }
 
+    // MARK: - Cache bypass on manual refresh (#144)
+
+    func testManualRefreshInvalidatesCacheAndRefetches() async throws {
+        let spy = CountingIncomingProvider()
+        let sleeper = MultiConnectionSleeper()
+        let connection = try makeCachedConnection(login: "manual", spy: spy, sleeper: sleeper)
+        _ = await connection.refreshPullRequestsFromGitHub() // primes the cache
+        connection.refreshNow(invalidatingCache: true)
+        await sleeper.awaitParked()
+        let fetches = await spy.incomingFetchCount
+        XCTAssertEqual(fetches, 2, "A user-initiated refresh must hit the provider despite the warm cache")
+    }
+
+    func testScheduledRefreshWithinTTLIsServedFromCache() async throws {
+        let spy = CountingIncomingProvider()
+        let sleeper = MultiConnectionSleeper()
+        let connection = try makeCachedConnection(login: "scheduled", spy: spy, sleeper: sleeper)
+        _ = await connection.refreshPullRequestsFromGitHub() // primes the cache
+        connection.refreshNow()
+        await sleeper.awaitParked()
+        let fetches = await spy.incomingFetchCount
+        XCTAssertEqual(fetches, 1, "An automatic refresh within the TTL must be served from cache")
+    }
+
+    private func makeCachedConnection(
+        login: String,
+        spy: CountingIncomingProvider,
+        sleeper: MultiConnectionSleeper
+    ) throws -> Connection {
+        let connection = try makeConnection(
+            login: login,
+            provider: CachingCodeHostProvider(wrapping: spy),
+            sleeper: sleeper
+        )
+        connection.authState = .signedIn(login: login)
+        return connection
+    }
+
     private func makeConnection(
         login: String,
         authService: MultiConnectionAuthService? = nil,
-        provider: MultiConnectionProvider = MultiConnectionProvider(),
+        provider: any CodeHostProvider = MultiConnectionProvider(),
         tokenStore: (any TokenStoring)? = nil,
         sleeper: MultiConnectionSleeper? = nil
     ) throws -> Connection {

@@ -31,7 +31,30 @@ final class GitHubProvider: CodeHostProvider {
         else { throw CodeHostAuthError.invalidResponse }
 
         return nodes.compactMap { node in
-            Self.parseIncomingReview(node: node, viewerLogin: viewerLogin, mode: mode)
+            guard Self.stillRequestsViewer(node: node, viewerLogin: viewerLogin, mode: mode) else { return nil }
+            return Self.parseIncomingReview(node: node, viewerLogin: viewerLogin, mode: mode)
+        }
+    }
+
+    /// GitHub's search index lags live PR state (e.g. right after the viewer approves), so check the PR's
+    /// current `reviewRequests`. Explicit mode needs a direct request for the viewer; team mode also accepts any
+    /// team request (the search qualifier already scoped teams to the viewer; their memberships aren't fetched).
+    /// A missing `reviewRequests` field keeps the node rather than dropping everything on an unexpected shape.
+    private static func stillRequestsViewer(
+        node: [String: Any],
+        viewerLogin: String,
+        mode: IncomingReviewMode
+    ) -> Bool {
+        guard let requests = (node["reviewRequests"] as? [String: Any])?["nodes"] as? [[String: Any]] else {
+            return true
+        }
+        return requests.contains { request in
+            guard let reviewer = request["requestedReviewer"] as? [String: Any] else { return false }
+            switch reviewer["__typename"] as? String {
+            case "User": return reviewer["login"] as? String == viewerLogin
+            case "Team": return mode == .team
+            default: return false
+            }
         }
     }
 
@@ -92,22 +115,35 @@ final class GitHubProvider: CodeHostProvider {
         )
     }
 
-    /// SLO clock = max(earliest ReviewRequestedEvent for viewer, latest ReadyForReviewEvent).
+    /// SLO clock = max(start of the current review request, latest ReadyForReviewEvent).
+    ///
+    /// The current request is the earliest qualifying ReviewRequestedEvent that follows the viewer's latest
+    /// submitted review, so a re-request after a review restarts the clock. If the viewer never reviewed, it is
+    /// the earliest qualifying request. If no request follows the review, falls back to the earliest request.
     private static func parseSLOClockStart(
         timelineNodes: [[String: Any]],
         viewerLogin: String,
         mode: IncomingReviewMode
     ) -> Date {
         let iso = ISO8601DateFormatter()
-        var reviewRequestedAt: Date?
+        var requestDates: [Date] = []
+        var lastViewerReviewAt: Date?
         var readyForReviewAt: Date?
 
         for item in timelineNodes {
             switch item["__typename"] as? String {
             case "ReviewRequestedEvent":
-                applyReviewRequested(
-                    item, iso: iso, viewerLogin: viewerLogin, mode: mode, into: &reviewRequestedAt
-                )
+                if let date = reviewRequestDate(item, iso: iso, viewerLogin: viewerLogin, mode: mode) {
+                    requestDates.append(date)
+                }
+            case "PullRequestReview":
+                if
+                    (item["author"] as? [String: Any])?["login"] as? String == viewerLogin,
+                    let dateStr = item["submittedAt"] as? String,
+                    let date = iso.date(from: dateStr),
+                    date > (lastViewerReviewAt ?? .distantPast) {
+                    lastViewerReviewAt = date
+                }
             case "ReadyForReviewEvent":
                 applyReadyForReview(item, iso: iso, into: &readyForReviewAt)
             default:
@@ -115,36 +151,27 @@ final class GitHubProvider: CodeHostProvider {
             }
         }
 
-        let base = reviewRequestedAt ?? Date()
+        let afterReview = requestDates.filter { $0 > (lastViewerReviewAt ?? .distantPast) }
+        let base = afterReview.min() ?? requestDates.min() ?? Date()
         if let ready = readyForReviewAt {
             return max(base, ready)
         }
         return base
     }
 
-    private static func applyReviewRequested(
+    /// The event's date if it requests the viewer. Team reviewers have no login; they only count in team mode.
+    private static func reviewRequestDate(
         _ item: [String: Any],
         iso: ISO8601DateFormatter,
         viewerLogin: String,
-        mode: IncomingReviewMode,
-        into current: inout Date?
-    ) {
+        mode: IncomingReviewMode
+    ) -> Date? {
         guard
             let dateStr = item["createdAt"] as? String,
             let date = iso.date(from: dateStr)
-        else { return }
-        let reviewer = item["requestedReviewer"] as? [String: Any]
-        let login = reviewer?["login"] as? String
-        // Team reviewers have no login field; they only count in team mode.
-        if login == viewerLogin || (login == nil && mode == .team) {
-            if let prev = current {
-                if date < prev {
-                    current = date
-                }
-            } else {
-                current = date
-            }
-        }
+        else { return nil }
+        let login = (item["requestedReviewer"] as? [String: Any])?["login"] as? String
+        return login == viewerLogin || (login == nil && mode == .team) ? date : nil
     }
 
     private static func applyReadyForReview(
@@ -283,9 +310,23 @@ final class GitHubProvider: CodeHostProvider {
               login
               ... on User { avatarUrl }
             }
-            timelineItems(first: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) {
+            reviewRequests(first: 50) {
+              nodes {
+                requestedReviewer {
+                  __typename
+                  ... on User { login }
+                  ... on Team { slug }
+                }
+              }
+            }
+            # last: keep the newest events (re-requests, reviews) if a long-lived PR exceeds the window.
+            timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT, PULL_REQUEST_REVIEW]) {
               nodes {
                 __typename
+                ... on PullRequestReview {
+                  author { login }
+                  submittedAt
+                }
                 ... on ReviewRequestedEvent {
                   createdAt
                   requestedReviewer {

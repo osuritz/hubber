@@ -147,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.store.refreshPullRequests()
+                self?.store.refreshPullRequests(userInitiated: false)
             }
         }
 
