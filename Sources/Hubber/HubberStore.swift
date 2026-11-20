@@ -108,8 +108,31 @@ final class HubberStore: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
+        // The modes are read at fetch time, so a change needs a refresh to take effect. `removeDuplicates`
+        // ignores no-op writes; `dropFirst` (after it, so a same-value write can't slip through as the
+        // first emission) skips the initial value `@Published` replays on subscribe.
+        settings.$incomingMode
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in self?.refreshAllConnectionsForSettingsChange() }
+            .store(in: &cancellables)
+        settings.$unresolvedMode
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in self?.refreshAllConnectionsForSettingsChange() }
+            .store(in: &cancellables)
+
         if restoreOnInit {
             restoreSession()
+        }
+    }
+
+    /// Settings are global, so every connection reloads. Not a user-initiated refresh: no telemetry,
+    /// no cache invalidation (the caching provider keys entries by mode).
+    private func refreshAllConnectionsForSettingsChange() {
+        appendDeveloperLog("Settings mode changed; refreshing")
+        for conn in connections {
+            conn.refreshAfterSettingsChange()
         }
     }
 

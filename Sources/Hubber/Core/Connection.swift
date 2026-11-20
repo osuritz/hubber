@@ -9,6 +9,7 @@ final class Connection: ObservableObject, Identifiable {
     @Published private(set) var viewerAvatarURL: URL?
     @Published private(set) var data = HubberData(incoming: [], outgoing: [], drafts: [])
     @Published private(set) var isRefreshingPullRequests = false
+    private var refreshQueuedAfterCurrent = false
     @Published private(set) var lastPullRequestRefresh: Date?
     @Published var incomingError: String?
     @Published var outgoingError: String?
@@ -250,6 +251,17 @@ final class Connection: ObservableObject, Identifiable {
         }
     }
 
+    /// Refreshes because a setting read at fetch time changed. A refresh already in flight may have
+    /// captured the old value, so it is queued to run once more right after the current one finishes.
+    func refreshAfterSettingsChange() {
+        guard canRefreshPullRequests else { return }
+        if isRefreshingPullRequests {
+            refreshQueuedAfterCurrent = true
+        } else {
+            refreshNow()
+        }
+    }
+
     private func restartRefreshCycle() {
         if isRefreshLoopRunning {
             scheduler.reset()
@@ -375,6 +387,10 @@ final class Connection: ObservableObject, Identifiable {
             },
             refresh: { [weak self] in
                 await self?.refreshPullRequestsFromGitHub()
+                while let self, refreshQueuedAfterCurrent {
+                    refreshQueuedAfterCurrent = false
+                    await refreshPullRequestsFromGitHub()
+                }
             }
         )
     }

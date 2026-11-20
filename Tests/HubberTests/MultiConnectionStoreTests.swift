@@ -199,6 +199,51 @@ private actor CountingIncomingProvider: CodeHostProvider {
     }
 }
 
+/// Records the mode each fetch was made with. When `gateFirstIncoming` is set, the first incoming
+/// fetch suspends until `releaseGate()` so tests can change settings mid-refresh.
+private actor ModeRecordingProvider: CodeHostProvider {
+    private(set) var incomingModes: [IncomingReviewMode] = []
+    private(set) var unresolvedModes: [UnresolvedThreadMode] = []
+    private let gateFirstIncoming: Bool
+    private var gate: CheckedContinuation<Void, Never>?
+    private var gateOpen = false
+
+    init(gateFirstIncoming: Bool = false) {
+        self.gateFirstIncoming = gateFirstIncoming
+    }
+
+    func releaseGate() {
+        gateOpen = true
+        gate?.resume()
+        gate = nil
+    }
+
+    func fetchIncomingReviews(
+        accessToken _: String,
+        viewerLogin _: String,
+        mode: IncomingReviewMode
+    ) async throws -> [IncomingReview] {
+        incomingModes.append(mode)
+        if gateFirstIncoming, incomingModes.count == 1, !gateOpen {
+            await withCheckedContinuation { gate = $0 }
+        }
+        return []
+    }
+
+    func fetchOutgoingPullRequests(
+        accessToken _: String,
+        viewerLogin _: String,
+        unresolvedMode: UnresolvedThreadMode
+    ) async throws -> [OutgoingReview] {
+        unresolvedModes.append(unresolvedMode)
+        return []
+    }
+
+    func fetchDraftPullRequests(accessToken _: String, limit _: Int) async throws -> [DraftReview] {
+        []
+    }
+}
+
 private actor MultiConnectionSleeper {
     private(set) var requestedIntervals: [TimeInterval] = []
     private(set) var cancellationCount = 0
@@ -638,6 +683,120 @@ final class MultiConnectionStoreTests: XCTestCase {
         await sleeper.awaitParked()
         let fetches = await spy.incomingFetchCount
         XCTAssertEqual(fetches, 1, "An automatic refresh within the TTL must be served from cache")
+    }
+
+    // MARK: - Refresh on settings mode change (#142)
+
+    func testChangingIncomingModeRefreshesEveryConnectionWithNewMode() async throws {
+        let fixture = try makeModeStore(logins: ["a", "b"])
+        let (store, settings, rigs) = (fixture.store, fixture.settings, fixture.rigs)
+        settings.incomingMode = .team
+        for rig in rigs {
+            await rig.sleeper.awaitParked()
+            let modes = await rig.provider.incomingModes
+            XCTAssertEqual(modes, [.team])
+        }
+        withExtendedLifetime(store) {}
+    }
+
+    func testChangingUnresolvedModeRefreshesWithNewMode() async throws {
+        let fixture = try makeModeStore(logins: ["a"])
+        let (store, settings, rigs) = (fixture.store, fixture.settings, fixture.rigs)
+        settings.unresolvedMode = .changesRequested
+        let rig = try XCTUnwrap(rigs.first)
+        await rig.sleeper.awaitParked()
+        let modes = await rig.provider.unresolvedModes
+        XCTAssertEqual(modes, [.changesRequested])
+        withExtendedLifetime(store) {}
+    }
+
+    func testInitialModeAndUnchangedWritesDoNotFetch() async throws {
+        let fixture = try makeModeStore(logins: ["a"])
+        let (store, settings, rigs) = (fixture.store, fixture.settings, fixture.rigs)
+        settings.incomingMode = settings.incomingMode
+        settings.unresolvedMode = settings.unresolvedMode
+        try await Task.sleep(for: .milliseconds(100))
+        let rig = try XCTUnwrap(rigs.first)
+        let incoming = await rig.provider.incomingModes
+        let unresolved = await rig.provider.unresolvedModes
+        XCTAssertTrue(incoming.isEmpty)
+        XCTAssertTrue(unresolved.isEmpty)
+        withExtendedLifetime(store) {}
+    }
+
+    func testModeChangeDuringInFlightRefreshTriggersFollowUpFetch() async throws {
+        let fixture = try makeModeStore(logins: ["a"], gateFirstIncoming: true)
+        let (store, settings, rigs) = (fixture.store, fixture.settings, fixture.rigs)
+        let rig = try XCTUnwrap(rigs.first)
+        let connection = try XCTUnwrap(store.connections.first)
+        connection.refreshNow() // first fetch (old mode) suspends at the gate
+        while await rig.provider.incomingModes.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(connection.isRefreshingPullRequests)
+
+        settings.incomingMode = .team
+        await rig.provider.releaseGate()
+        await rig.sleeper.awaitParked()
+        // Parked after the follow-up: the sleeper is only reached once the queued refresh has run.
+        var modes = await rig.provider.incomingModes
+        let deadline = Date().addingTimeInterval(3)
+        while modes != [.explicit, .team], Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+            modes = await rig.provider.incomingModes
+        }
+        XCTAssertEqual(modes, [.explicit, .team])
+    }
+
+    private struct ModeFixture {
+        let store: HubberStore
+        let settings: SettingsStore
+        let rigs: [ModeRig]
+    }
+
+    private struct ModeRig {
+        let provider: ModeRecordingProvider
+        let sleeper: MultiConnectionSleeper
+    }
+
+    private func makeModeStore(
+        logins: [String],
+        gateFirstIncoming: Bool = false
+    ) throws -> ModeFixture {
+        let defaults = try makeDefaults()
+        let settings = SettingsStore(defaults: defaults)
+        let store = HubberStore(
+            authService: MultiConnectionAuthService(login: "legacy"),
+            provider: MultiConnectionProvider(),
+            tokenStore: MutableTokenStore(token: storedToken(login: "legacy")),
+            settings: settings,
+            telemetry: Telemetry(sink: NullTelemetrySink()),
+            snapshotStore: SnapshotStore(snapshotURL: temporarySnapshotURL(login: "legacy")),
+            defaults: defaults,
+            restoreOnInit: false
+        )
+        var rigs: [ModeRig] = []
+        for login in logins {
+            let rig = ModeRig(
+                provider: ModeRecordingProvider(gateFirstIncoming: gateFirstIncoming),
+                sleeper: MultiConnectionSleeper()
+            )
+            let sleeper = rig.sleeper
+            let connection = try store.addConnection(
+                id: .gitHubDotCom(login: login),
+                provider: rig.provider,
+                authService: MultiConnectionAuthService(login: login),
+                tokenStore: MutableTokenStore(token: storedToken(login: login)),
+                snapshotStore: SnapshotStore(snapshotURL: temporarySnapshotURL(login: login)),
+                scheduler: RefreshScheduler(
+                    idle: MultiConnectionIdleProvider(),
+                    sleep: { interval in try await sleeper.sleep(for: interval) }
+                )
+            )
+            connection.authState = .signedIn(login: login)
+            rigs.append(rig)
+        }
+        return ModeFixture(store: store, settings: settings, rigs: rigs)
     }
 
     private func makeCachedConnection(
