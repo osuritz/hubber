@@ -1,3 +1,4 @@
+// swiftlint:disable file_length - growing multi-connection integration-test suite
 import Foundation
 import XCTest
 @testable import Hubber
@@ -135,10 +136,23 @@ private actor MultiConnectionProvider: CodeHostProvider {
 /// Provider whose outgoing result can change between refreshes and which counts fetches.
 private actor ScriptedProvider: CodeHostProvider {
     private var outgoingResult: Result<[OutgoingReview], Error>
+    private let incomingResult: Result<[IncomingReview], Error>
+    private let draftsResult: Result<[DraftReview], Error>
     private(set) var fetchCount = 0
 
-    init(outgoing: Result<[OutgoingReview], Error>) {
+    init(
+        outgoing: Result<[OutgoingReview], Error>,
+        incoming: Result<[IncomingReview], Error> = .success([]),
+        drafts: Result<[DraftReview], Error> = .success([])
+    ) {
         outgoingResult = outgoing
+        incomingResult = incoming
+        draftsResult = drafts
+    }
+
+    /// Every tab fails with `error`.
+    static func allFailing(_ error: Error) -> ScriptedProvider {
+        ScriptedProvider(outgoing: .failure(error), incoming: .failure(error), drafts: .failure(error))
     }
 
     func setOutgoing(_ result: Result<[OutgoingReview], Error>) {
@@ -147,7 +161,7 @@ private actor ScriptedProvider: CodeHostProvider {
 
     func fetchIncomingReviews(accessToken _: String, viewerLogin _: String, mode _: IncomingReviewMode) async throws
         -> [IncomingReview] {
-        []
+        try incomingResult.get()
     }
 
     func fetchOutgoingPullRequests(
@@ -160,7 +174,7 @@ private actor ScriptedProvider: CodeHostProvider {
     }
 
     func fetchDraftPullRequests(accessToken _: String, limit _: Int) async throws -> [DraftReview] {
-        []
+        try draftsResult.get()
     }
 }
 
@@ -428,7 +442,7 @@ final class MultiConnectionStoreTests: XCTestCase {
     func testTransientFailureSetsBackoffThatGrowsWithConsecutiveFailures() async throws {
         let connection = try makeConnection(
             login: "outage",
-            provider: ScriptedProvider(outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503))),
+            provider: ScriptedProvider.allFailing(CodeHostAuthError.serviceUnavailable(statusCode: 503)),
             backoffJitter: { 0.2 }
         )
         connection.authState = .signedIn(login: "outage")
@@ -448,7 +462,7 @@ final class MultiConnectionStoreTests: XCTestCase {
     }
 
     func testScheduledRefreshSkipsWhileBackingOffThenRecoversAndResets() async throws {
-        let provider = ScriptedProvider(outgoing: .failure(URLError(.notConnectedToInternet)))
+        let provider = ScriptedProvider.allFailing(URLError(.notConnectedToInternet))
         let connection = try makeConnection(login: "outage", provider: provider, backoffJitter: { 0 })
         connection.authState = .signedIn(login: "outage")
 
@@ -474,7 +488,7 @@ final class MultiConnectionStoreTests: XCTestCase {
         let sleeper = MultiConnectionSleeper()
         let connection = try makeConnection(
             login: "outage",
-            provider: ScriptedProvider(outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 502))),
+            provider: ScriptedProvider.allFailing(CodeHostAuthError.serviceUnavailable(statusCode: 502)),
             sleeper: sleeper,
             backoffJitter: { 0 }
         )
@@ -488,9 +502,86 @@ final class MultiConnectionStoreTests: XCTestCase {
         XCTAssertEqual(interval, 30, accuracy: 2, "Wake when the back-off ends, not 5 minutes later")
     }
 
+    func testSingleTabTransientFailureIsATabErrorNotAnOutage() async throws {
+        let outage = Result<[OutgoingReview], Error>.failure(CodeHostAuthError.serviceUnavailable(statusCode: 502))
+        let provider = ScriptedProvider(outgoing: outage, drafts: .failure(URLError(.timedOut)))
+        let connection = try makeConnection(login: "partial", provider: provider)
+        connection.authState = .signedIn(login: "partial")
+
+        // Two of three tabs fail, but incoming succeeds: normal success path.
+        let successes = await connection.refreshPullRequestsFromGitHub()
+
+        XCTAssertNotNil(successes)
+        XCTAssertNotNil(connection.outgoingError)
+        XCTAssertNotNil(connection.draftsError)
+        XCTAssertNil(connection.incomingError)
+        XCTAssertNil(connection.unavailableUntil)
+        XCTAssertEqual(connection.consecutiveTransientFailures, 0)
+        XCTAssertNotNil(connection.lastPullRequestRefresh)
+    }
+
+    func testPartialSuccessResetsExistingBackoffCounter() async throws {
+        let provider = ScriptedProvider(
+            outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503)),
+            incoming: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503)),
+            drafts: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503))
+        )
+        let connection = try makeConnection(login: "recover", provider: provider)
+        connection.authState = .signedIn(login: "recover")
+        _ = await connection.refreshPullRequestsFromGitHub()
+        XCTAssertEqual(connection.consecutiveTransientFailures, 1)
+        XCTAssertNotNil(connection.unavailableUntil)
+
+        // Outgoing recovers while the other tabs still 503: partial success resets the back-off.
+        await provider.setOutgoing(.success([]))
+        connection.unavailableUntil = nil
+        let successes = await connection.refreshPullRequestsFromGitHub()
+        XCTAssertNotNil(successes)
+        XCTAssertEqual(connection.consecutiveTransientFailures, 0)
+        XCTAssertNil(connection.unavailableUntil)
+        XCTAssertNotNil(connection.incomingError)
+        XCTAssertNil(connection.outgoingError)
+    }
+
+    func testAllTabsTransientFailureTriggersOutageBackoff() async throws {
+        let outage = CodeHostAuthError.serviceUnavailable(statusCode: 503)
+        let provider = ScriptedProvider(
+            outgoing: .failure(outage),
+            incoming: .failure(outage),
+            drafts: .failure(URLError(.notConnectedToInternet))
+        )
+        let connection = try makeConnection(login: "down", provider: provider)
+        connection.authState = .signedIn(login: "down")
+
+        let successes = await connection.refreshPullRequestsFromGitHub()
+
+        XCTAssertNil(successes)
+        XCTAssertEqual(connection.consecutiveTransientFailures, 1)
+        XCTAssertNotNil(connection.unavailableUntil)
+        XCTAssertNil(connection.lastPullRequestRefresh)
+    }
+
+    func testMixedTransientAndNonTransientFailuresDoNotTriggerOutageBackoff() async throws {
+        let provider = ScriptedProvider(
+            outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503)),
+            incoming: .failure(CodeHostAuthError.providerMessage("Boom")),
+            drafts: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 502))
+        )
+        let connection = try makeConnection(login: "mixed", provider: provider)
+        connection.authState = .signedIn(login: "mixed")
+
+        _ = await connection.refreshPullRequestsFromGitHub()
+
+        XCTAssertNil(connection.unavailableUntil)
+        XCTAssertEqual(connection.consecutiveTransientFailures, 0)
+        XCTAssertNotNil(connection.incomingError)
+        XCTAssertNotNil(connection.outgoingError)
+        XCTAssertNotNil(connection.draftsError)
+    }
+
     func testManualRefreshBypassesOutageBackoffButKeepsFailureCount() async throws {
         let sleeper = MultiConnectionSleeper()
-        let provider = ScriptedProvider(outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503)))
+        let provider = ScriptedProvider.allFailing(CodeHostAuthError.serviceUnavailable(statusCode: 503))
         let connection = try makeConnection(login: "outage", provider: provider, sleeper: sleeper, backoffJitter: { 0 })
         connection.authState = .signedIn(login: "outage")
         _ = await connection.refreshPullRequestsFromGitHub()
@@ -530,7 +621,7 @@ final class MultiConnectionStoreTests: XCTestCase {
         for error in [CancellationError() as Error, URLError(.cancelled)] {
             let connection = try makeConnection(
                 login: "cancel",
-                provider: ScriptedProvider(outgoing: .failure(error))
+                provider: ScriptedProvider.allFailing(error)
             )
             connection.authState = .signedIn(login: "cancel")
 
