@@ -232,12 +232,25 @@ final class Connection: ObservableObject, Identifiable {
         }
     }
 
-    func refreshNow() {
+    /// Restarts the refresh cycle now. `invalidatingCache` is for user-initiated refreshes: it evicts the
+    /// provider's response cache first so the fetch hits the network. Scheduled/automatic refreshes keep the cache.
+    func refreshNow(invalidatingCache: Bool = false) {
         guard canRefreshPullRequests, !isRefreshingPullRequests else {
             appendDeveloperLog("Ignored manual refresh request")
             return
         }
 
+        guard invalidatingCache, let invalidating = provider as? CodeHostCacheInvalidating else {
+            restartRefreshCycle()
+            return
+        }
+        Task { [weak self] in
+            await invalidating.invalidateAll()
+            self?.restartRefreshCycle()
+        }
+    }
+
+    private func restartRefreshCycle() {
         if isRefreshLoopRunning {
             scheduler.reset()
         } else {
