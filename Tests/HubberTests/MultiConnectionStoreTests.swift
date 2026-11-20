@@ -640,13 +640,27 @@ final class MultiConnectionStoreTests: XCTestCase {
             tokenStore: MutableTokenStore(token: storedToken(login: "outage"))
         )
         let connection = try XCTUnwrap(store.primaryConnection)
-        XCTAssertNil(store.outageMessage)
+        let now = Date()
+        XCTAssertNil(store.outageMessage(now: now))
 
-        connection.unavailableUntil = Date().addingTimeInterval(300)
-        XCTAssertEqual(store.outageMessage, "GitHub unavailable — retrying in 5m")
+        connection.unavailableUntil = now.addingTimeInterval(300)
+        XCTAssertEqual(store.outageMessage(now: now), "GitHub unavailable — retrying in 5m")
+        XCTAssertEqual(store.outageMessage(now: now.addingTimeInterval(270)), "GitHub unavailable — retrying in 30s")
+        XCTAssertEqual(store.outageMessage(now: now.addingTimeInterval(299)), "GitHub unavailable — retrying in 1s")
+        XCTAssertNil(store.outageMessage(now: now.addingTimeInterval(300)), "Expired backoff shows no countdown")
+        XCTAssertTrue(store.isCountingDown(now: now))
+        XCTAssertFalse(store.isCountingDown(now: now.addingTimeInterval(301)))
 
-        connection.rateLimitedUntil = Date().addingTimeInterval(300)
-        XCTAssertNil(store.outageMessage, "Rate-limit messaging takes precedence")
+        connection.rateLimitedUntil = now.addingTimeInterval(300)
+        XCTAssertNil(store.outageMessage(now: now), "Rate-limit messaging takes precedence")
+        XCTAssertEqual(store.rateLimitMessage(now: now), "Rate limited — next refresh in 5m")
+        XCTAssertEqual(store.rateLimitMessage(now: now.addingTimeInterval(120)), "Rate limited — next refresh in 3m")
+        XCTAssertNil(store.rateLimitMessage(now: now.addingTimeInterval(300)))
+        // Rate limit expired, outage still active: falls through to the outage message.
+        connection.rateLimitedUntil = now.addingTimeInterval(10)
+        connection.unavailableUntil = now.addingTimeInterval(100)
+        XCTAssertNil(store.outageMessage(now: now))
+        XCTAssertEqual(store.outageMessage(now: now.addingTimeInterval(20)), "GitHub unavailable — retrying in 2m")
     }
 
     func testBlockedPolicyDoesNotStartDeviceFlowAndSetsError() async throws {

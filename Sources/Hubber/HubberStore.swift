@@ -568,20 +568,25 @@ extension HubberStore {
         set { primaryConnection?.rateLimitedUntil = newValue }
     }
 
-    var rateLimitMessage: String? {
-        guard let until = rateLimitedUntil, until > Date() else { return nil }
-        return ReviewSLOPresentation.rateLimitFooter(secondsRemaining: until.timeIntervalSinceNow)
+    func rateLimitMessage(now: Date) -> String? {
+        guard let until = rateLimitedUntil, until > now else { return nil }
+        return ReviewSLOPresentation.rateLimitFooter(secondsRemaining: until.timeIntervalSince(now))
     }
 
     /// Footer text while backing off from an outage. Rate-limit messaging takes precedence.
-    var outageMessage: String? {
+    func outageMessage(now: Date) -> String? {
         guard
-            rateLimitMessage == nil, let connection = primaryConnection,
-            let until = connection.unavailableUntil, until > Date() else { return nil }
+            rateLimitMessage(now: now) == nil, let connection = primaryConnection,
+            let until = connection.unavailableUntil, until > now else { return nil }
         return ReviewSLOPresentation.outageFooter(
             providerName: connection.id.providerDisplayName,
-            secondsRemaining: until.timeIntervalSinceNow
+            secondsRemaining: until.timeIntervalSince(now)
         )
+    }
+
+    /// True while a rate-limit or outage countdown is showing in the footer.
+    func isCountingDown(now: Date) -> Bool {
+        rateLimitMessage(now: now) != nil || outageMessage(now: now) != nil
     }
 }
 
