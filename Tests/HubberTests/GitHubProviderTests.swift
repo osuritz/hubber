@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import Hubber
 
+// swiftlint:disable:next type_body_length - provider transport suite keeps growing
 final class GitHubProviderTests: XCTestCase {
     private var provider: GitHubProvider!
 
@@ -536,6 +537,123 @@ final class GitHubProviderTests: XCTestCase {
         } catch let CodeHostAuthError.rateLimited(retryAfter) {
             XCTAssertEqual(retryAfter, 60)
         }
+    }
+
+    func testGraphQL403WithRetryAfterIsSecondaryRateLimit() async throws {
+        MockURLProtocol.handler = { request in
+            try (
+                Self.response(
+                    for: request,
+                    statusCode: 403,
+                    headerFields: ["x-ratelimit-remaining": "42", "Retry-After": "90"]
+                ),
+                Data()
+            )
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
+            XCTAssertEqual(retryAfter, 90)
+        }
+    }
+
+    func testGraphQLRateLimitUsesResetHeaderWhenRetryAfterMissing() async throws {
+        let reset = Int(Date().timeIntervalSince1970) + 300
+        MockURLProtocol.handler = { request in
+            try (
+                Self.response(
+                    for: request,
+                    statusCode: 403,
+                    headerFields: ["x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset)]
+                ),
+                Data()
+            )
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
+            XCTAssertEqual(try XCTUnwrap(retryAfter), 300, accuracy: 5)
+        }
+    }
+
+    func testResetHeaderFallbackIsClampedAndSanitized() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        func error(retryAfter: String? = nil, reset: String?) -> CodeHostAuthError {
+            .rateLimited(retryAfterHeader: retryAfter, resetHeader: reset, now: now)
+        }
+        XCTAssertEqual(error(reset: "1000120"), .rateLimited(retryAfter: 120))
+        XCTAssertEqual(error(reset: "999000"), .rateLimited(retryAfter: 0), "A reset in the past clamps to 0")
+        XCTAssertEqual(
+            error(reset: "9999999999"),
+            .rateLimited(retryAfter: CodeHostAuthError.maxRetryAfter)
+        )
+        XCTAssertEqual(error(reset: "inf"), .rateLimited(retryAfter: nil))
+        XCTAssertEqual(error(reset: "nan"), .rateLimited(retryAfter: nil))
+        XCTAssertEqual(error(reset: nil), .rateLimited(retryAfter: nil))
+        XCTAssertEqual(error(retryAfter: "30", reset: "1000120"), .rateLimited(retryAfter: 30), "Retry-After wins")
+    }
+
+    func testGraphQLRateLimitedErrorTypeWithoutDataThrowsRateLimited() async throws {
+        MockURLProtocol.handler = { request in
+            try (
+                Self.response(for: request, headerFields: ["Retry-After": "45"]),
+                Data(#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#.utf8)
+            )
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
+            XCTAssertEqual(retryAfter, 45)
+        }
+    }
+
+    func testGraphQLRateLimitedErrorTypeWithoutHeadersHasNilRetryAfter() async throws {
+        MockURLProtocol.handler = { request in
+            try (
+                Self.response(for: request),
+                Data(#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#.utf8)
+            )
+        }
+
+        do {
+            _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+            XCTFail("Expected rateLimited")
+        } catch let CodeHostAuthError.rateLimited(retryAfter) {
+            XCTAssertNil(retryAfter)
+        }
+    }
+
+    func testGraphQL5xxThrowsServiceUnavailableAndIsTransient() async throws {
+        for status in [500, 502, 503, 504] {
+            MockURLProtocol.handler = { request in
+                try (Self.response(for: request, statusCode: status), Data())
+            }
+            do {
+                _ = try await provider.fetchIncomingReviews(accessToken: "tok", viewerLogin: "osuritz", mode: .explicit)
+                XCTFail("Expected serviceUnavailable for \(status)")
+            } catch let error as CodeHostAuthError {
+                XCTAssertEqual(error, .serviceUnavailable(statusCode: status))
+                XCTAssertTrue(CodeHostAuthError.isTransient(error))
+            }
+        }
+    }
+
+    func testTransientClassification() {
+        XCTAssertTrue(CodeHostAuthError.isTransient(URLError(.timedOut)))
+        XCTAssertTrue(CodeHostAuthError.isTransient(URLError(.notConnectedToInternet)))
+        XCTAssertFalse(CodeHostAuthError.isTransient(URLError(.cancelled)))
+        XCTAssertFalse(CodeHostAuthError.isTransient(CancellationError()))
+        XCTAssertFalse(CodeHostAuthError.isTransient(CodeHostAuthError.badCredentials))
+        XCTAssertFalse(CodeHostAuthError.isTransient(CodeHostAuthError.rateLimited(retryAfter: 5)))
+        XCTAssertTrue(CodeHostAuthError.isCancellation(URLError(.cancelled)))
+        XCTAssertTrue(CodeHostAuthError.isCancellation(CancellationError()))
+        XCTAssertFalse(CodeHostAuthError.isCancellation(URLError(.timedOut)))
     }
 
     func testGraphQL403WithoutRateLimitHeaderThrowsGitHub() async throws {

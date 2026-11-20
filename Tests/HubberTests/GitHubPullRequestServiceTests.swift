@@ -71,9 +71,9 @@ final class GitHubProviderDraftTests: XCTestCase {
 
         do {
             _ = try await service.fetchDraftPullRequests(accessToken: "test-token")
-            XCTFail("Expected CodeHostAuthError.providerMessage")
-        } catch let CodeHostAuthError.providerMessage(message) {
-            XCTAssertEqual(message, "GitHub returned HTTP 503.")
+            XCTFail("Expected CodeHostAuthError.serviceUnavailable")
+        } catch let CodeHostAuthError.serviceUnavailable(statusCode) {
+            XCTAssertEqual(statusCode, 503)
         }
     }
 

@@ -16,4 +16,11 @@ enum ReviewSLOPresentation {
         let minutes = max(1, Int((secondsRemaining / 60).rounded(.up)))
         return "Rate limited — next refresh in \(minutes)m"
     }
+
+    /// Returns a footer string like "GitHub unavailable — retrying in 5m" ("in 20s" under a minute).
+    static func outageFooter(providerName: String, secondsRemaining: TimeInterval) -> String {
+        let seconds = max(1, Int(secondsRemaining.rounded(.up)))
+        let wait = seconds < 60 ? "\(seconds)s" : "\(Int((secondsRemaining / 60).rounded(.up)))m"
+        return "\(providerName) unavailable — retrying in \(wait)"
+    }
 }

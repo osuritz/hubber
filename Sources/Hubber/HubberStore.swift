@@ -572,6 +572,17 @@ extension HubberStore {
         guard let until = rateLimitedUntil, until > Date() else { return nil }
         return ReviewSLOPresentation.rateLimitFooter(secondsRemaining: until.timeIntervalSinceNow)
     }
+
+    /// Footer text while backing off from an outage. Rate-limit messaging takes precedence.
+    var outageMessage: String? {
+        guard
+            rateLimitMessage == nil, let connection = primaryConnection,
+            let until = connection.unavailableUntil, until > Date() else { return nil }
+        return ReviewSLOPresentation.outageFooter(
+            providerName: connection.id.providerDisplayName,
+            secondsRemaining: until.timeIntervalSinceNow
+        )
+    }
 }
 
 private extension HubberAuthState {

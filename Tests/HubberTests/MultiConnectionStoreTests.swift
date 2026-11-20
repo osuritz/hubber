@@ -132,6 +132,38 @@ private actor MultiConnectionProvider: CodeHostProvider {
     }
 }
 
+/// Provider whose outgoing result can change between refreshes and which counts fetches.
+private actor ScriptedProvider: CodeHostProvider {
+    private var outgoingResult: Result<[OutgoingReview], Error>
+    private(set) var fetchCount = 0
+
+    init(outgoing: Result<[OutgoingReview], Error>) {
+        outgoingResult = outgoing
+    }
+
+    func setOutgoing(_ result: Result<[OutgoingReview], Error>) {
+        outgoingResult = result
+    }
+
+    func fetchIncomingReviews(accessToken _: String, viewerLogin _: String, mode _: IncomingReviewMode) async throws
+        -> [IncomingReview] {
+        []
+    }
+
+    func fetchOutgoingPullRequests(
+        accessToken _: String,
+        viewerLogin _: String,
+        unresolvedMode _: UnresolvedThreadMode
+    ) async throws -> [OutgoingReview] {
+        fetchCount += 1
+        return try outgoingResult.get()
+    }
+
+    func fetchDraftPullRequests(accessToken _: String, limit _: Int) async throws -> [DraftReview] {
+        []
+    }
+}
+
 private actor InvalidatingMultiConnectionProvider: CodeHostProvider, CodeHostCacheInvalidating {
     private let wrapped: MultiConnectionProvider
     private(set) var invalidateAllCallCount = 0
@@ -375,6 +407,155 @@ final class MultiConnectionStoreTests: XCTestCase {
 
         XCTAssertNotNil(connectionA.rateLimitedUntil)
         XCTAssertNil(connectionB.rateLimitedUntil)
+    }
+
+    // MARK: - Outage back-off
+
+    func testOutageDelayDoublesFromThirtySecondsAndCapsAtFifteenMinutes() {
+        let delays = (1...9).map { Connection.outageDelay(failures: $0, jitter: 0) }
+        XCTAssertEqual(delays, [30, 60, 120, 240, 480, 900, 900, 900, 900])
+        XCTAssertEqual(Connection.outageDelay(failures: 10000, jitter: 0), 900)
+    }
+
+    func testOutageDelayJitterStaysWithinTwentyPercent() {
+        XCTAssertEqual(Connection.outageDelay(failures: 3, jitter: -0.2), 96, accuracy: 0.001)
+        XCTAssertEqual(Connection.outageDelay(failures: 3, jitter: 0.2), 144, accuracy: 0.001)
+        // Out-of-range jitter is clamped, so the jittered delay can never exceed 1.2 x the cap.
+        XCTAssertEqual(Connection.outageDelay(failures: 20, jitter: 5), 900 * 1.2, accuracy: 0.001)
+        XCTAssertEqual(Connection.outageDelay(failures: 1, jitter: -5), 30 * 0.8, accuracy: 0.001)
+    }
+
+    func testTransientFailureSetsBackoffThatGrowsWithConsecutiveFailures() async throws {
+        let connection = try makeConnection(
+            login: "outage",
+            provider: ScriptedProvider(outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503))),
+            backoffJitter: { 0.2 }
+        )
+        connection.authState = .signedIn(login: "outage")
+
+        var observed: [TimeInterval] = []
+        for _ in 1...3 {
+            connection.unavailableUntil = nil // let the next refresh run
+            _ = await connection.refreshPullRequestsFromGitHub()
+            try observed.append(XCTUnwrap(connection.unavailableUntil).timeIntervalSinceNow)
+        }
+
+        XCTAssertEqual(connection.consecutiveTransientFailures, 3)
+        XCTAssertEqual(observed[0], 36, accuracy: 2)
+        XCTAssertEqual(observed[1], 72, accuracy: 2)
+        XCTAssertEqual(observed[2], 144, accuracy: 2)
+        XCTAssertNil(connection.pullRequestRefreshError, "An outage is not a per-tab or global error banner")
+    }
+
+    func testScheduledRefreshSkipsWhileBackingOffThenRecoversAndResets() async throws {
+        let provider = ScriptedProvider(outgoing: .failure(URLError(.notConnectedToInternet)))
+        let connection = try makeConnection(login: "outage", provider: provider, backoffJitter: { 0 })
+        connection.authState = .signedIn(login: "outage")
+
+        _ = await connection.refreshPullRequestsFromGitHub()
+        let firstFetchCount = await provider.fetchCount
+        XCTAssertEqual(firstFetchCount, 1)
+        XCTAssertNotNil(connection.unavailableUntil)
+
+        _ = await connection.refreshPullRequestsFromGitHub() // scheduled path: skipped
+        let skippedFetchCount = await provider.fetchCount
+        XCTAssertEqual(skippedFetchCount, 1)
+        XCTAssertEqual(connection.consecutiveTransientFailures, 1)
+
+        await provider.setOutgoing(.success([]))
+        connection.unavailableUntil = Date().addingTimeInterval(-1) // back-off elapsed
+        let successes = await connection.refreshPullRequestsFromGitHub()
+        XCTAssertNotNil(successes)
+        XCTAssertNil(connection.unavailableUntil)
+        XCTAssertEqual(connection.consecutiveTransientFailures, 0)
+    }
+
+    func testSchedulerSleepsUntilBackoffEndsInsteadOfFullInterval() async throws {
+        let sleeper = MultiConnectionSleeper()
+        let connection = try makeConnection(
+            login: "outage",
+            provider: ScriptedProvider(outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 502))),
+            sleeper: sleeper,
+            backoffJitter: { 0 }
+        )
+        connection.authState = .signedIn(login: "outage")
+
+        connection.refreshNow()
+        await sleeper.awaitParked()
+
+        let intervals = await sleeper.requestedIntervals
+        let interval = try XCTUnwrap(intervals.first)
+        XCTAssertEqual(interval, 30, accuracy: 2, "Wake when the back-off ends, not 5 minutes later")
+    }
+
+    func testManualRefreshBypassesOutageBackoffButKeepsFailureCount() async throws {
+        let sleeper = MultiConnectionSleeper()
+        let provider = ScriptedProvider(outgoing: .failure(CodeHostAuthError.serviceUnavailable(statusCode: 503)))
+        let connection = try makeConnection(login: "outage", provider: provider, sleeper: sleeper, backoffJitter: { 0 })
+        connection.authState = .signedIn(login: "outage")
+        _ = await connection.refreshPullRequestsFromGitHub()
+        XCTAssertEqual(connection.consecutiveTransientFailures, 1)
+        XCTAssertNotNil(connection.unavailableUntil)
+
+        connection.refreshNow()
+        XCTAssertNil(connection.unavailableUntil, "Manual refresh clears the outage back-off immediately")
+        XCTAssertEqual(connection.consecutiveTransientFailures, 1, "Count is kept so the delay keeps growing")
+
+        await sleeper.awaitParked()
+        let fetchCount = await provider.fetchCount
+        XCTAssertEqual(fetchCount, 2)
+        XCTAssertEqual(connection.consecutiveTransientFailures, 2)
+        let intervals = await sleeper.requestedIntervals
+        let interval = try XCTUnwrap(intervals.first)
+        XCTAssertEqual(interval, 60, accuracy: 2)
+    }
+
+    func testManualRefreshDoesNotBypassRateLimit() async throws {
+        let sleeper = MultiConnectionSleeper()
+        let provider = ScriptedProvider(outgoing: .success([]))
+        let connection = try makeConnection(login: "limited", provider: provider, sleeper: sleeper)
+        connection.authState = .signedIn(login: "limited")
+        let until = Date().addingTimeInterval(600)
+        connection.rateLimitedUntil = until
+
+        connection.refreshNow()
+        await sleeper.awaitParked()
+
+        XCTAssertEqual(connection.rateLimitedUntil, until)
+        let fetchCount = await provider.fetchCount
+        XCTAssertEqual(fetchCount, 0)
+    }
+
+    func testCancellationIsNotCountedAsTransientFailure() async throws {
+        for error in [CancellationError() as Error, URLError(.cancelled)] {
+            let connection = try makeConnection(
+                login: "cancel",
+                provider: ScriptedProvider(outgoing: .failure(error))
+            )
+            connection.authState = .signedIn(login: "cancel")
+
+            _ = await connection.refreshPullRequestsFromGitHub()
+
+            XCTAssertEqual(connection.consecutiveTransientFailures, 0, "\(error)")
+            XCTAssertNil(connection.unavailableUntil, "\(error)")
+        }
+    }
+
+    func testOutageMessageShowsProviderNameAndYieldsToRateLimit() throws {
+        let defaults = try makeDefaults()
+        let store = makeStore(defaults: defaults, restoreOnInit: false)
+        try store.addConnection(
+            id: .gitHubDotCom(login: "outage"),
+            tokenStore: MutableTokenStore(token: storedToken(login: "outage"))
+        )
+        let connection = try XCTUnwrap(store.primaryConnection)
+        XCTAssertNil(store.outageMessage)
+
+        connection.unavailableUntil = Date().addingTimeInterval(300)
+        XCTAssertEqual(store.outageMessage, "GitHub unavailable — retrying in 5m")
+
+        connection.rateLimitedUntil = Date().addingTimeInterval(300)
+        XCTAssertNil(store.outageMessage, "Rate-limit messaging takes precedence")
     }
 
     func testBlockedPolicyDoesNotStartDeviceFlowAndSetsError() async throws {
@@ -818,7 +999,8 @@ final class MultiConnectionStoreTests: XCTestCase {
         authService: MultiConnectionAuthService? = nil,
         provider: any CodeHostProvider = MultiConnectionProvider(),
         tokenStore: (any TokenStoring)? = nil,
-        sleeper: MultiConnectionSleeper? = nil
+        sleeper: MultiConnectionSleeper? = nil,
+        backoffJitter: @escaping @MainActor () -> Double = { 0 }
     ) throws -> Connection {
         let sleeper = sleeper ?? MultiConnectionSleeper()
         let id = ConnectionID.gitHubDotCom(login: login)
@@ -833,7 +1015,8 @@ final class MultiConnectionStoreTests: XCTestCase {
                 idle: MultiConnectionIdleProvider(),
                 sleep: { interval in try await sleeper.sleep(for: interval) }
             ),
-            settings: SettingsStore(defaults: defaults)
+            settings: SettingsStore(defaults: defaults),
+            backoffJitter: backoffJitter
         )
     }
 

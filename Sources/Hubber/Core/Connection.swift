@@ -16,6 +16,11 @@ final class Connection: ObservableObject, Identifiable {
     @Published var draftsError: String?
     @Published var pullRequestRefreshError: String?
     @Published var rateLimitedUntil: Date?
+    /// Set while backing off from a transient outage (5xx / network error). Unlike `rateLimitedUntil`,
+    /// a manual refresh clears it.
+    @Published var unavailableUntil: Date?
+    private(set) var consecutiveTransientFailures = 0
+    private let backoffJitter: @MainActor () -> Double
     @Published private(set) var developerLog: [DeveloperLogEntry] = []
     @Published var isPopoverOpen = false
 
@@ -40,8 +45,10 @@ final class Connection: ObservableObject, Identifiable {
         tokenStore: any TokenStoring,
         snapshotStore: SnapshotStore,
         scheduler: RefreshScheduler,
-        settings: SettingsStore
+        settings: SettingsStore,
+        backoffJitter: @escaping @MainActor () -> Double = { Double.random(in: -0.2...0.2) }
     ) {
+        self.backoffJitter = backoffJitter
         self.id = id
         self.provider = provider
         self.authService = authService
@@ -241,6 +248,10 @@ final class Connection: ObservableObject, Identifiable {
             return
         }
 
+        // Manual refresh bypasses the outage back-off (not the rate limit). The failure count is kept,
+        // so another failure keeps growing the delay.
+        unavailableUntil = nil
+
         guard invalidatingCache, let invalidating = provider as? CodeHostCacheInvalidating else {
             restartRefreshCycle()
             return
@@ -282,6 +293,11 @@ final class Connection: ObservableObject, Identifiable {
             appendDeveloperLog("Skipped refresh: rate-limited until \(until)")
             return nil
         }
+        guard unavailableUntil.map({ $0 > Date() }) != true else {
+            let until = unavailableUntil.map { Self.developerLogFormatter.string(from: $0) } ?? "unknown"
+            appendDeveloperLog("Skipped refresh: backing off from outage until \(until)")
+            return nil
+        }
         guard let login = signedInLogin else {
             appendDeveloperLog("Skipped refresh: no signed-in login")
             return nil
@@ -310,6 +326,8 @@ final class Connection: ObservableObject, Identifiable {
         lastPullRequestRefresh = Date()
         pullRequestRefreshError = nil
         rateLimitedUntil = nil
+        unavailableUntil = nil
+        consecutiveTransientFailures = 0
         let counts = "\(data.incoming.count) incoming, \(data.outgoing.count) outgoing, \(data.drafts.count) drafts"
         appendDeveloperLog("Fetched \(counts)")
         await onRefreshSucceeded?(tabSuccesses)
@@ -323,6 +341,19 @@ final class Connection: ObservableObject, Identifiable {
             rateLimitedUntil = Date().addingTimeInterval(delay)
             let minutes = Int((delay / 60).rounded(.up))
             appendDeveloperLog("GitHub rate limited, backing off for \(minutes)m")
+            return true
+        }
+        if CodeHostAuthError.isCancellation(error) {
+            return false
+        }
+        if CodeHostAuthError.isTransient(error) {
+            consecutiveTransientFailures += 1
+            let delay = Self.outageDelay(failures: consecutiveTransientFailures, jitter: backoffJitter())
+            unavailableUntil = Date().addingTimeInterval(delay)
+            appendDeveloperLog(
+                "\(id.providerDisplayName) unavailable (\(error.localizedDescription)), "
+                    + "retrying in \(Int(delay.rounded()))s"
+            )
             return true
         }
         guard let newState = Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) else {
@@ -342,6 +373,16 @@ final class Connection: ObservableObject, Identifiable {
             stopPullRequestRefreshLoop()
         }
         return true
+    }
+
+    nonisolated static let outageBaseDelay: TimeInterval = 30
+    nonisolated static let outageMaxDelay: TimeInterval = 15 * 60
+
+    /// `min(30s * 2^(n-1), 15m)`, then scaled by `1 + jitter` (jitter is in -0.2...0.2).
+    nonisolated static func outageDelay(failures: Int, jitter: Double) -> TimeInterval {
+        let exponent = Double(min(max(failures - 1, 0), 20))
+        let base = min(outageBaseDelay * pow(2, exponent), outageMaxDelay)
+        return base * (1 + min(max(jitter, -0.2), 0.2))
     }
 
     // MARK: - Private
@@ -380,6 +421,7 @@ final class Connection: ObservableObject, Identifiable {
                 let isRateLimited = rateLimitedUntil.map { $0 > Date() } ?? false
                 return RefreshContext(
                     isRateLimited: isRateLimited,
+                    unavailableRemaining: unavailableUntil.map(\.timeIntervalSinceNow).flatMap { $0 > 0 ? $0 : nil },
                     hasUrgentSLO: AttentionState.hasUrgentSLO(data: data, settings: settings),
                     isPopoverOpen: isPopoverOpen,
                     isAllGreen: AttentionState.isAllGreen(data: data)

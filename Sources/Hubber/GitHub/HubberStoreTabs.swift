@@ -18,7 +18,7 @@ extension Connection {
         let outgoingResult = await outgoing
         let draftsResult = await drafts
         let errs = [incomingResult.failureError, outgoingResult.failureError, draftsResult.failureError]
-        if errs.compactMap(\.self).contains(where: { $0 is CancellationError }) {
+        if errs.compactMap(\.self).contains(where: CodeHostAuthError.isCancellation) {
             appendDeveloperLog("Pull request refresh cancelled")
             return (true, TabSuccesses(incoming: false, outgoing: false))
         }
@@ -97,6 +97,10 @@ extension Connection {
 
     private func isGlobalError(_ error: Error) -> Bool {
         if case CodeHostAuthError.rateLimited = error {
+            return true
+        }
+        // An outage hits every tab alike, so any transient failure backs the whole connection off.
+        if CodeHostAuthError.isTransient(error) {
             return true
         }
         return Self.authState(afterRefreshError: error, signedInLogin: signedInLogin) != nil

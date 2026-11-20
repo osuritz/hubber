@@ -79,7 +79,13 @@ final class GitLabProvider: CodeHostProvider {
             throw CodeHostAuthError.badCredentials
         }
         if http.statusCode == 429 {
-            throw CodeHostAuthError.rateLimited(retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
+            throw CodeHostAuthError.rateLimited(
+                retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"),
+                resetHeader: http.value(forHTTPHeaderField: "RateLimit-Reset")
+            )
+        }
+        if (500..<600).contains(http.statusCode) {
+            throw CodeHostAuthError.serviceUnavailable(statusCode: http.statusCode)
         }
         guard (200..<300).contains(http.statusCode) else {
             throw CodeHostAuthError.providerMessage("GitLab returned HTTP \(http.statusCode).")

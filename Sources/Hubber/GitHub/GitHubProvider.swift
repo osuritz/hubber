@@ -258,12 +258,21 @@ final class GitHubProvider: CodeHostProvider {
             throw CodeHostAuthError.badCredentials
         }
 
-        // Rate-limit detection: 429, or 403 with x-ratelimit-remaining: 0
+        // Rate-limit detection: 429, or 403 with x-ratelimit-remaining: 0 (primary limit) or a
+        // Retry-After header (secondary limit, where remaining is usually non-zero).
+        let rateLimitError = CodeHostAuthError.rateLimited(
+            retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"),
+            resetHeader: http.value(forHTTPHeaderField: "x-ratelimit-reset")
+        )
         let isRateLimitedByHeader =
             http.statusCode == 403 &&
-            http.value(forHTTPHeaderField: "x-ratelimit-remaining").flatMap(Int.init) == 0
+            (http.value(forHTTPHeaderField: "x-ratelimit-remaining").flatMap(Int.init) == 0 ||
+                http.value(forHTTPHeaderField: "Retry-After") != nil)
         if http.statusCode == 429 || isRateLimitedByHeader {
-            throw CodeHostAuthError.rateLimited(retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
+            throw rateLimitError
+        }
+        if (500..<600).contains(http.statusCode) {
+            throw CodeHostAuthError.serviceUnavailable(statusCode: http.statusCode)
         }
 
         guard (200..<300).contains(http.statusCode) else {
@@ -284,6 +293,9 @@ final class GitHubProvider: CodeHostProvider {
         if
             let errors = json["errors"] as? [[String: Any]],
             let message = errors.first?["message"] as? String {
+            if errors.contains(where: { $0["type"] as? String == "RATE_LIMITED" }) {
+                throw rateLimitError
+            }
             throw CodeHostAuthError.providerMessage(message)
         }
         throw CodeHostAuthError.invalidResponse
