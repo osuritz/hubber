@@ -178,11 +178,10 @@ struct HubberPopoverView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 13, weight: .medium))
+                            .headerIconHitTarget()
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(HubberDesign.text2)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
                     .help("Back to pull requests (Esc)")
                     .accessibilityLabel("Back to pull requests")
                 }
@@ -194,19 +193,20 @@ struct HubberPopoverView: View {
                 Button {
                     store.refreshPullRequests()
                 } label: {
-                    if store.isRefreshingPullRequests {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.65)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .medium))
+                    Group {
+                        if store.isRefreshingPullRequests {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.65)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 13, weight: .medium))
+                        }
                     }
+                    .headerIconHitTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(store.canRefreshPullRequests ? HubberDesign.text2 : HubberDesign.text3)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
                 .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
                 .help("Refresh pull requests (⌘R)")
                 .accessibilityLabel("Refresh")
@@ -216,11 +216,10 @@ struct HubberPopoverView: View {
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13, weight: .medium))
+                        .headerIconHitTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(store.showSettings ? HubberDesign.accent : HubberDesign.text2)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
                 .help(store.showSettings ? "Close settings (⌘,)" : "Settings (⌘,)")
                 .keyboardShortcut(",", modifiers: .command)
                 .accessibilityLabel(store.showSettings ? "Close settings" : "Settings")
@@ -528,3 +527,10 @@ private struct CountBadge: View {
 // SettingsView and SettingsSection are in HubberSettingsView.swift
 // Row components (IncomingReviewRow, OutgoingReviewRow, DraftPRRow, etc.) are in HubberRows.swift
 // List states (AllClearState, ErrorState, LoadingState, etc.) are in HubberListStates.swift
+
+private extension View {
+    /// A plain-style button only hit-tests its label, so the 24pt target must be applied inside the label.
+    func headerIconHitTarget() -> some View {
+        frame(width: 24, height: 24).contentShape(Rectangle())
+    }
+}
