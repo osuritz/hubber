@@ -241,7 +241,7 @@ final class PerTabRefreshTests: XCTestCase {
 
         // Global rate-limit handling must have been applied.
         XCTAssertNotNil(
-            store.rateLimitMessage,
+            store.rateLimitMessage(now: Date()),
             "Rate-limit backoff must be applied after a rateLimited error"
         )
     }

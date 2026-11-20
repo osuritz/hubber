@@ -266,7 +266,7 @@ struct HubberPopoverView: View {
         } else if store.incomingError != nil, store.data.incoming.isEmpty {
             ErrorState(
                 message: "Couldn't load reviews",
-                lastUpdated: lastUpdatedText,
+                lastUpdated: lastUpdatedText(now: Date()),
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.incoming.isEmpty {
@@ -306,7 +306,7 @@ struct HubberPopoverView: View {
         } else if store.outgoingError != nil, store.data.outgoing.isEmpty {
             ErrorState(
                 message: "Couldn't load outgoing PRs",
-                lastUpdated: lastUpdatedText,
+                lastUpdated: lastUpdatedText(now: Date()),
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.outgoing.isEmpty {
@@ -344,7 +344,7 @@ struct HubberPopoverView: View {
         } else if store.draftsError != nil, store.data.drafts.isEmpty {
             ErrorState(
                 message: "Couldn't load drafts",
-                lastUpdated: lastUpdatedText,
+                lastUpdated: lastUpdatedText(now: Date()),
                 onRetry: { store.refreshPullRequests() }
             )
         } else if store.data.drafts.isEmpty {
@@ -374,20 +374,18 @@ struct HubberPopoverView: View {
         }
     }
 
-    private var lastUpdatedText: String? {
+    private func lastUpdatedText(now: Date) -> String? {
         guard let last = store.lastPullRequestRefresh else { return nil }
-        return "Updated \(elapsedText(hours: Date().timeIntervalSince(last) / 3600))"
+        return "Updated \(elapsedText(hours: now.timeIntervalSince(last) / 3600))"
     }
 
     private var footer: some View {
         HStack(spacing: 6) {
             // Last-refresh status (per popover.jsx footer)
-            if let rateLimitMessage = store.rateLimitMessage {
-                Text(rateLimitMessage).lineLimit(1)
-            } else if let outageMessage = store.outageMessage {
-                Text(outageMessage).lineLimit(1)
-            } else {
-                Text(refreshStatusText).lineLimit(1)
+            // Ticks every second while a countdown shows, every 30 s for "Updated … ago".
+            let isCountingDown = store.isCountingDown(now: Date())
+            TimelineView(.periodic(from: .now, by: isCountingDown ? 1 : 30)) { context in
+                Text(footerStatusText(now: context.date)).lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -416,7 +414,11 @@ struct HubberPopoverView: View {
         }
     }
 
-    private var refreshStatusText: String {
+    private func footerStatusText(now: Date) -> String {
+        store.rateLimitMessage(now: now) ?? store.outageMessage(now: now) ?? refreshStatusText(now: now)
+    }
+
+    private func refreshStatusText(now: Date) -> String {
         if store.isRefreshingPullRequests {
             return "Refreshing PRs..."
         }
@@ -428,7 +430,7 @@ struct HubberPopoverView: View {
             return "Refresh failed"
         }
         if let lastPullRequestRefresh = store.lastPullRequestRefresh {
-            return "Updated \(elapsedText(hours: Date().timeIntervalSince(lastPullRequestRefresh) / 3600))"
+            return "Updated \(elapsedText(hours: now.timeIntervalSince(lastPullRequestRefresh) / 3600))"
         }
         return store.canRefreshPullRequests ? "Not refreshed yet" : "Mock data"
     }
