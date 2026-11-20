@@ -11,10 +11,12 @@ enum ReviewSLOPresentation {
         isEnabled ? "SLO \(Int(hours))h" : "SLO off"
     }
 
-    /// Returns a footer string like "Rate limited — next refresh in 15m".
-    static func rateLimitFooter(secondsRemaining: TimeInterval) -> String {
+    /// Returns a footer string like "Rate limited — next refresh in 15m", or "GitHub rate limited — ..." when
+    /// `subject` names the affected account (or "2 accounts" when several are).
+    static func rateLimitFooter(subject: String? = nil, secondsRemaining: TimeInterval) -> String {
         let minutes = max(1, Int((secondsRemaining / 60).rounded(.up)))
-        return "Rate limited — next refresh in \(minutes)m"
+        let prefix = subject.map { "\($0) rate limited" } ?? "Rate limited"
+        return "\(prefix) — next refresh in \(minutes)m"
     }
 
     /// Returns a footer string like "GitHub unavailable — retrying in 5m" ("in 20s" under a minute).

@@ -24,6 +24,10 @@ final class ReviewSLOPresentationTests: XCTestCase {
             ReviewSLOPresentation.rateLimitFooter(secondsRemaining: 120),
             "Rate limited — next refresh in 2m"
         )
+        XCTAssertEqual(
+            ReviewSLOPresentation.rateLimitFooter(subject: "GitHub", secondsRemaining: 300),
+            "GitHub rate limited — next refresh in 5m"
+        )
     }
 
     func testOutageFooterShowsMinutesOrSeconds() {

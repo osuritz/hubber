@@ -207,7 +207,7 @@ struct HubberPopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(store.canRefreshPullRequests ? HubberDesign.text2 : HubberDesign.text3)
-                .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
+                .disabled(!store.canStartPullRequestRefresh)
                 .help("Refresh pull requests (⌘R)")
                 .accessibilityLabel("Refresh")
 
@@ -267,7 +267,8 @@ struct HubberPopoverView: View {
             ErrorState(
                 message: "Couldn't load reviews",
                 lastUpdated: lastUpdatedText(now: Date()),
-                onRetry: { store.refreshPullRequests() }
+                onRetry: { store.refreshPullRequests() },
+                canRetry: store.canStartPullRequestRefresh
             )
         } else if store.data.incoming.isEmpty {
             AllClearState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
@@ -276,7 +277,8 @@ struct HubberPopoverView: View {
                 ErrorState(
                     message: "Couldn't load reviews",
                     lastUpdated: "Last refresh failed: \(error)",
-                    onRetry: { store.refreshPullRequests() }
+                    onRetry: { store.refreshPullRequests() },
+                    canRetry: store.canStartPullRequestRefresh
                 )
             }
             let sorted = store.data.incoming.sorted { $0.sloClockStart < $1.sloClockStart }
@@ -307,7 +309,8 @@ struct HubberPopoverView: View {
             ErrorState(
                 message: "Couldn't load outgoing PRs",
                 lastUpdated: lastUpdatedText(now: Date()),
-                onRetry: { store.refreshPullRequests() }
+                onRetry: { store.refreshPullRequests() },
+                canRetry: store.canStartPullRequestRefresh
             )
         } else if store.data.outgoing.isEmpty {
             EmptyOutgoingState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
@@ -316,7 +319,8 @@ struct HubberPopoverView: View {
                 ErrorState(
                     message: "Couldn't load outgoing PRs",
                     lastUpdated: "Last refresh failed: \(error)",
-                    onRetry: { store.refreshPullRequests() }
+                    onRetry: { store.refreshPullRequests() },
+                    canRetry: store.canStartPullRequestRefresh
                 )
             }
             ForEach(Array(store.data.outgoing.enumerated()), id: \.element.id) { index, review in
@@ -345,7 +349,8 @@ struct HubberPopoverView: View {
             ErrorState(
                 message: "Couldn't load drafts",
                 lastUpdated: lastUpdatedText(now: Date()),
-                onRetry: { store.refreshPullRequests() }
+                onRetry: { store.refreshPullRequests() },
+                canRetry: store.canStartPullRequestRefresh
             )
         } else if store.data.drafts.isEmpty {
             EmptyDraftsState(showsAccessHint: EmptyResultsHint.shouldShow(store: store))
@@ -354,7 +359,8 @@ struct HubberPopoverView: View {
                 ErrorState(
                     message: "Couldn't load drafts",
                     lastUpdated: "Last refresh failed: \(error)",
-                    onRetry: { store.refreshPullRequests() }
+                    onRetry: { store.refreshPullRequests() },
+                    canRetry: store.canStartPullRequestRefresh
                 )
             }
             ForEach(Array(store.data.drafts.enumerated()), id: \.element.id) { index, draft in
@@ -402,7 +408,7 @@ struct HubberPopoverView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(HubberDesign.text2)
-            .disabled(store.isRefreshingPullRequests)
+            .disabled(!store.canStartPullRequestRefresh)
             .keyboardShortcut("r", modifiers: .command)
         }
         .hubberFont(.footer)

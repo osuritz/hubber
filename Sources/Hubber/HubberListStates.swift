@@ -58,6 +58,7 @@ struct ErrorState: View {
     var message: String
     var lastUpdated: String?
     var onRetry: (() -> Void)?
+    var canRetry = true
 
     var body: some View {
         HStack(spacing: 10) {
@@ -85,6 +86,7 @@ struct ErrorState: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(HubberDesign.accent)
                     .buttonStyle(.plain)
+                    .disabled(!canRetry)
             }
         }
         .padding(.horizontal, 12)
