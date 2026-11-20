@@ -207,7 +207,7 @@ struct HubberPopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(store.canRefreshPullRequests ? HubberDesign.text2 : HubberDesign.text3)
-                .disabled(!store.canRefreshPullRequests || store.isRefreshingPullRequests)
+                .disabled(!store.canStartPullRequestRefresh)
                 .help("Refresh pull requests (⌘R)")
                 .accessibilityLabel("Refresh")
 
@@ -402,7 +402,7 @@ struct HubberPopoverView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(HubberDesign.text2)
-            .disabled(store.isRefreshingPullRequests)
+            .disabled(!store.canStartPullRequestRefresh)
             .keyboardShortcut("r", modifiers: .command)
         }
         .hubberFont(.footer)

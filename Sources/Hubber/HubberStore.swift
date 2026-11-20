@@ -418,8 +418,15 @@ final class HubberStore: ObservableObject {
         primaryConnection?.usernameDisplay ?? "· not signed in"
     }
 
+    /// True when any connection is signed in and able to refresh (regardless of in-flight refreshes).
     var canRefreshPullRequests: Bool {
-        primaryConnection?.canRefreshPullRequests ?? false
+        connections.contains { $0.canRefreshPullRequests }
+    }
+
+    /// True when at least one connection could refresh right now: signed in and not already refreshing.
+    /// Gates the refresh buttons, so a slow refresh on one account never blocks refreshing the others.
+    var canStartPullRequestRefresh: Bool {
+        connections.contains { $0.canRefreshPullRequests && !$0.isRefreshingPullRequests }
     }
 
     /// True while the GitHub device-flow sign-in is awaiting user authorization.
@@ -478,7 +485,8 @@ final class HubberStore: ObservableObject {
     /// using the cache.
     func refreshPullRequests(userInitiated: Bool = true) {
         let kind = userInitiated ? "manual" : "automatic"
-        guard canRefreshPullRequests, !isRefreshingPullRequests else {
+        let targets = connections.filter { $0.canRefreshPullRequests && !$0.isRefreshingPullRequests }
+        guard !targets.isEmpty else {
             appendDeveloperLog("Ignored \(kind) refresh request")
             return
         }
@@ -487,7 +495,9 @@ final class HubberStore: ObservableObject {
         if userInitiated {
             telemetry.manualRefresh()
         }
-        primaryConnection?.refreshNow(invalidatingCache: userInitiated)
+        for connection in targets {
+            connection.refreshNow(invalidatingCache: userInitiated)
+        }
     }
 
     func clearDeveloperLog() {
@@ -569,19 +579,35 @@ extension HubberStore {
     }
 
     func rateLimitMessage(now: Date) -> String? {
-        guard let until = rateLimitedUntil, until > now else { return nil }
-        return ReviewSLOPresentation.rateLimitFooter(secondsRemaining: until.timeIntervalSince(now))
+        guard let (subject, until) = affected(now: now, deadline: \.rateLimitedUntil) else { return nil }
+        return ReviewSLOPresentation.rateLimitFooter(subject: subject, secondsRemaining: until.timeIntervalSince(now))
     }
 
     /// Footer text while backing off from an outage. Rate-limit messaging takes precedence.
     func outageMessage(now: Date) -> String? {
         guard
-            rateLimitMessage(now: now) == nil, let connection = primaryConnection,
-            let until = connection.unavailableUntil, until > now else { return nil }
-        return ReviewSLOPresentation.outageFooter(
-            providerName: connection.id.providerDisplayName,
-            secondsRemaining: until.timeIntervalSince(now)
-        )
+            rateLimitMessage(now: now) == nil,
+            let (subject, until) = affected(now: now, deadline: \.unavailableUntil) else { return nil }
+        return ReviewSLOPresentation.outageFooter(providerName: subject, secondsRemaining: until.timeIntervalSince(now))
+    }
+
+    /// Connections whose `deadline` is still in the future: a label for them (the account's name when one,
+    /// "N accounts" when several) and the soonest deadline. `nil` when none are affected.
+    private func affected(now: Date, deadline: KeyPath<Connection, Date?>) -> (subject: String, until: Date)? {
+        let hits = connections.compactMap { connection in
+            connection[keyPath: deadline].flatMap { $0 > now ? (connection: connection, until: $0) : nil }
+        }
+        guard let soonest = hits.map(\.until).min() else { return nil }
+        if hits.count > 1 {
+            return ("\(hits.count) accounts", soonest)
+        }
+        return (footerName(for: hits[0].connection.id), soonest)
+    }
+
+    /// Provider display name, plus the login when several connections share that provider.
+    private func footerName(for id: ConnectionID) -> String {
+        let shared = connections.filter { $0.id.providerDisplayName == id.providerDisplayName }.count > 1
+        return shared ? "\(id.providerDisplayName) (@\(id.login))" : id.providerDisplayName
     }
 
     /// True while a rate-limit or outage countdown is showing in the footer.

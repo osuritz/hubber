@@ -653,14 +653,200 @@ final class MultiConnectionStoreTests: XCTestCase {
 
         connection.rateLimitedUntil = now.addingTimeInterval(300)
         XCTAssertNil(store.outageMessage(now: now), "Rate-limit messaging takes precedence")
-        XCTAssertEqual(store.rateLimitMessage(now: now), "Rate limited — next refresh in 5m")
-        XCTAssertEqual(store.rateLimitMessage(now: now.addingTimeInterval(120)), "Rate limited — next refresh in 3m")
+        XCTAssertEqual(store.rateLimitMessage(now: now), "GitHub rate limited — next refresh in 5m")
+        XCTAssertEqual(
+            store.rateLimitMessage(now: now.addingTimeInterval(120)),
+            "GitHub rate limited — next refresh in 3m"
+        )
         XCTAssertNil(store.rateLimitMessage(now: now.addingTimeInterval(300)))
         // Rate limit expired, outage still active: falls through to the outage message.
         connection.rateLimitedUntil = now.addingTimeInterval(10)
         connection.unavailableUntil = now.addingTimeInterval(100)
         XCTAssertNil(store.outageMessage(now: now))
         XCTAssertEqual(store.outageMessage(now: now.addingTimeInterval(20)), "GitHub unavailable — retrying in 2m")
+    }
+
+    // MARK: - Multi-account refresh fan-out and footer aggregation (#156)
+
+    private func addSignedIn(
+        _ store: HubberStore,
+        id: ConnectionID,
+        provider: any CodeHostProvider = MultiConnectionProvider(),
+        sleeper: MultiConnectionSleeper = MultiConnectionSleeper()
+    ) throws -> Connection {
+        let connection = try store.addConnection(
+            id: id,
+            provider: provider,
+            tokenStore: MutableTokenStore(token: storedToken(login: id.login)),
+            scheduler: scheduler(sleeper: sleeper)
+        )
+        connection.authState = .signedIn(login: id.login)
+        return connection
+    }
+
+    func testUserInitiatedRefreshFansOutToEveryConnectionWithOneTelemetryEvent() async throws {
+        let spy = SpyTelemetrySink()
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false, telemetry: Telemetry(sink: spy))
+        let (sleeperA, sleeperB) = (MultiConnectionSleeper(), MultiConnectionSleeper())
+        let providerA = InvalidatingMultiConnectionProvider()
+        let providerB = InvalidatingMultiConnectionProvider()
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "a"), provider: providerA, sleeper: sleeperA)
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "b"), provider: providerB, sleeper: sleeperB)
+
+        store.refreshPullRequests(userInitiated: true)
+        await sleeperA.awaitParked()
+        await sleeperB.awaitParked()
+
+        XCTAssertEqual(spy.calls.filter { $0.event == "refresh.manual" }.count, 1)
+        let invalidatedA = await providerA.invalidateCount()
+        let invalidatedB = await providerB.invalidateCount()
+        XCTAssertEqual(invalidatedA, 1, "User-initiated refresh invalidates every connection's cache")
+        XCTAssertEqual(invalidatedB, 1)
+        XCTAssertTrue(store.connections.allSatisfy { $0.lastPullRequestRefresh != nil }, "Both connections fetched")
+    }
+
+    func testAutomaticRefreshFansOutWithoutTelemetryOrCacheInvalidation() async throws {
+        let spy = SpyTelemetrySink()
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false, telemetry: Telemetry(sink: spy))
+        let (sleeperA, sleeperB) = (MultiConnectionSleeper(), MultiConnectionSleeper())
+        let providerA = InvalidatingMultiConnectionProvider()
+        let providerB = InvalidatingMultiConnectionProvider()
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "a"), provider: providerA, sleeper: sleeperA)
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "b"), provider: providerB, sleeper: sleeperB)
+
+        store.refreshPullRequests(userInitiated: false)
+        await sleeperA.awaitParked()
+        await sleeperB.awaitParked()
+
+        XCTAssertFalse(spy.calls.contains { $0.event == "refresh.manual" })
+        let invalidatedA = await providerA.invalidateCount()
+        let invalidatedB = await providerB.invalidateCount()
+        XCTAssertEqual(invalidatedA, 0)
+        XCTAssertEqual(invalidatedB, 0)
+        XCTAssertTrue(store.connections.allSatisfy { $0.lastPullRequestRefresh != nil }, "Both connections fetched")
+    }
+
+    func testRefreshSkipsSignedOutAndAlreadyRefreshingConnections() async throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        let sleeperReady = MultiConnectionSleeper()
+        let providerReady = ScriptedProvider(outgoing: .success([]))
+        let providerOut = ScriptedProvider(outgoing: .success([]))
+        let providerBusy = ModeRecordingProvider(gateFirstIncoming: true)
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "ready"), provider: providerReady, sleeper: sleeperReady)
+        let signedOut = try addSignedIn(store, id: .gitHubDotCom(login: "out"), provider: providerOut)
+        signedOut.authState = .signedOut
+        let busy = try addSignedIn(store, id: .gitHubDotCom(login: "busy"), provider: providerBusy)
+        busy.refreshNow()
+        while await providerBusy.incomingModes.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(busy.isRefreshingPullRequests)
+
+        store.refreshPullRequests()
+        await sleeperReady.awaitParked()
+
+        let fetchesReady = await providerReady.fetchCount
+        let fetchesOut = await providerOut.fetchCount
+        let busyFetches = await providerBusy.incomingModes.count
+        XCTAssertEqual(fetchesReady, 1)
+        XCTAssertEqual(fetchesOut, 0)
+        XCTAssertEqual(busyFetches, 1, "The in-flight connection is not refreshed a second time")
+        await providerBusy.releaseGate()
+    }
+
+    func testRefreshAvailabilityAggregatesAcrossConnections() async throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        XCTAssertFalse(store.canRefreshPullRequests)
+        XCTAssertFalse(store.canStartPullRequestRefresh)
+        let signedOut = try addSignedIn(store, id: .gitHubDotCom(login: "out"))
+        signedOut.authState = .signedOut
+        XCTAssertFalse(store.canRefreshPullRequests, "A signed-out primary alone cannot refresh")
+        let providerBusy = ModeRecordingProvider(gateFirstIncoming: true)
+        let busy = try addSignedIn(store, id: .gitHubDotCom(login: "busy"), provider: providerBusy)
+        XCTAssertTrue(store.canRefreshPullRequests, "A secondary can refresh even when the primary cannot")
+        XCTAssertTrue(store.canStartPullRequestRefresh)
+
+        busy.refreshNow()
+        while await providerBusy.incomingModes.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(store.canRefreshPullRequests)
+        XCTAssertTrue(store.isRefreshingPullRequests)
+        XCTAssertFalse(store.canStartPullRequestRefresh, "Every eligible connection is already refreshing")
+        await providerBusy.releaseGate()
+    }
+
+    func testFooterNamesSingleAffectedSecondaryWhilePrimaryIsFine() throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "primary"))
+        let gitlab = try addSignedIn(store, id: ConnectionID(provider: "gitlab", host: "gitlab.com", login: "g"))
+        let now = Date()
+
+        gitlab.rateLimitedUntil = now.addingTimeInterval(300)
+        XCTAssertEqual(store.rateLimitMessage(now: now), "GitLab rate limited — next refresh in 5m")
+        XCTAssertTrue(store.isCountingDown(now: now))
+
+        gitlab.rateLimitedUntil = nil
+        gitlab.unavailableUntil = now.addingTimeInterval(30)
+        XCTAssertEqual(store.outageMessage(now: now), "GitLab unavailable — retrying in 30s")
+        XCTAssertTrue(store.isCountingDown(now: now))
+    }
+
+    func testFooterAddsLoginWhenSeveralConnectionsShareAProvider() throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "alice"))
+        let bob = try addSignedIn(store, id: .gitHubDotCom(login: "bob"))
+        let now = Date()
+
+        bob.rateLimitedUntil = now.addingTimeInterval(120)
+        XCTAssertEqual(store.rateLimitMessage(now: now), "GitHub (@bob) rate limited — next refresh in 2m")
+    }
+
+    func testFooterSummarisesSeveralAffectedConnectionsWithSoonestDeadline() throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        let a = try addSignedIn(store, id: .gitHubDotCom(login: "a"))
+        let b = try addSignedIn(store, id: .gitHubDotCom(login: "b"))
+        _ = try addSignedIn(store, id: .gitHubDotCom(login: "c"))
+        let now = Date()
+
+        a.rateLimitedUntil = now.addingTimeInterval(600)
+        b.rateLimitedUntil = now.addingTimeInterval(180)
+        XCTAssertEqual(store.rateLimitMessage(now: now), "2 accounts rate limited — next refresh in 3m")
+
+        a.rateLimitedUntil = nil
+        b.rateLimitedUntil = nil
+        a.unavailableUntil = now.addingTimeInterval(90)
+        b.unavailableUntil = now.addingTimeInterval(30)
+        XCTAssertEqual(store.outageMessage(now: now), "2 accounts unavailable — retrying in 30s")
+    }
+
+    func testFooterPrecedenceAndExpiryAcrossConnections() throws {
+        let store = try makeStore(defaults: makeDefaults(), restoreOnInit: false)
+        let a = try addSignedIn(store, id: .gitHubDotCom(login: "a"))
+        let gitlab = try addSignedIn(store, id: ConnectionID(provider: "gitlab", host: "gitlab.com", login: "g"))
+        let now = Date()
+
+        // Outage on one account, rate limit on another: rate limit wins, outage message yields.
+        a.unavailableUntil = now.addingTimeInterval(60)
+        gitlab.rateLimitedUntil = now.addingTimeInterval(300)
+        XCTAssertEqual(store.rateLimitMessage(now: now), "GitLab rate limited — next refresh in 5m")
+        XCTAssertNil(store.outageMessage(now: now))
+
+        // The rate limit expires, the outage still shows.
+        let later = now.addingTimeInterval(301)
+        a.unavailableUntil = later.addingTimeInterval(45)
+        XCTAssertNil(store.rateLimitMessage(now: later))
+        XCTAssertEqual(store.outageMessage(now: later), "GitHub unavailable — retrying in 45s")
+
+        // An expired deadline on another account is not counted toward the summary.
+        gitlab.unavailableUntil = later.addingTimeInterval(-1)
+        XCTAssertEqual(store.outageMessage(now: later), "GitHub unavailable — retrying in 45s")
+
+        // Everything expired.
+        let end = later.addingTimeInterval(60)
+        XCTAssertNil(store.rateLimitMessage(now: end))
+        XCTAssertNil(store.outageMessage(now: end))
+        XCTAssertFalse(store.isCountingDown(now: end))
     }
 
     func testBlockedPolicyDoesNotStartDeviceFlowAndSetsError() async throws {
@@ -1129,6 +1315,7 @@ final class MultiConnectionStoreTests: XCTestCase {
         defaults: UserDefaults,
         primaryLogin: String = "legacy",
         restoreOnInit: Bool,
+        telemetry: Telemetry = Telemetry(sink: NullTelemetrySink()),
         connectionFactory: ((ConnectionID) throws -> Connection)? = nil
     ) -> HubberStore {
         HubberStore(
@@ -1136,7 +1323,7 @@ final class MultiConnectionStoreTests: XCTestCase {
             provider: MultiConnectionProvider(),
             tokenStore: MutableTokenStore(token: storedToken(login: primaryLogin)),
             settings: SettingsStore(defaults: defaults),
-            telemetry: Telemetry(sink: NullTelemetrySink()),
+            telemetry: telemetry,
             snapshotStore: SnapshotStore(snapshotURL: temporarySnapshotURL(login: primaryLogin)),
             defaults: defaults,
             restoreOnInit: restoreOnInit,
